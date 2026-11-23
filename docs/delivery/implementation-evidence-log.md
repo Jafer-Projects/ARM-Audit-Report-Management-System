@@ -11,7 +11,8 @@ This log records engineering evidence while the integrated system is being built
 - [x] Tauri 2 desktop shell and React/TypeScript application scaffold added.
 - [x] Local SQLite database and initial schema migration added.
 - [x] Synthetic demo firm and four demo personas seeded.
-- [x] Client register with draft save, basic validation, optimistic concurrency and archive command added.
+- [x] Client register with draft save, basic validation, optimistic concurrency, activation, archive and restore commands added.
+- [x] Increment 0 local draft notes with client association and persistence migration added.
 - [x] Shared workspace records added for catalogue/invoices, historical data, tasks and import-cost discovery.
 - [x] Append-only local activity event table and activity view added.
 - [x] Offline/local-only status presented honestly.
