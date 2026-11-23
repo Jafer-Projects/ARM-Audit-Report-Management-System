@@ -924,6 +924,15 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
     ).optional().map_err(|e|e.to_string())?;
 
     if input.record_type == "invoice" {
+        let prior_reviewer_note = exists.as_ref().map(|row| serde_json::from_str::<serde_json::Value>(&row.3).unwrap_or_else(|_|json!({})))
+            .and_then(|value|value.get("reviewer_note").and_then(|v|v.as_str()).map(str::to_string)).unwrap_or_default();
+        let next_reviewer_note = payload.get("reviewer_note").and_then(|v|v.as_str()).unwrap_or("").to_string();
+        if prior_reviewer_note != next_reviewer_note {
+            let previous_status = exists.as_ref().map(|row|row.2.as_str());
+            if !["administrator","manager"].contains(&persona.as_str()) || previous_status != Some("Ready for review") {
+                return Err("Only the assigned manager/admin review step may add or change the invoice reviewer note.".into());
+            }
+        }
         if ["Needs correction","Reviewed"].contains(&input.status.as_str()) && !["administrator","manager"].contains(&persona.as_str()) {
             return Err("Only the demo administrator or engagement manager can record an invoice review decision.".into());
         }
