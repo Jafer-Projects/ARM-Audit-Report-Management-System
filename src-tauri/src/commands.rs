@@ -2591,6 +2591,23 @@ mod tests {
     }
 
     #[test]
+    fn save_note_command_persists_local_draft_after_database_reopen() {
+        let directory = tempfile::tempdir().expect("temporary data directory");
+        let path = directory.path().join("arm-local-note.sqlite3");
+        let app = test_app_with_database(crate::db::Database::open(&path).expect("open file-backed test database"));
+        let note = save_note(LocalNoteInput {
+            id:None,client_id:None,title:"Offline note".into(),body:"Persist this synthetic draft locally.".into(),
+        },app.state::<AppState>()).expect("save local draft");
+        assert_eq!(note.status,"Local draft");
+        drop(app);
+        let reopened = crate::db::Database::open(&path).expect("reopen local database");
+        let (title,body,status):(String,String,String) = reopened.connection.query_row(
+            "SELECT title,body,status FROM local_note WHERE id=?1",[&note.id],|row|Ok((row.get(0)?,row.get(1)?,row.get(2)?))
+        ).expect("persisted local note");
+        assert_eq!((title,body,status),("Offline note".into(),"Persist this synthetic draft locally.".into(),"Local draft".into()));
+    }
+
+    #[test]
     fn reset_demo_data_is_admin_only_and_restores_only_synthetic_fixtures() {
         let app = test_app();
         let extra = save_client(command_client_input("Temporary Synthetic Client",None),app.state::<AppState>()).unwrap();
