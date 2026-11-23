@@ -918,12 +918,12 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
             let prior_assignee = prior.get("assignee").and_then(|v|v.as_str()).unwrap_or("");
             let prior_reviewer = prior.get("reviewer").and_then(|v|v.as_str()).unwrap_or("");
             if existing_type != "task" { return Err("Task record type mismatch.".into()); }
-            if prior_assignee != assignee {
+            if prior_assignee != assignee || (!prior_reviewer.is_empty() && prior_reviewer != reviewer) {
                 if !["administrator","manager"].contains(&persona.as_str()) {
-                    return Err("Only a manager can reassign a task.".into());
+                    return Err("Only a manager can reassign a task or reviewer.".into());
                 }
                 if payload.get("reassignment_reason").and_then(|v|v.as_str()).unwrap_or("").trim().chars().count() < 3 {
-                    return Err("Record a reason of at least 3 characters when reassigning a task.".into());
+                    return Err("Record a reason of at least 3 characters when changing the assignee or reviewer.".into());
                 }
             }
             if persona == "auditor" {
