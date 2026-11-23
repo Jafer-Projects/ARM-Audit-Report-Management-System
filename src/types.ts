@@ -51,3 +51,9 @@ export type ImportCostResult = {
   total_landed_cost_minor: number; excluded_or_pending_minor: number;
   lines: ImportCostLineResult[]; components: ImportCostComponentResult[]; limitations: string[];
 };
+
+export type SourceDocumentMeta = {
+  id: string; record_id: string; file_name: string; media_type: string;
+  size_bytes: number; sha256: string; actor_name: string; created_at: string;
+};
+export type SourceDocumentContent = { metadata: SourceDocumentMeta; content: number[] };
