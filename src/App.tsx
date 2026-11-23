@@ -71,7 +71,7 @@ const recordFields: Record<string, RecordField[]> = {
     { key: "authority_source", label: "Period definition source" },
   ],
   historical_record: [
-    { key: "historical_class", label: "Record type", kind: "select", options: ["Purchase","Expense","Tax / VAT carry-forward (source supplied)","Other"] },
+    { key: "historical_class", label: "Record type", kind: "select", options: ["Purchase","Expense","Tax / VAT carry-forward (source supplied)","Draft VAT workpaper grouping only","VAT exception / unresolved item","Other"] },
     { key: "transaction_date", label: "Transaction date", kind: "date" },
     { key: "source_period", label: "Source period label" },
     { key: "tax_type_label", label: "Tax type / label exactly as supplied" },
@@ -86,6 +86,13 @@ const recordFields: Record<string, RecordField[]> = {
     { key: "invoice_reference", label: "Invoice / reference number" },
     { key: "entry_method", label: "Entry method", kind: "select", options: ["Manual","Imported"] },
     { key: "source_filename", label: "Source filename / reference" },
+    { key: "workpaper_period_label", label: "Draft workpaper period label" },
+    { key: "included_source_references", label: "Included source record IDs / references (one per line)", kind: "textarea", wide: true },
+    { key: "scope_and_basis_note", label: "Workpaper scope and basis note — no tax conclusions", kind: "textarea", wide: true },
+    { key: "review_questions", label: "Questions for practitioner review", kind: "textarea", wide: true },
+    { key: "exception_type", label: "Exception type", kind: "select", options: ["Not an exception","Missing source","Duplicate reference","Inconsistent period","Unclear classification","Unverified tax treatment","Other"] },
+    { key: "exception_description", label: "Exception description", kind: "textarea", wide: true },
+    { key: "required_follow_up", label: "Required follow-up / owner", kind: "textarea", wide: true },
   ],
   staff: [
     { key: "staff_reference", label: "Demo staff reference" },
