@@ -253,6 +253,26 @@ impl Database {
                     "00000000-0000-4000-8000-000000000011"
                 ],
             )?;
+            for (id, title, staff_ref, job_title, discipline) in [
+                ("00000000-0000-4000-8000-000000000301","Demo Firm Administrator","DEMO-ADM","Firm administrator","Administration"),
+                ("00000000-0000-4000-8000-000000000302","Demo Engagement Manager","DEMO-MGR","Engagement manager","Audit management"),
+                ("00000000-0000-4000-8000-000000000303","Demo Auditor","DEMO-AUD","Auditor","Audit preparation"),
+            ] {
+                let created_at = now_utc();
+                let payload = serde_json::json!({"staff_reference":staff_ref,"job_title":job_title,"discipline":discipline});
+                tx.execute(
+                    "INSERT INTO workspace_record(id,firm_id,client_id,record_type,title,status,reference,payload_json,row_version,created_at,updated_at,created_by,updated_by)
+                     VALUES(?1,?2,NULL,'staff',?3,'Active',?4,?5,1,?6,?6,?7,?7)",
+                    rusqlite::params![id,firm,title,staff_ref,payload.to_string(),created_at,"00000000-0000-4000-8000-000000000011"],
+                )?;
+                tx.execute(
+                    "INSERT INTO workspace_record_version(id,firm_id,record_id,row_version,actor_id,changed_at,snapshot_json,correlation_id)
+                     VALUES(?1,?2,?3,1,?4,?5,?6,?7)",
+                    rusqlite::params![uuid::Uuid::new_v4().to_string(),firm,id,"00000000-0000-4000-8000-000000000011",created_at,
+                        serde_json::json!({"record_type":"staff","title":title,"status":"Active","reference":staff_ref,"payload":payload}).to_string(),
+                        uuid::Uuid::new_v4().to_string()],
+                )?;
+            }
             tx.execute(
                 "INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json)
                  VALUES(?1,?2,?3,'demo_workspace_initialized','demo_workspace',?2,?4,?5,'{}')",
