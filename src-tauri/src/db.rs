@@ -132,7 +132,11 @@ impl Database {
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
-                CREATE INDEX local_note_firm_updated ON local_note(firm_id, updated_at);"
+                CREATE INDEX local_note_firm_updated ON local_note(firm_id, updated_at);
+                CREATE TRIGGER local_event_no_update BEFORE UPDATE ON local_event
+                BEGIN SELECT RAISE(ABORT, 'local_event is append-only'); END;
+                CREATE TRIGGER local_event_no_delete BEFORE DELETE ON local_event
+                BEGIN SELECT RAISE(ABORT, 'local_event is append-only'); END;"
             )?;
             tx.execute(
                 "INSERT INTO schema_migration(version, checksum, applied_at) VALUES(2, ?1, ?2)",
