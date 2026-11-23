@@ -1018,6 +1018,39 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
     }
 
 
+
+    if input.record_type == "invoice" && input.status == "Ready for review" {
+        let raw_lines = payload.get("invoice_lines_json").and_then(|v| v.as_str()).unwrap_or("").trim();
+        let legacy_description = payload.get("line_items_text").and_then(|v| v.as_str()).unwrap_or("").trim();
+        if raw_lines.is_empty() {
+            if legacy_description.is_empty() {
+                return Err("Capture at least one structured invoice line or preserve the source line descriptions before review.".into());
+            }
+        } else {
+            let lines: Vec<serde_json::Value> = serde_json::from_str(raw_lines)
+                .map_err(|_| "Structured invoice lines must be a valid JSON array.".to_string())?;
+            if lines.is_empty() || lines.len() > 200 {
+                return Err("An invoice must contain 1–200 structured lines before review.".into());
+            }
+            for (index, line) in lines.iter().enumerate() {
+                if line.get("description").and_then(|v| v.as_str()).unwrap_or("").trim().is_empty()
+                    || line.get("line_amount_text").and_then(|v| v.as_str()).unwrap_or("").trim().is_empty() {
+                    return Err(format!("Invoice line {} needs a description and the line amount exactly as shown on the source.", index + 1));
+                }
+            }
+        }
+        let source_reference = payload.get("source_reference").and_then(|v| v.as_str()).unwrap_or("").trim();
+        let has_attachment = if let Some(record_id) = input.id.as_deref() {
+            db.connection.query_row(
+                "SELECT EXISTS(SELECT 1 FROM source_document WHERE firm_id=?1 AND client_id=?2 AND record_id=?3)",
+                params![FIRM_ID,input.client_id.as_deref().unwrap_or(""),record_id], |r| r.get::<_,bool>(0)
+            ).unwrap_or(false)
+        } else { false };
+        if source_reference.is_empty() && !has_attachment {
+            return Err("Add a source document reference or attach the original invoice before submitting it for review.".into());
+        }
+    }
+
     if input.record_type == "import_cost_input" {
         let entry_kind = payload.get("entry_kind").and_then(|v| v.as_str()).unwrap_or("").trim();
         if !["Goods line", "Cost component", "calculation_result"].contains(&entry_kind) {
