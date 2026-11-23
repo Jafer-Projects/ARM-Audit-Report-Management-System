@@ -584,7 +584,7 @@ export default function App() {
         notes: recordContentLocked ? recordEditor?.notes ?? "" : v.notes || "",
         payload_json: JSON.stringify(recordContentLocked ? lockedPayload : { ...recordPayload, ...editablePayload, ...(recordType === "invoice" ? { invoice_lines_json: JSON.stringify(invoiceLines) } : {}) }),
       });
-      setRecordEditor(null); setRecords(await desktop.records(recordType, recordType === "staff" ? undefined : selectedClientId || undefined)); if (recordType === "staff") setStaffRecords(await desktop.records("staff"));
+      setRecordEditor(null); setRecords(await desktop.records(recordType, recordType === "staff" ? undefined : selectedClientId || undefined)); setNotifications(await desktop.notifications()); if (recordType === "staff") setStaffRecords(await desktop.records("staff"));
     } catch (e) { setError(String(e)); } finally { setBusy(false); }
   }
   async function saveNote(event: FormEvent<HTMLFormElement>) {
