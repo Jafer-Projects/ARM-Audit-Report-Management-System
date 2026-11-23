@@ -85,3 +85,12 @@ The product owner has issued a later, explicit decision recorded in [PR #2](http
 - The calculation is a transparent prototype worksheet, not a practitioner-approved or production financial output.
 
 These implementation notes describe code added, not test results, increment acceptance, or production readiness.
+
+
+### Increment 2 source-evidence implementation added
+
+- Added forward-only SQLite migration 10 for source-document BLOB storage linked to a client invoice or historical record.
+- Added local PDF/JPEG/PNG attachment and retrieval commands. The backend validates file signatures against declared media type, extension, size, path/control characters, record/client ownership and duplicate hashes.
+- Source documents retain SHA-256, filename, media type, size, actor, timestamp, record link and correlation ID. Update/delete triggers protect evidence rows; demo reset explicitly removes synthetic attachments and restores the guards.
+- Invoice and historical-record UI exposes attachment listing and download from the record workspace.
+- This is local prototype evidence storage only. It is not encrypted, malware scanning is not implemented, and real client documents remain prohibited.
