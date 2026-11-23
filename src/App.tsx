@@ -130,7 +130,7 @@ export default function App() {
         id: recordEditor?.id || undefined, row_version: recordEditor?.id ? recordEditor.row_version : undefined,
         client_id: v.client_id || null, record_type: recordType, title: v.title,
         status: v.status || (statusOptions[recordType] ?? config.statuses)[0], reference: v.reference || "",
-        amount_text: v.amount_text || "", notes: v.notes || "",
+        amount_text: v.amount_text || "", notes: v.notes || "", payload_json: JSON.stringify(Object.fromEntries((recordFields[recordType] ?? []).map(field => [field.key, v[field.key] ?? ""]))),
       });
       setRecordEditor(null); setRecords(await desktop.records(recordType));
     } catch (e) { setError(String(e)); } finally { setBusy(false); }
@@ -191,7 +191,7 @@ export default function App() {
         const config = recordTypes[section as keyof typeof recordTypes];
         if (!config) return null;
         return <section className="content-panel">
-          <div className="section-head"><div><span className="overline">{config.label.toUpperCase()}</span><h2>{nav.find(n => n.id === section)?.label}</h2><p>{config.hint}</p></div><button className="primary" disabled={!canMutate} onClick={() => setRecordEditor({ id:"",client_id:null,record_type:recordType,title:"",status:(statusOptions[recordType] ?? config.statuses)[0],reference:"",amount_text:"",notes:"",row_version:0,updated_at:"" })}>+ Add record</button></div>
+          <div className="section-head"><div><span className="overline">{config.label.toUpperCase()}</span><h2>{nav.find(n => n.id === section)?.label}</h2><p>{config.hint}</p></div><button className="primary" disabled={!canMutate} onClick={() => setRecordEditor({ id:"",client_id:null,record_type:recordType,title:"",status:(statusOptions[recordType] ?? config.statuses)[0],reference:"",amount_text:"",notes:"",payload_json:"{}",row_version:0,updated_at:"" })}>+ Add record</button></div>
           <div className="subtype-tabs" role="group" aria-label="Record type">{subtypeOptions[section as keyof typeof subtypeOptions].map(option => <button key={option.type} className={recordType === option.type ? "subtype-tab active" : "subtype-tab"} onClick={() => setRecordType(option.type)}>{option.label}</button>)}</div>
           <div className="record-grid">{records.map(r => <article className="record-card" key={r.id}><div className="record-card-top"><span className="status">{r.status}</span><small>{new Date(r.updated_at).toLocaleDateString()}</small></div><h3>{r.title}</h3><p>{r.notes || "No additional notes"}</p><div className="record-meta"><span>{r.reference || "No source reference"}</span>{r.amount_text && <strong>{r.amount_text}</strong>}</div><button className="text-button" onClick={() => setRecordEditor(r)}>Open record →</button></article>)}
           {records.length === 0 && <div className="empty-card"><strong>No records yet</strong><p>Create a record to start this workflow. Data is stored locally in the demo database.</p></div>}</div>
