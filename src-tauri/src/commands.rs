@@ -520,10 +520,23 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
             params![id,FIRM_ID,input.client_id,input.record_type,input.title.trim(),input.status,input.reference.unwrap_or_default(),input.amount_text.unwrap_or_default(),input.notes.unwrap_or_default(),payload.to_string(),now,actor_id]
         ).map_err(|e|e.to_string())?;
     }
+    let new_version = exists.as_ref().map(|(version,_,_,_)| *version + 1).unwrap_or(1);
+    let snapshot = json!({
+        "client_id":input.client_id.as_deref(),"record_type":input.record_type,"title":input.title,
+        "status":input.status,"reference":input.reference.as_deref().unwrap_or(""),
+        "amount_text":input.amount_text.as_deref().unwrap_or(""),"notes":input.notes.as_deref().unwrap_or(""),
+        "payload":payload
+    });
+    let correlation_id = Uuid::new_v4().to_string();
+    tx.execute(
+        "INSERT INTO workspace_record_version(id,firm_id,record_id,row_version,actor_id,changed_at,snapshot_json,correlation_id)
+         VALUES(?1,?2,?3,?4,?5,?6,?7,?8)",
+        params![Uuid::new_v4().to_string(),FIRM_ID,id,new_version,actor_id,now,snapshot.to_string(),correlation_id]
+    ).map_err(|e|e.to_string())?;
     tx.execute(
         "INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json)
          VALUES(?1,?2,?3,?4,'workspace_record',?5,?6,?7,?8)",
-        params![Uuid::new_v4().to_string(),FIRM_ID,actor_id,if exists.is_some(){"workspace_record_updated"}else{"workspace_record_created"},id,now,Uuid::new_v4().to_string(),json!({"record_type":input.record_type,"status":input.status}).to_string()]
+        params![Uuid::new_v4().to_string(),FIRM_ID,actor_id,if exists.is_some(){"workspace_record_updated"}else{"workspace_record_created"},id,now,correlation_id,json!({"record_type":input.record_type,"status":input.status,"row_version":new_version}).to_string()]
     ).map_err(|e|e.to_string())?;
     tx.commit().map_err(|e|e.to_string())?;
 
