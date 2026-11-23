@@ -6,9 +6,11 @@
 
 Build software to help practitioners do familiar work. Do not wait for auditors to write complete software specifications. Observe the work, build a small workflow, demonstrate it, collect corrections, and update the requirements. Keep unresolved assumptions explicit.
 
-A sprint/increment should end with something a practitioner can try, not only an internal technical layer. Foundational technical work may precede the UI where necessary, but each vertical slice should connect user action to stored data, validation, evidence and an observable outcome.
+Each increment should produce a demonstrable vertical slice for practitioner feedback, not only an internal technical layer. Foundational technical work may precede the UI where necessary, but each slice should connect user action to stored data, validation, evidence and an observable outcome. Demonstration and continuous testing are progress checkpoints only: no increment is independently accepted or passed. All six increments are delivered on one branch and one PR (#2), and acceptance is decided collectively only after Increment 5 and full-system regression.
 
 ## 2. Initial increments
+
+**Binding delivery rule:** Increments 0–5 are one implementation programme on branch `implementation/increments-0-to-5` and PR #2. Do not split them into separate implementation branches or PRs. Execute relevant tests throughout development, but do not assign individual increment acceptance/pass status. The sole acceptance decision is made after Increment 5, using the integrated Increments 0–5 acceptance gate in the consolidated developer specification. A failed criterion blocks the collective gate; fix it and rerun relevant tests plus full regression. This rule does not waive separate professional, security, legal or production-release approvals.
 
 ### Increment 0 — Working shell and safe local workspace
 - Windows desktop shell and simple navigation.
@@ -120,9 +122,9 @@ Every feedback item is classified as:
 
 Prioritize by professional risk, user impact, frequency, effort and dependency. Do not implement a request that weakens authorization, auditability, financial integrity or legal compliance without formal review. Record why a suggestion is accepted, deferred or rejected.
 
-## 7. Exit from initial development
+## 7. Collective acceptance after Increment 5
 
-The first pilot candidate is ready only when:
+There is no individual increment exit/acceptance decision. The first controlled synthetic-data release candidate is assessed only after all six increments (0–5) have been implemented on the same branch and PR. It is ready for collective acceptance only when:
 - A complete chosen workflow passes acceptance tests.
 - Practitioners have demonstrated it and recorded feedback.
 - Role boundaries and audit history are tested.
