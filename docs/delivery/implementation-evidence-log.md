@@ -94,3 +94,13 @@ These implementation notes describe code added, not test results, increment acce
 - Source documents retain SHA-256, filename, media type, size, actor, timestamp, record link and correlation ID. Update/delete triggers protect evidence rows; demo reset explicitly removes synthetic attachments and restores the guards.
 - Invoice, historical-record and import-cost input UI exposes attachment listing and download from the record workspace.
 - This is local prototype evidence storage only. It is not encrypted, malware scanning is not implemented, and real client documents remain prohibited.
+
+
+### Increment 2/3 workflow hardening added
+
+- Invoice capture now supports multiple structured source line items (item/category reference, description, quantity/unit, unit price, line amount, tax label and tax amount) while retaining source notation rather than silently recalculating tax.
+- Invoice review requires at least one structured line with description and source line amount, or a preserved source line-description field, plus a source reference or attached original invoice.
+- Invoice review requires an explicit reviewed financial-period reference and invoice date inside that period's start/end window.
+- Period records require unique client-scoped references, valid ISO date windows, source/calendar policy references before review, and manager/administrator review before use.
+- Historical records submitted for review require an explicit reviewed period and source evidence; dated transactions must fall inside the selected period. Tax-history rows preserve the tax period exactly as supplied.
+- These checks prevent automatic tax-period inference and stop unassigned/out-of-window records from being treated as review-ready.
