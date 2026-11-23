@@ -2,6 +2,7 @@ use crate::{db::{now_utc, Database}, AppState};
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use tauri::State;
 use uuid::Uuid;
 
@@ -453,6 +454,165 @@ pub fn find_invoice_duplicates(client_id: String, invoice_number: String, exclud
         }
     }
     Ok(candidates)
+}
+
+#[derive(Deserialize)]
+pub struct HistoricalImportRow {
+    source_row: usize,
+    transaction_date: String,
+    description: String,
+    amount_text: String,
+    currency: String,
+    supplier: String,
+    supplier_tin: String,
+    vat_amount: String,
+    invoice_reference: String,
+}
+
+#[derive(Deserialize)]
+pub struct HistoricalImportInput {
+    client_id: String,
+    source_filename: String,
+    source_content: String,
+    mapping_json: String,
+    rows: Vec<HistoricalImportRow>,
+}
+
+#[derive(Serialize)]
+pub struct HistoricalImportResult {
+    batch_id: String,
+    source_checksum_sha256: String,
+    source_row_count: usize,
+    imported_row_count: usize,
+}
+
+#[derive(Serialize)]
+pub struct HistoricalImportBatch {
+    id: String,
+    source_filename: String,
+    source_checksum_sha256: String,
+    source_row_count: i64,
+    imported_row_count: i64,
+    imported_at: String,
+}
+
+#[tauri::command]
+pub fn import_historical_batch(input: HistoricalImportInput, state: State<'_, AppState>) -> Result<HistoricalImportResult, String> {
+    if input.source_content.len() > 5 * 1024 * 1024 {
+        return Err("CSV source must be no larger than 5 MB.".into());
+    }
+    if input.source_filename.trim().is_empty() || input.source_filename.len() > 255
+        || input.source_filename.contains('/') || input.source_filename.contains('\\')
+        || input.source_filename.contains("..") || !input.source_filename.to_ascii_lowercase().ends_with(".csv") {
+        return Err("Choose a CSV filename without path components.".into());
+    }
+    if input.rows.is_empty() || input.rows.len() > 1000 {
+        return Err("A batch must contain between 1 and 1,000 data rows.".into());
+    }
+    if input.mapping_json.len() > 16_384 || serde_json::from_str::<serde_json::Value>(&input.mapping_json).is_err() {
+        return Err("Column mapping must be valid JSON under 16 KB.".into());
+    }
+    let mut seen_rows = std::collections::HashSet::new();
+    for row in &input.rows {
+        if row.source_row < 2 || row.source_row > 100_001 || !seen_rows.insert(row.source_row) {
+            return Err("CSV source row numbers must be unique and start at row 2.".into());
+        }
+        if row.description.trim().is_empty() || row.amount_text.trim().is_empty() {
+            return Err(format!("CSV row {} needs both a description and source amount.", row.source_row));
+        }
+    }
+    let digest = Sha256::digest(input.source_content.as_bytes());
+    let checksum = digest.iter().map(|byte| format!("{byte:02x}")).collect::<String>();
+    let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
+    let (actor_id,_,_) = ensure_can_mutate(&db)?;
+    let active: bool = db.connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM client WHERE id=?1 AND firm_id=?2 AND status='Active')",
+        params![input.client_id,FIRM_ID], |r|r.get(0)
+    ).map_err(|e|e.to_string())?;
+    if !active { return Err("Choose an active client in this demonstration firm.".into()); }
+
+    let batch_id = Uuid::new_v4().to_string();
+    let correlation_id = Uuid::new_v4().to_string();
+    let imported_at = now_utc();
+    let tx = db.connection.unchecked_transaction().map_err(|e|e.to_string())?;
+    tx.execute(
+        "INSERT INTO historical_import_batch(id,firm_id,client_id,actor_id,source_filename,source_checksum_sha256,source_content,mapping_json,source_row_count,imported_row_count,imported_at,correlation_id)
+         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?9,?10,?11)",
+        params![batch_id,FIRM_ID,input.client_id,actor_id,input.source_filename,checksum,input.source_content,input.mapping_json,input.rows.len() as i64,imported_at,correlation_id]
+    ).map_err(|e|e.to_string())?;
+
+    for row in &input.rows {
+        let record_id = Uuid::new_v4().to_string();
+        let mut payload = json!({
+            "historical_class":"Imported transaction",
+            "transaction_date":row.transaction_date,
+            "supplier":row.supplier,
+            "supplier_tin":row.supplier_tin,
+            "currency":row.currency,
+            "vat_amount":row.vat_amount,
+            "invoice_reference":row.invoice_reference,
+            "entry_method":"Imported",
+            "source_filename":input.source_filename,
+            "source_checksum_sha256":checksum,
+            "source_row":row.source_row,
+            "import_batch_id":batch_id,
+            "mapping_version":1
+        });
+        let possible_duplicate: bool = if row.invoice_reference.trim().is_empty() {
+            false
+        } else {
+            tx.query_row(
+                "SELECT EXISTS(SELECT 1 FROM workspace_record WHERE firm_id=?1 AND client_id=?2 AND record_type='historical_record' AND reference=?3)",
+                params![FIRM_ID,input.client_id,row.invoice_reference.trim()], |r|r.get(0)
+            ).map_err(|e|e.to_string())?
+        };
+        payload["possible_duplicate_reference"] = json!(possible_duplicate);
+        let notes = format!("Imported from {} · source row {}", input.source_filename, row.source_row);
+        tx.execute(
+            "INSERT INTO workspace_record(id,firm_id,client_id,record_type,title,status,reference,amount_text,notes,payload_json,row_version,created_at,updated_at,created_by,updated_by)
+             VALUES(?1,?2,?3,'historical_record',?4,'Draft',?5,?6,?7,?8,1,?9,?9,?10,?10)",
+            params![record_id,FIRM_ID,input.client_id,row.description.trim(),row.invoice_reference.trim(),row.amount_text.trim(),notes,payload.to_string(),imported_at,actor_id]
+        ).map_err(|e|e.to_string())?;
+        let snapshot = json!({
+            "client_id":input.client_id,"record_type":"historical_record","title":row.description,
+            "status":"Draft","reference":row.invoice_reference,"amount_text":row.amount_text,
+            "notes":notes,"payload":payload
+        });
+        tx.execute(
+            "INSERT INTO workspace_record_version(id,firm_id,record_id,row_version,actor_id,changed_at,snapshot_json,correlation_id)
+             VALUES(?1,?2,?3,1,?4,?5,?6,?7)",
+            params![Uuid::new_v4().to_string(),FIRM_ID,record_id,actor_id,imported_at,snapshot.to_string(),correlation_id]
+        ).map_err(|e|e.to_string())?;
+    }
+    tx.execute(
+        "INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json)
+         VALUES(?1,?2,?3,'historical_import_batch_created','historical_import_batch',?4,?5,?6,?7)",
+        params![Uuid::new_v4().to_string(),FIRM_ID,actor_id,batch_id,imported_at,correlation_id,
+            json!({"source_filename":input.source_filename,"source_checksum_sha256":checksum,"source_row_count":input.rows.len(),"imported_row_count":input.rows.len()}).to_string()]
+    ).map_err(|e|e.to_string())?;
+    tx.commit().map_err(|e|e.to_string())?;
+    Ok(HistoricalImportResult {
+        batch_id,source_checksum_sha256:checksum,source_row_count:input.rows.len(),imported_row_count:input.rows.len()
+    })
+}
+
+#[tauri::command]
+pub fn list_historical_import_batches(client_id: String, state: State<'_, AppState>) -> Result<Vec<HistoricalImportBatch>, String> {
+    let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
+    let active: bool = db.connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM client WHERE id=?1 AND firm_id=?2 AND status='Active')",
+        params![client_id,FIRM_ID], |r|r.get(0)
+    ).map_err(|e|e.to_string())?;
+    if !active { return Err("Choose an active client in this demonstration firm.".into()); }
+    let mut stmt = db.connection.prepare(
+        "SELECT id,source_filename,source_checksum_sha256,source_row_count,imported_row_count,imported_at
+         FROM historical_import_batch WHERE firm_id=?1 AND client_id=?2 ORDER BY imported_at DESC"
+    ).map_err(|e|e.to_string())?;
+    let rows = stmt.query_map(params![FIRM_ID,client_id], |r| Ok(HistoricalImportBatch {
+        id:r.get(0)?,source_filename:r.get(1)?,source_checksum_sha256:r.get(2)?,
+        source_row_count:r.get(3)?,imported_row_count:r.get(4)?,imported_at:r.get(5)?
+    })).map_err(|e|e.to_string())?;
+    rows.collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())
 }
 
 #[tauri::command]
