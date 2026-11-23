@@ -2450,3 +2450,9 @@ Do not ask the product owner to decide every future detail before Increment 1. A
 | Markup vs margin and pricing purpose | Optional I5-W06 | Management/accounting practitioner and product owner |
 
 **No preference question is required to complete this document.** The listed questions are intentionally sequenced to the increment where practitioners can demonstrate the real work. The next immediate implementation can proceed with the already approved Increment 1 contract; Increment 2–5 should be treated as detailed workflow proposals whose explicitly marked business-rule decisions are confirmed before those rules are coded.
+
+## Binding override — prototype build and deferred collective verification
+
+The product owner has issued a later, explicit decision recorded in [PR #2](https://github.com/Jafermenza/ARM-Audit-Report-Management-System/pull/2) and [Prototype Build Binding Contract](prototype-build-binding-contract.md). ARM is a controlled prototype using synthetic data. All implementation remains on `implementation/increments-0-to-5` in PR #2. Close the outstanding Increments 0–5 implementation gaps to the best practical professional standard, preserving existing behavior and avoiding scope expansion.
+
+**This later decision supersedes any earlier wording in this file that requires continuous test execution or increment-level verification.** Formal verification and testing of the integrated Increments 0–5 delivery occur only after Increment 5 implementation is complete. Do not declare any increment accepted, passed, or independently complete. Test plans and fixtures may be prepared during implementation, but partial checks must not be presented as acceptance. This timing decision does not permit test deletion, assertion weakening, or unsupported claims. The one collective gate and separate production/legal/security/professional gates remain mandatory.
