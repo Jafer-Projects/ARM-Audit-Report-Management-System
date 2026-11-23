@@ -125,6 +125,47 @@ const personaLabels: Record<Persona, string> = {
   auditor: "Demo Auditor", reviewer: "Demo Read-only Reviewer",
 };
 
+function parseCsv(text: string): string[][] {
+  const source = text.replace(/^\uFEFF/, "");
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let quoted = false;
+  for (let i = 0; i < source.length; i += 1) {
+    const char = source[i];
+    if (quoted) {
+      if (char === '"' && source[i + 1] === '"') { field += '"'; i += 1; }
+      else if (char === '"') quoted = false;
+      else field += char;
+    } else if (char === '"' && field.length === 0) quoted = true;
+    else if (char === ",") { row.push(field); field = ""; }
+    else if (char === "\n" || char === "\r") {
+      row.push(field); field = "";
+      if (row.some(cell => cell.trim() !== "")) rows.push(row);
+      row = [];
+      if (char === "\r" && source[i + 1] === "\n") i += 1;
+    } else field += char;
+  }
+  if (quoted) throw new Error("The CSV contains an unclosed quoted field.");
+  if (field.length > 0 || row.length > 0) {
+    row.push(field);
+    if (row.some(cell => cell.trim() !== "")) rows.push(row);
+  }
+  if (rows.some(cells => cells.length > 50)) throw new Error("CSV rows may contain no more than 50 columns.");
+  return rows;
+}
+
+function suggestedHeader(headers: string[], aliases: string[]): string {
+  const normalized = headers.map(header => header.trim().toLowerCase());
+  const index = normalized.findIndex(header => aliases.includes(header));
+  return index >= 0 ? headers[index] : "";
+}
+
+function hasPossibleDuplicate(record: WorkspaceRecord): boolean {
+  try { return JSON.parse(record.payload_json).possible_duplicate_reference === true; }
+  catch { return false; }
+}
+
 function formatSnapshot(value: string): string {
   try { return JSON.stringify(JSON.parse(value), null, 2); }
   catch { return value; }
@@ -140,6 +181,13 @@ export default function App() {
   const [notes, setNotes] = useState<LocalNote[]>([]);
   const [historyClient, setHistoryClient] = useState<Client | null>(null);
   const [clientChanges, setClientChanges] = useState<ClientChange[]>([]);
+  const [importBatches, setImportBatches] = useState<HistoricalImportBatch[]>([]);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [csvFileName, setCsvFileName] = useState("");
+  const [csvContent, setCsvContent] = useState("");
+  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
+  const [csvRows, setCsvRows] = useState<string[][]>([]);
+  const [csvMapping, setCsvMapping] = useState<Record<string, string>>({});
   const [noteEditor, setNoteEditor] = useState<LocalNote | null | undefined>(undefined);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
