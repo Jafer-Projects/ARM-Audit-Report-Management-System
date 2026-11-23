@@ -970,11 +970,17 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
         if let Some((_,_,previous_status,previous_payload,_)) = exists.as_ref() {
             if ["Submitted","Completed","Cancelled"].contains(&previous_status.as_str()) {
                 let previous: serde_json::Value = serde_json::from_str(previous_payload).unwrap_or_else(|_|json!({}));
+                let mut previous_compare = previous.clone();
+                let mut payload_compare = payload.clone();
+                if previous_status == "Submitted" && input.status == "Cancelled" {
+                    if let Some(object) = previous_compare.as_object_mut() { object.remove("cancellation_reason"); }
+                    if let Some(object) = payload_compare.as_object_mut() { object.remove("cancellation_reason"); }
+                }
                 let old_values: (String,String,String,String) = db.connection.query_row(
                     "SELECT title,reference,amount_text,notes FROM workspace_record WHERE id=?1 AND firm_id=?2",
                     params![id,FIRM_ID], |r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))
                 ).map_err(|e|e.to_string())?;
-                if previous != payload || old_values.0 != input.title.trim()
+                if previous_compare != payload_compare || old_values.0 != input.title.trim()
                     || old_values.1 != input.reference.as_deref().unwrap_or("")
                     || old_values.2 != input.amount_text.as_deref().unwrap_or("")
                     || old_values.3 != input.notes.as_deref().unwrap_or("") {
