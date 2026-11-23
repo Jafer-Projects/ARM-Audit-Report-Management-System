@@ -34,3 +34,5 @@ export type HistoricalImportResult = { batch_id: string; source_checksum_sha256:
 export type HistoricalImportBatch = { id: string; source_filename: string; source_checksum_sha256: string; source_row_count: number; imported_row_count: number; imported_at: string };
 
 export type TaskReviewNote = { id: string; task_id: string; category: string; description: string; affected_record_reference: string; required_response: string; status: string; preparer_response: string; reviewer_name: string; response_actor_name: string; disposition: string; disposition_actor_name: string; created_at: string; updated_at: string };
+
+export type WorkspaceRecordVersion = { id: string; row_version: number; actor_name: string; changed_at: string; snapshot_json: string };
