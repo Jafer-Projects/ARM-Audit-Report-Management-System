@@ -2120,13 +2120,15 @@ mod tests {
     }
 
 
-    fn test_app() -> tauri::App<tauri::test::MockRuntime> {
+    fn test_app_with_database(database: crate::db::Database) -> tauri::App<tauri::test::MockRuntime> {
         tauri::test::mock_builder()
-            .manage(AppState {
-                database: std::sync::Mutex::new(crate::db::Database::memory().expect("seeded in-memory database")),
-            })
+            .manage(AppState { database: std::sync::Mutex::new(database) })
             .build(tauri::test::mock_context(tauri::test::noop_assets()))
             .expect("mock Tauri app")
+    }
+
+    fn test_app() -> tauri::App<tauri::test::MockRuntime> {
+        test_app_with_database(crate::db::Database::memory().expect("seeded in-memory database"))
     }
 
     fn command_client_input(name: &str, email: Option<&str>) -> ClientInput {
@@ -2409,6 +2411,37 @@ mod tests {
     }
 
     #[test]
+    fn invoice_draft_can_be_saved_with_missing_fields_and_duplicates_remain_advisory() {
+        let app = test_app();
+        let client_id = command_active_client_id(&app);
+        let first = save_record(RecordInput {
+            id:None,row_version:None,client_id:Some(client_id.clone()),record_type:"invoice".into(),
+            title:"Synthetic invoice draft".into(),status:"Draft".into(),reference:Some("INV-SYN-01".into()),
+            amount_text:None,notes:None,payload_json:Some(json!({"invoice_number":"INV-SYN-01"}).to_string()),
+            duplicate_acknowledged:None,duplicate_acknowledgement_reason:None,
+        },app.state::<AppState>()).expect("draft may be saved before all fields are complete");
+        assert_eq!(first.status,"Draft");
+        let mut duplicate = RecordInput {
+            id:None,row_version:None,client_id:Some(client_id.clone()),record_type:"invoice".into(),
+            title:"Second synthetic invoice draft".into(),status:"Draft".into(),reference:Some("INV-SYN-01".into()),
+            amount_text:None,notes:None,payload_json:Some(json!({"invoice_number":"INV-SYN-01"}).to_string()),
+            duplicate_acknowledged:None,duplicate_acknowledgement_reason:None,
+        };
+        assert!(save_record(duplicate.clone(),app.state::<AppState>()).is_err());
+        duplicate.duplicate_acknowledged = Some(true);
+        duplicate.duplicate_acknowledgement_reason = Some("Separate source document confirmed".into());
+        let second = save_record(duplicate,app.state::<AppState>()).expect("acknowledged duplicate remains separate");
+        assert_ne!(first.id,second.id);
+        let state = app.state::<AppState>();
+        let db = state.database.lock().unwrap();
+        let count: i64 = db.connection.query_row(
+            "SELECT COUNT(*) FROM workspace_record WHERE client_id=?1 AND record_type='invoice' AND json_extract(payload_json,'$.invoice_number')='INV-SYN-01'",
+            [&client_id],|row|row.get(0)
+        ).unwrap();
+        assert_eq!(count,2);
+    }
+
+    #[test]
     fn save_record_command_rejects_invoice_review_without_lines_source_and_period() {
         let app = test_app();
         let client_id = command_active_client_id(&app);
@@ -2482,8 +2515,10 @@ mod tests {
     }
 
     #[test]
-    fn attach_source_document_command_persists_validated_evidence_and_rejects_spoofing() {
-        let app = test_app();
+    fn attach_source_document_command_persists_validated_evidence_across_database_reopen() {
+        let directory = tempfile::tempdir().expect("temporary data directory");
+        let path = directory.path().join("arm-source-document.sqlite3");
+        let app = test_app_with_database(crate::db::Database::open(&path).expect("open file-backed test database"));
         let client_id = command_active_client_id(&app);
         let draft = save_record(RecordInput {
             id:None,row_version:None,client_id:Some(client_id.clone()),record_type:"invoice".into(),
@@ -2493,10 +2528,17 @@ mod tests {
         },app.state::<AppState>()).expect("create draft invoice");
         let bytes = b"%PDF-1.7 synthetic fixture".to_vec();
         assert!(attach_source_document(client_id.clone(),draft.id.clone(),"invoice.pdf".into(),"application/pdf".into(),bytes.clone(),app.state::<AppState>()).is_ok());
-        assert!(attach_source_document(client_id,draft.id,"spoofed.png".into(),"image/png".into(),bytes,app.state::<AppState>()).is_err());
-        let state = app.state::<AppState>();
-        let db = state.database.lock().unwrap();
-        let count: i64 = db.connection.query_row("SELECT COUNT(*) FROM source_document WHERE file_name='invoice.pdf'",[],|row|row.get(0)).unwrap();
+        assert!(attach_source_document(client_id,draft.id.clone(),"spoofed.png".into(),"image/png".into(),bytes,app.state::<AppState>()).is_err());
+        drop(app);
+        let reopened = crate::db::Database::open(&path).expect("reopen database");
+        let (file_name,media_type,record_id):(String,String,String) = reopened.connection.query_row(
+            "SELECT file_name,media_type,record_id FROM source_document WHERE file_name='invoice.pdf'",
+            [],|row|Ok((row.get(0)?,row.get(1)?,row.get(2)?))
+        ).expect("persisted attachment metadata");
+        assert_eq!(file_name,"invoice.pdf");
+        assert_eq!(media_type,"application/pdf");
+        assert_eq!(record_id,draft.id);
+        let count: i64 = reopened.connection.query_row("SELECT COUNT(*) FROM source_document",[],|row|row.get(0)).unwrap();
         assert_eq!(count,1);
     }
 
