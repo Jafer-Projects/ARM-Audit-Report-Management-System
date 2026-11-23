@@ -1301,6 +1301,9 @@ mod tests {
         assert!(valid_record_transition("task", Some("Assigned"), "In progress"));
         assert!(valid_record_transition("task", Some("In progress"), "Submitted"));
         assert!(valid_record_transition("task", Some("Submitted"), "Completed"));
+        assert!(valid_record_transition("task", Some("Submitted"), "Returned"));
+        assert!(valid_record_transition("task", Some("Submitted"), "Cancelled"));
+        assert!(valid_record_transition("task", Some("Returned"), "In progress"));
         assert!(!valid_record_transition("task", Some("In progress"), "Completed"));
         assert!(!valid_record_transition("task", Some("Completed"), "In progress"));
     }
