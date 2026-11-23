@@ -46,7 +46,7 @@
 - Local changes are not represented as cloud-received until acknowledged by the server.
 - Government submission is not represented as successful until an official acknowledgement is recorded.
 - Automation assists professional work; required human review and authorization remain mandatory.
-- Windows 11 supported editions are the production baseline. Ordinary unsupported Windows 10 installations are not an approved production target.
+- Supported OS matrix remains a product-owner decision: Windows 11 x64 is the default target; Windows 10 x64 support is limited to editions/releases with verifiable security-update eligibility. Unsupported Windows 10 installations are not an approved production target. Installer acceptance is blocked until the owner confirms the Windows 10 support boundary.
 - No production use until backup restoration, incident response, monitoring, access control and agreed RPO/RTO are demonstrated.
 
 ## 5. Approval record
