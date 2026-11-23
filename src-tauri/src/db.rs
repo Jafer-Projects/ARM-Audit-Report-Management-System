@@ -211,4 +211,31 @@ mod tests {
         assert_eq!(clients, 1);
         assert_eq!(actors, 4);
     }
+
+    #[test]
+    fn local_event_history_rejects_update_and_delete() {
+        let db = Database::memory().expect("in-memory db");
+        let update = db.connection.execute("UPDATE local_event SET event_type='tampered' WHERE event_type='demo_workspace_initialized'", []);
+        let delete = db.connection.execute("DELETE FROM local_event WHERE event_type='demo_workspace_initialized'", []);
+        assert!(update.is_err());
+        assert!(delete.is_err());
+    }
+
+    #[test]
+    fn local_notes_survive_database_reopen() {
+        let directory = tempfile::tempdir().expect("temporary data directory");
+        let path = directory.path().join("arm-test.sqlite3");
+        {
+            let db = Database::open(&path).expect("create test database");
+            db.connection.execute(
+                "INSERT INTO local_note(id,firm_id,client_id,actor_id,title,body,status,created_at,updated_at)
+                 VALUES('note-1','00000000-0000-4000-8000-000000000001',NULL,'00000000-0000-4000-8000-000000000011','Restart test','Saved locally','Local draft','2026-11-23T00:00:00Z','2026-11-23T00:00:00Z')",
+                [],
+            ).expect("save note");
+        }
+        let reopened = Database::open(&path).expect("reopen test database");
+        let title: String = reopened.connection.query_row("SELECT title FROM local_note WHERE id='note-1'", [], |r| r.get(0)).unwrap();
+        assert_eq!(title, "Restart test");
+    }
+
 }
