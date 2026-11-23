@@ -48,7 +48,7 @@ These checkmarks mean source code has been added, not that the feature has passe
 
 | Date | Commit | Evidence | Result / limitation |
 |---|---|---|---|
-| 2026-11-23 | Initial PR #2 implementation series | 3 Node tests passed; SQLite DDL/trigger smoke checks passed | Rust/TS/build CI unverified; no increment accepted; no collective acceptance decision |
+| 2026-11-23 | Initial PR #2 implementation series | Historical pre-deferral checks: 3 Node tests passed; SQLite DDL/trigger smoke checks passed (not acceptance and not a current integrated verification result) | Rust/TS/build CI unverified; no increment accepted; no collective acceptance decision |
 
 
 ## Binding override — prototype build and deferred collective verification
