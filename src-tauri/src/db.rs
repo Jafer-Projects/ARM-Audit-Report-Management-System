@@ -268,4 +268,12 @@ mod tests {
         assert_eq!(title, "Restart test");
     }
 
+
+    #[test]
+    fn migration_checksum_mismatch_is_rejected() {
+        let db = Database::memory().expect("in-memory db");
+        db.connection.execute("UPDATE schema_migration SET checksum='changed' WHERE version=2", []).expect("tamper test fixture");
+        assert!(db.migrate().is_err());
+    }
+
 }
