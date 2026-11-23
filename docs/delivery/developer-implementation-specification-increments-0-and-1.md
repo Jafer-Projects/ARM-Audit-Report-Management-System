@@ -69,6 +69,29 @@ Encryption is a security gate, not a checkbox. Before any real data or distribut
 Store the database and future document cache in the per-user application-data directory using the platform's supported application path APIs. Do not write business data beside the executable, into the repository, or to arbitrary user-selected paths by default. Restrict filesystem access to the minimum required directory. Exports are out of scope for Increments 0–1.
 
 ### 3.5 Date, number and identity conventions
+
+### 3.6 Windows compatibility target and WebView2 runtime
+
+The product-owner compatibility decision is broad Windows 10 x64 and Windows 11 x64 application compatibility, including ordinary Windows 10 22H2 installations that no longer receive Windows OS security updates. This is an application compatibility target, not a claim that an unsupported Windows installation is secure or vendor-supported.
+
+The selected Tauri architecture uses Microsoft Edge WebView2. Microsoft's current WebView2 documentation lists Windows 10 SAC 1709 and later, Windows 10 LTSC editions and Windows 11 as supported client platforms. Microsoft separately states that Edge and WebView2 Runtime updates continue on Windows 10 22H2 until at least October 2028, even without enrollment in the Windows 10 Extended Security Updates program. Treat these as runtime/platform facts, not a guarantee that every ARM build has been tested.
+
+Required compatibility evidence:
+- Test a clean Windows 10 22H2 x64 installation without ESU as a first-class target.
+- Test representative Windows 10 LTSC editions and Windows 11 x64 builds used by the pilot cohort; record exact edition, build, cumulative update, WebView2 runtime version and device architecture.
+- Test launch when WebView2 is present, missing, damaged or being updated. The installer must handle runtime provisioning without asking users to disable security controls.
+- Test offline installation and first launch. Tauri's default WebView2 bootstrapper requires internet; an offline installer package is larger but supports disconnected installation. Choose and verify the distribution mode before public desktop release.
+- Test display scaling, fonts, file dialogs, application-data permissions, database locking, sleep/resume, restart recovery and Windows Defender interaction.
+- A Windows Server CI build is compile evidence only; it is not a substitute for runtime testing on Windows 10 and Windows 11 devices.
+
+Microsoft references:
+- [WebView2 supported Windows versions](https://learn.microsoft.com/en-us/microsoft-edge/webview2/)
+- [Microsoft Edge and WebView2 support on Windows 10 22H2](https://learn.microsoft.com/en-us/deployedge/microsoft-edge-supported-operating-systems)
+- [Tauri Windows prerequisites](https://v2.tauri.app/start/prerequisites/)
+- [Tauri WebView2 installer modes](https://v2.tauri.app/distribute/windows-installer/)
+
+Do not promise support for a Windows build below the Microsoft WebView2 platform floor without a separately validated architecture decision. Do not disable Windows security features or describe unsupported Windows as secure. Real-client-data production use on unsupported Windows remains blocked pending a documented security risk assessment, compensating controls and explicit approval.
+
 - Persist timestamps as UTC ISO-8601 values; display in the user's local timezone.
 - Store ETB amounts only when a later approved workflow defines amount semantics; no financial amount fields are part of client registration.
 - Generate internal IDs as UUIDs. Do not use TIN, company name or sequential database IDs as primary keys.
