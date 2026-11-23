@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { desktop } from "./services/desktop";
-import type { Client, EventItem, Persona, WorkspaceInfo, WorkspaceRecord } from "./types";
+import type { Client, EventItem, LocalNote, Persona, WorkspaceInfo, WorkspaceRecord } from "./types";
 
 type Section = "home" | "clients" | "catalogue" | "history" | "work" | "imports" | "activity";
 const nav: { id: Section; label: string; eyebrow: string }[] = [
@@ -29,6 +29,8 @@ export default function App() {
   const [clients, setClients] = useState<Client[]>([]);
   const [records, setRecords] = useState<WorkspaceRecord[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
+  const [notes, setNotes] = useState<LocalNote[]>([]);
+  const [noteEditor, setNoteEditor] = useState<LocalNote | null | undefined>(undefined);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState("");
@@ -42,6 +44,7 @@ export default function App() {
       setError("");
       const info = await desktop.initialize();
       setWorkspace(info);
+      setNotes(await desktop.notes());
       if (nextSection === "clients") setClients(await desktop.clients(includeArchived));
       if (nextSection === "activity") setEvents(await desktop.events());
       const config = Object.values(recordTypes).find((item) => item.type === recordType);
@@ -80,6 +83,16 @@ export default function App() {
       setClientEditor(undefined); setClients(await desktop.clients(includeArchived));
     } catch (e) { setError(String(e)); } finally { setBusy(false); }
   }
+  async function activateClient(client: Client) {
+    if (!window.confirm(`Activate ${client.legal_name}? This changes only the local demo profile status.`)) return;
+    try { await desktop.activateClient(client.id); setClients(await desktop.clients(includeArchived)); }
+    catch (e) { setError(String(e)); }
+  }
+  async function restoreClient(client: Client) {
+    if (!window.confirm(`Restore ${client.legal_name} to the active demo register?`)) return;
+    try { await desktop.restoreClient(client.id); setClients(await desktop.clients(includeArchived)); }
+    catch (e) { setError(String(e)); }
+  }
   async function archiveClient(client: Client) {
     if (!window.confirm(`Archive ${client.legal_name}? This is reversible in the prototype and is not legal deletion.`)) return;
     try { await desktop.archiveClient(client.id); setClients(await desktop.clients(includeArchived)); }
@@ -100,6 +113,16 @@ export default function App() {
         amount_text: v.amount_text || "", notes: v.notes || "",
       });
       setRecordEditor(null); setRecords(await desktop.records(recordType));
+    } catch (e) { setError(String(e)); } finally { setBusy(false); }
+  }
+  async function saveNote(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const values = Object.fromEntries(data.entries()) as Record<string, string>;
+    try {
+      setBusy(true); setError("");
+      await desktop.saveNote({ id: noteEditor?.id || undefined, client_id: values.client_id || null, title: values.title, body: values.body || "" });
+      setNoteEditor(undefined); setNotes(await desktop.notes());
     } catch (e) { setError(String(e)); } finally { setBusy(false); }
   }
   async function resetDemo() {
@@ -133,11 +156,13 @@ export default function App() {
         <article className="summary-card"><span className="overline">INITIAL WORKFLOWS</span><div className="summary-row"><b>01</b><div><strong>Client records</strong><small>Register and maintain company or individual profiles</small></div><button onClick={() => setSection("clients")}>Open →</button></div><div className="summary-row"><b>02</b><div><strong>Products & invoices</strong><small>Maintain source-backed catalogue and invoice records</small></div><button onClick={() => setSection("catalogue")}>Open →</button></div><div className="summary-row"><b>03</b><div><strong>Historical & VAT work</strong><small>Capture historical information; calculations remain gated</small></div><button onClick={() => setSection("history")}>Open →</button></div><div className="summary-row"><b>04</b><div><strong>Staff & tasks</strong><small>Demonstrate assignment and review workflow</small></div><button onClick={() => setSection("work")}>Open →</button></div><div className="summary-row"><b>05</b><div><strong>Import costing</strong><small>Capture assumptions without unapproved calculations</small></div><button onClick={() => setSection("imports")}>Open →</button></div></article>
       </section>}
 
+      {section === "home" && <section className="content-panel notes-panel"><div className="section-head"><div><span className="overline">INCREMENT 0 · LOCAL DRAFTS</span><h2>Quick notes</h2><p>Private demonstration notes saved on this device. These are not tasks, workpapers or audit findings.</p></div><button className="primary" disabled={!canMutate} onClick={() => setNoteEditor(null)}>+ New note</button></div><div className="record-grid">{notes.map(note => <article className="record-card" key={note.id}><div className="record-card-top"><span className="status">{note.status}</span><small>{new Date(note.updated_at).toLocaleDateString()}</small></div><h3>{note.title}</h3><p>{note.body || "No note details"}</p><button className="text-button" onClick={() => setNoteEditor(note)}>Open note →</button></article>)}{notes.length === 0 && <div className="empty-card"><strong>No local notes</strong><p>Create a short draft note and reopen ARM to confirm it persists.</p></div>}</div></section>}
+
       {section === "clients" && <section className="content-panel">
         <div className="section-head"><div><span className="overline">CLIENT WORKSPACE</span><h2>Client register</h2><p>Keep a clear profile for each company or individual.</p></div><button className="primary" disabled={!canMutate} onClick={() => setClientEditor(null)}>+ Add client</button></div>
         <div className="toolbar"><input aria-label="Search clients" placeholder="Search name or TIN…" value={search} onChange={(e) => setSearch(e.target.value)} /><label className="check"><input type="checkbox" checked={includeArchived} onChange={(e) => setIncludeArchived(e.target.checked)} /> Include archived</label><span>{filteredClients.length} records</span></div>
         <div className="table-wrap"><table><thead><tr><th>CLIENT</th><th>TYPE</th><th>TIN</th><th>STATUS</th><th>UPDATED</th><th /></tr></thead><tbody>
-          {filteredClients.map(c => <tr key={c.id}><td><strong>{c.display_name || c.legal_name}</strong><small>{c.legal_name}</small></td><td>{c.record_kind}</td><td>{c.tin_raw || "Not provided"}</td><td><span className={c.status === "Archived" ? "status muted" : "status"}>{c.status}</span></td><td>{new Date(c.updated_at).toLocaleDateString()}</td><td className="actions"><button onClick={() => setClientEditor(c)}>Open</button>{c.status !== "Archived" && <button disabled={!canMutate} onClick={() => void archiveClient(c)}>Archive</button>}</td></tr>)}
+          {filteredClients.map(c => <tr key={c.id}><td><strong>{c.display_name || c.legal_name}</strong><small>{c.legal_name}</small></td><td>{c.record_kind}</td><td>{c.tin_raw || "Not provided"}</td><td><span className={c.status === "Archived" ? "status muted" : "status"}>{c.status}</span></td><td>{new Date(c.updated_at).toLocaleDateString()}</td><td className="actions"><button onClick={() => setClientEditor(c)}>Open</button>{c.status === "Draft" && <button disabled={!canMutate} onClick={() => void activateClient(c)}>Activate</button>}{c.status === "Archived" ? <button disabled={!canMutate} onClick={() => void restoreClient(c)}>Restore</button> : <button disabled={!canMutate} onClick={() => void archiveClient(c)}>Archive</button>}</td></tr>)}
           {filteredClients.length === 0 && <tr><td colSpan={6} className="empty">No clients match this search. Add a client to begin.</td></tr>}
         </tbody></table></div>
       </section>}
@@ -158,6 +183,8 @@ export default function App() {
 
       <footer className="main-footer"><span>ARM · Local demonstration workspace</span><span>Changes are saved on this device only</span></footer>
     </main>
+
+    {noteEditor !== undefined && <div className="modal-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setNoteEditor(undefined); }}><form className="modal note-modal" onSubmit={saveNote}><div className="modal-head"><div><span className="overline">INCREMENT 0 · LOCAL DRAFT</span><h2>{noteEditor ? "Edit local note" : "New local note"}</h2><p>Not a task, workpaper, finding or professional approval.</p></div><button type="button" className="close" onClick={() => setNoteEditor(undefined)}>×</button></div><div className="form-grid"><label className="wide">Title *<input name="title" required minLength={1} maxLength={120} defaultValue={noteEditor?.title ?? ""} /></label><label>Related client (optional)<select name="client_id" defaultValue={noteEditor?.client_id ?? ""}><option value="">No client</option>{clients.map(c => <option key={c.id} value={c.id}>{c.display_name || c.legal_name}</option>)}</select></label><label className="wide">Note<textarea name="body" maxLength={2000} defaultValue={noteEditor?.body ?? ""} /></label></div><div className="modal-actions"><button type="button" className="secondary" onClick={() => setNoteEditor(undefined)}>Cancel</button><button className="primary" disabled={!canMutate || busy}>Save local draft</button></div></form></div>}
 
     {clientEditor !== undefined && <div className="modal-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setClientEditor(undefined); }}><form className="modal" onSubmit={saveClient}>
       <div className="modal-head"><div><span className="overline">CLIENT PROFILE</span><h2>{clientEditor ? "Edit client" : "Add a client"}</h2><p>Only a record kind and legal name are required to save a draft.</p></div><button type="button" className="close" onClick={() => setClientEditor(undefined)}>×</button></div>
