@@ -1067,7 +1067,7 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
     if input.record_type == "invoice" && input.status == "Ready for review" {
         let raw_lines = payload.get("invoice_lines_json").and_then(|v| v.as_str()).unwrap_or("").trim();
         let legacy_description = payload.get("line_items_text").and_then(|v| v.as_str()).unwrap_or("").trim();
-        if raw_lines.is_empty() {
+        if raw_lines.is_empty() || raw_lines == "[]" {
             if legacy_description.is_empty() {
                 return Err("Capture at least one structured invoice line or preserve the source line descriptions before review.".into());
             }
