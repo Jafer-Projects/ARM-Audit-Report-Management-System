@@ -698,6 +698,22 @@ pub fn disposition_task_review_note(note_id: String, decision: String, reason: S
     Ok(())
 }
 
+fn validate_historical_import_rows(rows: &[HistoricalImportRow]) -> Result<(), String> {
+    if rows.is_empty() || rows.len() > 1000 {
+        return Err("A batch must contain between 1 and 1,000 data rows.".into());
+    }
+    let mut seen_rows = std::collections::HashSet::new();
+    for row in rows {
+        if row.source_row < 2 || row.source_row > 100_001 || !seen_rows.insert(row.source_row) {
+            return Err("CSV source row numbers must be unique and start at row 2.".into());
+        }
+        if row.description.trim().is_empty() || row.amount_text.trim().is_empty() {
+            return Err(format!("CSV row {} needs both a description and source amount.", row.source_row));
+        }
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn import_historical_batch(input: HistoricalImportInput, state: State<'_, AppState>) -> Result<HistoricalImportResult, String> {
     if input.source_content.len() > 5 * 1024 * 1024 {
@@ -714,15 +730,7 @@ pub fn import_historical_batch(input: HistoricalImportInput, state: State<'_, Ap
     if input.mapping_json.len() > 16_384 || serde_json::from_str::<serde_json::Value>(&input.mapping_json).is_err() {
         return Err("Column mapping must be valid JSON under 16 KB.".into());
     }
-    let mut seen_rows = std::collections::HashSet::new();
-    for row in &input.rows {
-        if row.source_row < 2 || row.source_row > 100_001 || !seen_rows.insert(row.source_row) {
-            return Err("CSV source row numbers must be unique and start at row 2.".into());
-        }
-        if row.description.trim().is_empty() || row.amount_text.trim().is_empty() {
-            return Err(format!("CSV row {} needs both a description and source amount.", row.source_row));
-        }
-    }
+    validate_historical_import_rows(&input.rows)?;
     let digest = Sha256::digest(input.source_content.as_bytes());
     let checksum = digest.iter().map(|byte| format!("{byte:02x}")).collect::<String>();
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
@@ -2111,13 +2119,18 @@ mod tests {
     }
 
     #[test]
-    fn historical_import_row_identity_constraints_reject_duplicates_before_persistence() {
-        let rows = [2_usize, 3, 4];
-        let unique: std::collections::HashSet<_> = rows.iter().collect();
-        assert_eq!(unique.len(), rows.len());
-        let duplicate_rows = [2_usize, 3, 2];
-        let duplicate_set: std::collections::HashSet<_> = duplicate_rows.iter().collect();
-        assert_ne!(duplicate_set.len(), duplicate_rows.len());
+    fn historical_import_row_validation_rejects_duplicates_empty_values_and_invalid_row_numbers() {
+        let make_row = |source_row, description: &str, amount_text: &str| HistoricalImportRow {
+            source_row, transaction_date: "2026-01-01".into(), description: description.into(),
+            amount_text: amount_text.into(), currency: "ETB".into(), supplier: "Synthetic supplier".into(),
+            supplier_tin: "".into(), vat_amount: "".into(), invoice_reference: "".into(),
+        };
+        assert!(validate_historical_import_rows(&[make_row(2,"Purchase","100")]).is_ok());
+        assert!(validate_historical_import_rows(&[make_row(2,"Purchase","100"),make_row(2,"Second","200")]).is_err());
+        assert!(validate_historical_import_rows(&[make_row(1,"Purchase","100")]).is_err());
+        assert!(validate_historical_import_rows(&[make_row(2," ","100")]).is_err());
+        assert!(validate_historical_import_rows(&[make_row(2,"Purchase"," ")]).is_err());
+        assert!(validate_historical_import_rows(&[]).is_err());
     }
 
 }
