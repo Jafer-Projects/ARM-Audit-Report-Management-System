@@ -2522,6 +2522,68 @@ mod tests {
     }
 
     #[test]
+    fn cancelled_task_retains_work_product_and_restart_state() {
+        let directory = tempfile::tempdir().expect("temporary data directory");
+        let path = directory.path().join("arm-cancelled-task.sqlite3");
+        let app = test_app_with_database(crate::db::Database::open(&path).expect("file-backed database"));
+        let client_id = command_active_client_id(&app);
+        set_demo_persona("manager".into(),app.state::<AppState>()).unwrap();
+        let draft = save_record(task_input(None,None,&client_id,"Draft",json!({"description":"Retain cancelled task work"})),app.state::<AppState>()).unwrap();
+        let payload = assigned_task_payload();
+        let assigned = save_record(task_input(Some(draft.id.clone()),Some(draft.row_version),&client_id,"Assigned",payload.clone()),app.state::<AppState>()).unwrap();
+        let cancelled = save_record(task_input(Some(assigned.id.clone()),Some(assigned.row_version),&client_id,"Cancelled",payload),app.state::<AppState>()).unwrap();
+        assert_eq!(cancelled.status,"Cancelled");
+        drop(app);
+        let reopened = crate::db::Database::open(&path).expect("reopen task database");
+        let (status,payload,versions):(String,String,i64) = reopened.connection.query_row(
+            "SELECT r.status,r.payload_json,(SELECT COUNT(*) FROM workspace_record_version v WHERE v.record_id=r.id) FROM workspace_record r WHERE r.id=?1",
+            [&cancelled.id],|row|Ok((row.get(0)?,row.get(1)?,row.get(2)?))
+        ).unwrap();
+        assert_eq!(status,"Cancelled");
+        assert!(payload.contains("Review synthetic purchase invoices"));
+        assert_eq!(versions,3);
+    }
+
+    #[test]
+    fn import_cost_calculation_snapshots_are_immutable_and_new_versions_are_separate_records() {
+        let app = test_app();
+        let client_id = command_active_client_id(&app);
+        set_demo_persona("manager".into(),app.state::<AppState>()).unwrap();
+        save_record(RecordInput {
+            id:None,row_version:None,client_id:Some(client_id.clone()),record_type:"import_case".into(),
+            title:"Synthetic import case".into(),status:"Discovery".into(),reference:Some("CASE-COST-IMM".into()),
+            amount_text:None,notes:None,payload_json:Some(json!({"base_currency":"ETB"}).to_string()),
+            duplicate_acknowledged:None,duplicate_acknowledgement_reason:None,
+        },app.state::<AppState>()).expect("create import case");
+        let first_payload = json!({"entry_kind":"calculation_result","result_json":"{\\\"base_currency\\\":\\\"ETB\\\",\\\"total\\\":100}"});
+        let first = save_record(RecordInput {
+            id:None,row_version:None,client_id:Some(client_id.clone()),record_type:"import_cost_input".into(),
+            title:"Calculation version 1".into(),status:"Draft".into(),reference:Some("CASE-COST-IMM".into()),
+            amount_text:None,notes:None,payload_json:Some(first_payload.to_string()),
+            duplicate_acknowledged:None,duplicate_acknowledgement_reason:None,
+        },app.state::<AppState>()).expect("save first calculation snapshot");
+        let mut changed_payload = first_payload.clone();
+        changed_payload["result_json"] = json!("{\\\"base_currency\\\":\\\"ETB\\\",\\\"total\\\":999}");
+        assert!(save_record(RecordInput {
+            id:Some(first.id.clone()),row_version:Some(first.row_version),client_id:Some(client_id.clone()),
+            record_type:"import_cost_input".into(),title:"Calculation version 1 changed".into(),status:"Draft".into(),
+            reference:Some("CASE-COST-IMM".into()),amount_text:None,notes:None,payload_json:Some(changed_payload.to_string()),
+            duplicate_acknowledged:None,duplicate_acknowledgement_reason:None,
+        },app.state::<AppState>()).is_err());
+        let second = save_record(RecordInput {
+            id:None,row_version:None,client_id:Some(client_id.clone()),record_type:"import_cost_input".into(),
+            title:"Calculation version 2".into(),status:"Draft".into(),reference:Some("CASE-COST-IMM".into()),
+            amount_text:None,notes:None,payload_json:Some(changed_payload.to_string()),
+            duplicate_acknowledged:None,duplicate_acknowledgement_reason:None,
+        },app.state::<AppState>()).expect("create separate calculation version");
+        assert_ne!(first.id,second.id);
+        let state = app.state::<AppState>();
+        let db = state.database.lock().unwrap();
+        let first_json: String = db.connection.query_row("SELECT payload_json FROM workspace_record WHERE id=?1",[&first.id],|row|row.get(0)).unwrap();
+        assert!(first_json.contains("\\\\"total\\\\\":100"));
+    }
+
+    #[test]
     fn invoice_draft_can_be_saved_with_missing_fields_and_duplicates_remain_advisory() {
         let app = test_app();
         let client_id = command_active_client_id(&app);
