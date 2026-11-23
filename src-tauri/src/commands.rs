@@ -62,6 +62,7 @@ pub struct WorkspaceRecord {
     reference: String,
     amount_text: String,
     notes: String,
+    payload_json: String,
     row_version: i64,
     updated_at: String,
 }
@@ -307,9 +308,9 @@ pub fn save_note(input: LocalNoteInput, state: State<'_, AppState>) -> Result<Lo
 pub fn list_records(record_type: String, state: State<'_, AppState>) -> Result<Vec<WorkspaceRecord>, String> {
     if !allowed_record_type(&record_type) { return Err("Unsupported workspace record type.".into()); }
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
-    let mut stmt = db.connection.prepare("SELECT id,client_id,record_type,title,status,reference,amount_text,notes,row_version,updated_at FROM workspace_record WHERE firm_id=?1 AND record_type=?2 ORDER BY updated_at DESC").map_err(|e| e.to_string())?;
+    let mut stmt = db.connection.prepare("SELECT id,client_id,record_type,title,status,reference,amount_text,notes,payload_json,row_version,updated_at FROM workspace_record WHERE firm_id=?1 AND record_type=?2 ORDER BY updated_at DESC").map_err(|e| e.to_string())?;
     let rows = stmt.query_map(params![FIRM_ID,record_type], |r| Ok(WorkspaceRecord {
-        id:r.get(0)?,client_id:r.get(1)?,record_type:r.get(2)?,title:r.get(3)?,status:r.get(4)?,reference:r.get(5)?,amount_text:r.get(6)?,notes:r.get(7)?,row_version:r.get(8)?,updated_at:r.get(9)?
+        id:r.get(0)?,client_id:r.get(1)?,record_type:r.get(2)?,title:r.get(3)?,status:r.get(4)?,reference:r.get(5)?,amount_text:r.get(6)?,notes:r.get(7)?,payload_json:r.get(8)?,row_version:r.get(9)?,updated_at:r.get(10)?
     })).map_err(|e| e.to_string())?;
     rows.collect::<Result<Vec<_>,_>>().map_err(|e| e.to_string())
 }
@@ -337,9 +338,9 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
     tx.execute("INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json) VALUES(?1,?2,?3,?4,'workspace_record',?5,?6,?7,?8)",
         params![Uuid::new_v4().to_string(),FIRM_ID,actor_id,if exists.is_some(){"workspace_record_updated"}else{"workspace_record_created"},id,now,Uuid::new_v4().to_string(),json!({"record_type":input.record_type,"status":input.status}).to_string()]).map_err(|e|e.to_string())?;
     tx.commit().map_err(|e|e.to_string())?;
-    let mut stmt = db.connection.prepare("SELECT id,client_id,record_type,title,status,reference,amount_text,notes,row_version,updated_at FROM workspace_record WHERE id=?1").map_err(|e|e.to_string())?;
+    let mut stmt = db.connection.prepare("SELECT id,client_id,record_type,title,status,reference,amount_text,notes,payload_json,row_version,updated_at FROM workspace_record WHERE id=?1").map_err(|e|e.to_string())?;
     stmt.query_row([id], |r| Ok(WorkspaceRecord {
-        id:r.get(0)?,client_id:r.get(1)?,record_type:r.get(2)?,title:r.get(3)?,status:r.get(4)?,reference:r.get(5)?,amount_text:r.get(6)?,notes:r.get(7)?,row_version:r.get(8)?,updated_at:r.get(9)?
+        id:r.get(0)?,client_id:r.get(1)?,record_type:r.get(2)?,title:r.get(3)?,status:r.get(4)?,reference:r.get(5)?,amount_text:r.get(6)?,notes:r.get(7)?,payload_json:r.get(8)?,row_version:r.get(9)?,updated_at:r.get(10)?
     })).map_err(|e|e.to_string())
 }
 
