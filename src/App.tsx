@@ -75,6 +75,7 @@ const recordFields: Record<string, RecordField[]> = {
     { key: "source_filename", label: "Source filename (metadata only)" },
     { key: "source_received_date", label: "Source received date", kind: "date" },
     { key: "source_association_note", label: "Source association note", kind: "textarea", wide: true },
+    { key: "reviewer_note", label: "Reviewer decision / correction note", kind: "textarea", wide: true },
   ],
   period: [
     { key: "period_label", label: "Period label" },
