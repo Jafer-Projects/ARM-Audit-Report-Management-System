@@ -10,7 +10,7 @@ export type Client = {
 };
 export type WorkspaceRecord = {
   id: string; client_id: string | null; record_type: string; title: string; status: string;
-  reference: string; amount_text: string; notes: string; row_version: number; updated_at: string;
+  reference: string; amount_text: string; notes: string; payload_json: string; row_version: number; updated_at: string;
 };
 export type EventItem = {
   id: string; event_type: string; target_type: string; target_id: string;
@@ -19,7 +19,7 @@ export type EventItem = {
 export type ClientInput = Omit<Client, "id" | "row_version" | "status" | "updated_at"> & { id?: string; row_version?: number };
 export type RecordInput = {
   id?: string; row_version?: number; client_id?: string | null; record_type: string;
-  title: string; status: string; reference?: string; amount_text?: string; notes?: string;
+  title: string; status: string; reference?: string; amount_text?: string; notes?: string; payload_json?: string;
 };
 
 export type LocalNote = { id: string; client_id: string | null; title: string; body: string; status: string; updated_at: string };
