@@ -20,15 +20,17 @@ This log records engineering evidence while the integrated system is being built
 - [x] Historical CSV mapping preview and atomic import added (5 MB / 1,000-row limits, retained source content, SHA-256 checksum, row-level provenance, duplicate-reference flags and count reconciliation).
 - [x] Draft VAT workpaper grouping, VAT exception capture and print/PDF preview added without calculations or filing output.
 - [x] Staff directory and role-aware task overview, due-state filters, workload counts and assigned preparer/reviewer workflow added.
+- [x] Demo client visibility is scoped to non-draft task assignment; auditor and read-only reviewer views are limited to assigned client workspaces; client lifecycle and staff administration are manager/admin-only; local notes are author-scoped and activity/version history is assignment-filtered.
 - [x] Task review-note lifecycle added (Open → Responded → Cleared/Reopened), with no-delete/content-immutable guards, preparer response and reviewer disposition.
 - [x] Submitted task content is protected from reviewer edits; task reassignment/reviewer change and cancellation require recorded reasons; task snapshots preserve revisions.
 - [x] Import-cost discovery captures all 12 practitioner prompts and Gate 5-A supporting artifact references; cost inputs remain locked.
 - [x] Append-only local activity event table and activity view added.
 - [x] Offline/local-only status presented honestly.
 - [x] Windows x64 CI workflow added for typecheck, domain tests, frontend build and Rust build.
+- [x] Windows 10/11 and WebView2 compatibility requirements documented; future bundles are configured for the offline WebView2 installer mode, but bundling remains disabled and no installer has been built or runtime-tested.
 - [x] Three Node domain contract tests executed locally: 3 passed.
 - [x] SQLite in-memory smoke checks exercised immutable-history triggers and allowed task review-note transitions; foreign-key check returned no violations.
-- [ ] Rust tests (including new migration, import, version-history and review-note tests), TypeScript typecheck, frontend build and Tauri Windows build remain unverified because no application workflow jobs have run; the available repository Actions runs report startup failure with zero jobs.
+- [ ] Rust tests (including new migration, import, version-history, review-note and assigned-client authorization tests), TypeScript typecheck, frontend build and Tauri Windows build remain unverified because no application workflow jobs have run; the available repository Actions runs report startup failure with zero jobs.
 
 These checkmarks mean source code has been added, not that the feature has passed acceptance or been verified by CI.
 
