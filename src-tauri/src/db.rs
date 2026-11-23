@@ -224,8 +224,9 @@ impl Database {
     fn seed_demo(&self) -> Result<()> {
         let firm_count: i64 = self.connection.query_row("SELECT COUNT(*) FROM demo_firm", [], |r| r.get(0))?;
         if firm_count == 0 {
+            let tx = self.connection.unchecked_transaction()?;
             let firm = "00000000-0000-4000-8000-000000000001";
-            self.connection.execute(
+            tx.execute(
                 "INSERT INTO demo_firm(id,name,created_at) VALUES(?1,?2,?3)",
                 rusqlite::params![firm, "ARM Demonstration Firm", now_utc()],
             )?;
@@ -235,16 +236,16 @@ impl Database {
                 ("00000000-0000-4000-8000-000000000013", "Demo Auditor", "auditor"),
                 ("00000000-0000-4000-8000-000000000014", "Demo Read-only Reviewer", "reviewer"),
             ] {
-                self.connection.execute(
+                tx.execute(
                     "INSERT INTO demo_actor(id,display_name,persona,created_at) VALUES(?1,?2,?3,?4)",
                     rusqlite::params![id,name,persona,now_utc()],
                 )?;
             }
-            self.connection.execute(
+            tx.execute(
                 "INSERT INTO app_setting(key,value) VALUES('active_actor_id',?1)",
                 rusqlite::params!["00000000-0000-4000-8000-000000000011"],
             )?;
-            self.connection.execute(
+            tx.execute(
                 "INSERT INTO client(id,firm_id,record_kind,legal_name,display_name,status,created_at,updated_at,created_by,updated_by)
                  VALUES(?1,?2,'Company','Sample Trading PLC','Sample Trading','Active',?3,?3,?4,?4)",
                 rusqlite::params![
@@ -252,7 +253,7 @@ impl Database {
                     "00000000-0000-4000-8000-000000000011"
                 ],
             )?;
-            self.connection.execute(
+            tx.execute(
                 "INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json)
                  VALUES(?1,?2,?3,'demo_workspace_initialized','demo_workspace',?2,?4,?5,'{}')",
                 rusqlite::params![
@@ -261,6 +262,7 @@ impl Database {
                     "00000000-0000-4000-8000-000000000202"
                 ],
             )?;
+            tx.commit()?;
         }
         Ok(())
     }
