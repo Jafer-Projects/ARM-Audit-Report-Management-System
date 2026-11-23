@@ -419,9 +419,7 @@ pub fn list_notes(state: State<'_, AppState>) -> Result<Vec<LocalNote>, String> 
     let (actor_id,actor_name,persona) = active_actor(&db)?;
     let mut stmt = db.connection.prepare("SELECT id,client_id,title,body,status,updated_at FROM local_note WHERE firm_id=?1 AND actor_id=?2 ORDER BY updated_at DESC").map_err(|e|e.to_string())?;
     let rows = stmt.query_map(params![FIRM_ID,actor_id], |r| Ok(LocalNote { id:r.get(0)?,client_id:r.get(1)?,title:r.get(2)?,body:r.get(3)?,status:r.get(4)?,updated_at:r.get(5)? })).map_err(|e|e.to_string())?;
-    let mut notes = rows.collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())?;
-    notes.retain(|note| note.client_id.as_deref().map_or(true, |client_id| actor_has_client_access(&db,client_id,&actor_name,&persona).unwrap_or(false)));
-    Ok(notes)
+    rows.collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())
 }
 
 #[tauri::command]
@@ -435,8 +433,7 @@ pub fn save_note(input: LocalNoteInput, state: State<'_, AppState>) -> Result<Lo
     if let Some(client_id) = input.client_id.as_deref() {
         let active: bool = db.connection.query_row("SELECT EXISTS(SELECT 1 FROM client WHERE id=?1 AND firm_id=?2 AND status='Active')",params![client_id,FIRM_ID],|r|r.get(0)).map_err(|e|e.to_string())?;
         if !active { return Err("Selected client is not active in this demo workspace.".into()); }
-        if !actor_has_client_access(&db,client_id,&actor_name,&persona)? { return Err("This client workspace is not assigned to your demo persona.".into()); }
-    }
+        }
     let id = input.id.unwrap_or_else(||Uuid::new_v4().to_string());
     let now = now_utc();
     let tx = db.connection.unchecked_transaction().map_err(|e|e.to_string())?;
@@ -800,7 +797,6 @@ pub fn list_historical_import_batches(client_id: String, state: State<'_, AppSta
     ).map_err(|e|e.to_string())?;
     if !active { return Err("Choose an active client in this demonstration firm.".into()); }
     let (_,actor_name,persona) = active_actor(&db)?;
-    if !actor_has_client_access(&db,&client_id,&actor_name,&persona)? { return Err("This client workspace is not assigned to your demo persona.".into()); }
     let mut stmt = db.connection.prepare(
         "SELECT id,source_filename,source_checksum_sha256,source_row_count,imported_row_count,imported_at
          FROM historical_import_batch WHERE firm_id=?1 AND client_id=?2 ORDER BY imported_at DESC"
