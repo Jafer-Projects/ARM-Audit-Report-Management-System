@@ -200,6 +200,26 @@ pub fn find_client_duplicates(legal_name: String, tin_raw: String, exclude_id: O
     rows.collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())
 }
 
+fn validate_client_fields(input: &ClientInput) -> Result<(), String> {
+    validate_client_fields(&input)?;
+    let legal_name = input.legal_name.trim();
+    Ok(())
+}
+
+fn require_duplicate_acknowledgement(duplicate_count: usize, acknowledged: Option<bool>) -> Result<(), String> {
+    if duplicate_count > 0 && acknowledged != Some(true) {
+        return Err("Possible duplicate client found. Compare the candidate and explicitly acknowledge before saving.".into());
+    }
+    Ok(())
+}
+
+fn ensure_expected_row_version(expected: Option<i64>, actual: i64) -> Result<(), String> {
+    if expected != Some(actual) {
+        return Err("This client changed since it was opened. Reload or copy your changes before saving.".into());
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn save_client(input: ClientInput, state: State<'_, AppState>) -> Result<Client, String> {
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
@@ -225,9 +245,7 @@ pub fn save_client(input: ClientInput, state: State<'_, AppState>) -> Result<Cli
     let duplicate_rows = duplicate_stmt.query_map(params![FIRM_ID,id,legal_name,input.tin_raw.as_deref().unwrap_or("").trim()], |r| Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?))).map_err(|e|e.to_string())?;
     let duplicates = duplicate_rows.collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())?;
     drop(duplicate_stmt);
-    if !duplicates.is_empty() && input.duplicate_acknowledged != Some(true) {
-        return Err("Possible duplicate client found. Compare the candidate and explicitly acknowledge before saving.".into());
-    }
+    require_duplicate_acknowledgement(duplicates.len(), input.duplicate_acknowledged)?;
     let now = now_utc();
     let exists: Option<i64> = db.connection.query_row("SELECT row_version FROM client WHERE id=?1 AND firm_id=?2", params![id,FIRM_ID], |r| r.get(0)).optional().map_err(|e| e.to_string())?;
     let before_snapshot: Option<serde_json::Value> = if exists.is_some() {
@@ -251,7 +269,7 @@ pub fn save_client(input: ClientInput, state: State<'_, AppState>) -> Result<Cli
     });
     let tx = db.connection.unchecked_transaction().map_err(|e| e.to_string())?;
     if let Some(current_version) = exists {
-        if input.row_version != Some(current_version) { return Err("This client changed since it was opened. Reload or copy your changes before saving.".into()); }
+        ensure_expected_row_version(input.row_version, current_version)?;
         tx.execute(
             "UPDATE client SET record_kind=?1,legal_name=?2,display_name=?3,tin_raw=?4,sector=?5,contact_name=?6,contact_email=?7,contact_phone=?8,address_text=?9,internal_reference=?10,notes=?11,row_version=row_version+1,updated_at=?12,updated_by=?13 WHERE id=?14 AND firm_id=?15",
             params![input.record_kind,legal_name,input.display_name.unwrap_or_default(),input.tin_raw.unwrap_or_default().trim(),input.sector.unwrap_or_default(),input.contact_name.unwrap_or_default(),input.contact_email.unwrap_or_default().trim(),input.contact_phone.unwrap_or_default(),input.address_text.unwrap_or_default(),input.internal_reference.unwrap_or_default(),input.notes.unwrap_or_default(),now,actor_id,id,FIRM_ID]
@@ -2040,6 +2058,44 @@ mod tests {
     }
 
 
+
+    fn sample_client_input(name: &str, email: Option<&str>) -> ClientInput {
+        ClientInput {
+            id: None, row_version: None, record_kind: "Company".into(), legal_name: name.into(),
+            display_name: Some("Synthetic display".into()), tin_raw: Some("TIN-001".into()), sector: Some("Services".into()),
+            contact_name: Some("Demo Contact".into()), contact_email: email.map(str::to_string),
+            contact_phone: None, address_text: None, internal_reference: None, notes: None,
+            duplicate_acknowledged: None,
+        }
+    }
+
+    #[test]
+    fn client_field_validation_accepts_minimal_profile_and_rejects_invalid_fields() {
+        assert!(validate_client_fields(&sample_client_input("Valid Company",None)).is_ok());
+        assert!(validate_client_fields(&sample_client_input("Valid Company",Some("contact@example.org"))).is_ok());
+        assert!(validate_client_fields(&sample_client_input(" ",None)).is_err());
+        let mut invalid_kind = sample_client_input("Valid Company",None);
+        invalid_kind.record_kind = "Unknown".into();
+        assert!(validate_client_fields(&invalid_kind).is_err());
+        for email in ["not-an-email","@example.org","contact@","contact with space@example.org"] {
+            assert!(validate_client_fields(&sample_client_input("Valid Company",Some(email))).is_err(), "expected invalid email {email}");
+        }
+    }
+
+    #[test]
+    fn duplicate_acknowledgement_is_required_only_when_candidates_exist() {
+        assert!(require_duplicate_acknowledgement(0,None).is_ok());
+        assert!(require_duplicate_acknowledgement(2,None).is_err());
+        assert!(require_duplicate_acknowledgement(1,Some(false)).is_err());
+        assert!(require_duplicate_acknowledgement(1,Some(true)).is_ok());
+    }
+
+    #[test]
+    fn optimistic_row_version_guard_rejects_missing_or_stale_versions() {
+        assert!(ensure_expected_row_version(Some(4),4).is_ok());
+        assert!(ensure_expected_row_version(None,4).is_err());
+        assert!(ensure_expected_row_version(Some(3),4).is_err());
+    }
 
     #[test]
     fn read_only_reviewer_is_rejected_by_the_shared_mutation_guard() {
