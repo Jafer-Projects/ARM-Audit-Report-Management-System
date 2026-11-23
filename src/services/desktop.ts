@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Client, ClientInput, EventItem, RecordInput, WorkspaceInfo, WorkspaceRecord } from "../types";
+import type { Client, ClientInput, EventItem, LocalNote, RecordInput, WorkspaceInfo, WorkspaceRecord } from "../types";
 
 export const desktop = {
   initialize: () => invoke<WorkspaceInfo>("initialize_workspace"),
@@ -7,6 +7,10 @@ export const desktop = {
   clients: (includeArchived = false) => invoke<Client[]>("list_clients", { includeArchived }),
   saveClient: (input: ClientInput) => invoke<Client>("save_client", { input }),
   archiveClient: (id: string) => invoke<void>("archive_client", { id }),
+  activateClient: (id: string) => invoke<void>("activate_client", { id }),
+  restoreClient: (id: string) => invoke<void>("restore_client", { id }),
+  notes: () => invoke<LocalNote[]>("list_notes"),
+  saveNote: (input: { id?: string; client_id?: string | null; title: string; body: string }) => invoke<LocalNote>("save_note", { input }),
   records: (recordType: string) => invoke<WorkspaceRecord[]>("list_records", { recordType }),
   saveRecord: (input: RecordInput) => invoke<WorkspaceRecord>("save_record", { input }),
   events: () => invoke<EventItem[]>("list_events"),
