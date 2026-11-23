@@ -11,7 +11,7 @@ The developer must be able to implement these increments without inventing busin
 
 - **One implementation branch:** all implementation commits for Increments 0–5 remain on `implementation/increments-0-to-5`.
 - **One pull request:** all implementation commits and supporting contract updates remain in PR #2, targeting `main`. Keep PR #2 open while the six increments are implemented. Do not create increment-specific implementation branches or PRs.
-- **No individual increment acceptance:** criteria and screen checklists for each increment are verification requirements only. An increment may be demonstrated, code-reviewed and tested, but must never be marked accepted, passed, released or independently signed off.
+- **No individual increment acceptance:** criteria and screen checklists for each increment are verification requirements only. An increment may be demonstrated and code-reviewed, but formal test execution is deferred until Increment 5 is implemented. It must never be marked accepted, passed, released or independently signed off.
 - **Verification and test execution are deferred:** do not run the formal Increments 0–5 verification/test program until Increment 5 implementation is complete. During implementation, prepare and maintain test plans, fixtures and acceptance mappings; do not mark any increment accepted or use partial evidence as acceptance. After Increment 5, run the integrated suite and regression program once against the completed prototype. This timing rule never permits deleting tests, weakening assertions or claiming unrun checks passed.
 - **Single collective acceptance gate:** only after Increment 5 is implemented, run the complete cross-increment acceptance suite against the integrated Increments 0–5 application. No earlier increment-level test run or demonstration constitutes acceptance. Evaluate all requirements, roles, workflows, persistence, restart recovery, offline behavior, evidence integrity, failure recovery, Windows compatibility, usability and regression together.
 - **Gate outcomes:** record one overall result only: `NOT READY`, `READY FOR PRACTITIONER ACCEPTANCE`, or `ACCEPTED FOR CONTROLLED SYNTHETIC-DATA USE`. A failed criterion keeps the collective gate at `NOT READY`; fix it and rerun the affected tests plus full regression.
@@ -454,7 +454,7 @@ Clients → Add client → Enter identity → Save draft → Review completeness
 | Demo Auditor | Searches for a client by TIN text and acknowledges a possible duplicate | Search is firm-scoped; no automatic merge; acknowledgment event recorded |
 | Demo Read-only Reviewer | Opens profile and activity | Can inspect; all mutation routes are unavailable and command-guarded |
 
-**Increment 1 verification checkpoint (not an acceptance or exit gate):** continuously verify offline restart durability, validation preservation, duplicate handling, event atomicity and stale-row conflict behavior. These results contribute to the single collective Increments 0–5 acceptance gate and do not constitute Increment 1 acceptance.
+**Increment 1 test cases (not an acceptance or exit gate):** prepare cases for offline restart durability, validation preservation, duplicate handling, event atomicity and stale-row conflict behavior. Execute these cases only during the single collective Increments 0–5 verification program after Increment 5 is implemented. They do not constitute Increment 1 acceptance.
 
 ---
 
