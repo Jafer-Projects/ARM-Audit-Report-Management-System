@@ -18,6 +18,12 @@ const recordTypes: Record<Exclude<Section, "home" | "clients" | "activity">, { t
   work: { type: "task", label: "Staff task", statuses: ["Draft", "Assigned", "In progress", "Blocked", "Submitted", "Returned", "Completed"], hint: "Record staff and task workflow demonstrations. Demo personas are not production authorization." },
   imports: { type: "import_case", label: "Import-cost case", statuses: ["Discovery", "Inputs captured", "Needs review", "Reviewed"], hint: "Capture import-cost assumptions and source references only. No customs valuation, landed-cost or selling-price calculation is enabled." },
 };
+const subtypeOptions: Record<"catalogue" | "history" | "work" | "imports", { type: string; label: string }[]> = {
+  catalogue: [{ type: "category", label: "Categories" }, { type: "product", label: "Products" }, { type: "invoice", label: "Invoices" }],
+  history: [{ type: "period", label: "Periods" }, { type: "historical_record", label: "Historical records" }],
+  work: [{ type: "staff", label: "Staff" }, { type: "task", label: "Tasks" }],
+  imports: [{ type: "import_case", label: "Import cases" }, { type: "import_cost_input", label: "Cost inputs" }],
+};
 const personaLabels: Record<Persona, string> = {
   administrator: "Demo Firm Administrator", manager: "Demo Engagement Manager",
   auditor: "Demo Auditor", reviewer: "Demo Read-only Reviewer",
@@ -47,16 +53,20 @@ export default function App() {
       setNotes(await desktop.notes());
       if (nextSection === "clients") setClients(await desktop.clients(includeArchived));
       if (nextSection === "activity") setEvents(await desktop.events());
-      const config = Object.values(recordTypes).find((item) => item.type === recordType);
-      if (config && ["catalogue", "history", "work", "imports"].includes(nextSection)) setRecords(await desktop.records(config.type));
+      if (["catalogue", "history", "work", "imports"].includes(nextSection)) setRecords(await desktop.records(recordType));
     } catch (e) { setError(String(e)); }
   }
   useEffect(() => { void refresh("home"); }, []);
   useEffect(() => { if (section === "clients" || section === "activity") void refresh(section); }, [section, includeArchived]);
   useEffect(() => {
     const config = recordTypes[section as keyof typeof recordTypes];
-    if (config) { setRecordType(config.type); void desktop.records(config.type).then(setRecords).catch((e) => setError(String(e))); }
+    if (config) setRecordType(config.type);
   }, [section]);
+  useEffect(() => {
+    if (["catalogue", "history", "work", "imports"].includes(section)) {
+      void desktop.records(recordType).then(setRecords).catch((e) => setError(String(e)));
+    }
+  }, [recordType, section]);
 
   const filteredClients = useMemo(() => clients.filter((c) =>
     [c.legal_name, c.display_name, c.tin_raw].join(" ").toLowerCase().includes(search.toLowerCase())), [clients, search]);
@@ -102,7 +112,7 @@ export default function App() {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     const v = Object.fromEntries(data.entries()) as Record<string, string>;
-    const config = Object.values(recordTypes).find((item) => item.type === recordType);
+    const config = recordTypes[section as keyof typeof recordTypes];
     if (!config) return;
     try {
       setBusy(true); setError("");
@@ -171,7 +181,8 @@ export default function App() {
         const config = recordTypes[section as keyof typeof recordTypes];
         if (!config) return null;
         return <section className="content-panel">
-          <div className="section-head"><div><span className="overline">{config.label.toUpperCase()}</span><h2>{nav.find(n => n.id === section)?.label}</h2><p>{config.hint}</p></div><button className="primary" disabled={!canMutate} onClick={() => setRecordEditor({ id:"",client_id:null,record_type:config.type,title:"",status:config.statuses[0],reference:"",amount_text:"",notes:"",row_version:0,updated_at:"" })}>+ Add record</button></div>
+          <div className="section-head"><div><span className="overline">{config.label.toUpperCase()}</span><h2>{nav.find(n => n.id === section)?.label}</h2><p>{config.hint}</p></div><button className="primary" disabled={!canMutate} onClick={() => setRecordEditor({ id:"",client_id:null,record_type:recordType,title:"",status:config.statuses[0],reference:"",amount_text:"",notes:"",row_version:0,updated_at:"" })}>+ Add record</button></div>
+          <div className="subtype-tabs" role="group" aria-label="Record type">{subtypeOptions[section as keyof typeof subtypeOptions].map(option => <button key={option.type} className={recordType === option.type ? "subtype-tab active" : "subtype-tab"} onClick={() => setRecordType(option.type)}>{option.label}</button>)}</div>
           <div className="record-grid">{records.map(r => <article className="record-card" key={r.id}><div className="record-card-top"><span className="status">{r.status}</span><small>{new Date(r.updated_at).toLocaleDateString()}</small></div><h3>{r.title}</h3><p>{r.notes || "No additional notes"}</p><div className="record-meta"><span>{r.reference || "No source reference"}</span>{r.amount_text && <strong>{r.amount_text}</strong>}</div><button className="text-button" onClick={() => setRecordEditor(r)}>Open record →</button></article>)}
           {records.length === 0 && <div className="empty-card"><strong>No records yet</strong><p>Create a record to start this workflow. Data is stored locally in the demo database.</p></div>}</div>
         </section>;
