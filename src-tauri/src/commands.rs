@@ -1,4 +1,4 @@
-use crate::{db::{now_utc, Database}, AppState};
+use crate::{db::{now_utc, Database}, import_cost::{calculate_import_cost, CostComponentInput, GoodsLineInput, ImportCostResult}, AppState};
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -338,7 +338,7 @@ fn allowed_status(record_type: &str, status: &str) -> bool {
         "staff" => ["Draft","Active","Inactive"].contains(&status),
         "task" => ["Draft","Assigned","In progress","Blocked","Submitted","Returned","Completed","Cancelled"].contains(&status),
         "import_case" => ["Discovery","Inputs captured","Needs review","Reviewed","Deferred"].contains(&status),
-        "import_cost_input" => false,
+        "import_cost_input" => ["Draft","Needs source","Ready for review","Reviewed"].contains(&status),
         _ => false,
     }
 }
@@ -376,6 +376,11 @@ fn valid_record_transition(record_type: &str, previous: Option<&str>, next: &str
         ("import_case", Some("Needs review"), "Needs review" | "Inputs captured" | "Reviewed" | "Deferred") => true,
         ("import_case", Some("Reviewed"), "Reviewed" | "Deferred") => true,
         ("import_case", Some("Deferred"), "Deferred" | "Discovery") => true,
+        ("import_cost_input", None, "Draft") => true,
+        ("import_cost_input", Some("Draft"), "Draft" | "Needs source" | "Ready for review") => true,
+        ("import_cost_input", Some("Needs source"), "Needs source" | "Draft" | "Ready for review") => true,
+        ("import_cost_input", Some("Ready for review"), "Ready for review" | "Reviewed") => true,
+        ("import_cost_input", Some("Reviewed"), "Reviewed") => true,
         _ => false,
     }
 }
@@ -812,6 +817,120 @@ pub fn list_historical_import_batches(client_id: String, state: State<'_, AppSta
     rows.collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())
 }
 
+
+#[tauri::command]
+pub fn calculate_import_cost_preview(
+    client_id: String,
+    case_reference: String,
+    base_currency: String,
+    state: State<'_, AppState>,
+) -> Result<ImportCostResult, String> {
+    let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
+    let (_, _, persona) = ensure_can_mutate(&db)?;
+    if !["administrator", "manager"].contains(&persona.as_str()) {
+        return Err("Only the demo administrator or engagement manager may prepare an import-cost calculation preview.".into());
+    }
+    let client_active: bool = db.connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM client WHERE id=?1 AND firm_id=?2 AND status='Active')",
+        params![client_id, FIRM_ID], |r| r.get(0)
+    ).map_err(|e| e.to_string())?;
+    if !client_active {
+        return Err("Select an active client in this demonstration firm.".into());
+    }
+    let case_reference = case_reference.trim();
+    if case_reference.is_empty() {
+        return Err("Enter the import case reference used by its saved cost inputs.".into());
+    }
+    let case: Option<(String, String)> = db.connection.query_row(
+        "SELECT status,payload_json FROM workspace_record
+         WHERE firm_id=?1 AND client_id=?2 AND record_type='import_case' AND reference=?3
+         ORDER BY updated_at DESC LIMIT 1",
+        params![FIRM_ID, client_id, case_reference],
+        |r| Ok((r.get(0)?, r.get(1)?))
+    ).optional().map_err(|e| e.to_string())?;
+    let (case_status, case_payload) = case.ok_or_else(|| "Create an import discovery case and use its exact reference before calculating.".to_string())?;
+    if case_status != "Reviewed" {
+        return Err("The import discovery case must be marked Reviewed before a draft calculation can be prepared.".into());
+    }
+    let case_data: serde_json::Value = serde_json::from_str(&case_payload).unwrap_or_else(|_| json!({}));
+    for key in ["component_policy_reference", "fx_policy_reference", "allocation_policy_reference", "synthetic_example_reference"] {
+        if case_data.get(key).and_then(|v| v.as_str()).unwrap_or("").trim().is_empty() {
+            return Err(format!("The reviewed discovery case is missing {key}. Record the supporting policy or synthetic worked-example reference first."));
+        }
+    }
+
+    let mut stmt = db.connection.prepare(
+        "SELECT title,status,payload_json FROM workspace_record
+         WHERE firm_id=?1 AND client_id=?2 AND record_type='import_cost_input' AND reference=?3
+         ORDER BY created_at,id"
+    ).map_err(|e| e.to_string())?;
+    let rows = stmt.query_map(params![FIRM_ID, client_id, case_reference], |r| {
+        Ok((r.get::<_,String>(0)?, r.get::<_,String>(1)?, r.get::<_,String>(2)?))
+    }).map_err(|e| e.to_string())?;
+
+    let read_text = |payload: &serde_json::Value, key: &str| -> String {
+        payload.get(key).and_then(|v| v.as_str()).unwrap_or("").trim().to_string()
+    };
+    let read_number = |payload: &serde_json::Value, key: &str, required: bool| -> Result<i64, String> {
+        let raw = match payload.get(key) {
+            Some(value) if value.is_number() => value.to_string(),
+            Some(value) if value.is_string() => value.as_str().unwrap_or("").trim().to_string(),
+            _ => String::new(),
+        };
+        if raw.is_empty() && !required { return Ok(0); }
+        raw.parse::<i64>().map_err(|_| format!("Import-cost field {key} must be a whole-number minor-unit or scaled quantity value."))
+    };
+
+    let mut goods = Vec::new();
+    let mut components = Vec::new();
+    for row in rows {
+        let (title, status, raw) = row.map_err(|e| e.to_string())?;
+        if !["Ready for review", "Reviewed"].contains(&status.as_str()) {
+            return Err(format!("Import-cost input '{title}' must be Ready for review before calculation."));
+        }
+        let payload: serde_json::Value = serde_json::from_str(&raw).map_err(|_| format!("Import-cost input '{title}' contains invalid metadata."))?;
+        if read_text(&payload, "entry_kind") == "calculation_result" {
+            continue;
+        }
+        if read_text(&payload, "source_reference").is_empty() {
+            return Err(format!("Import-cost input '{title}' needs a source document/reference before calculation."));
+        }
+        match read_text(&payload, "entry_kind").as_str() {
+            "Goods line" => {
+                goods.push(GoodsLineInput {
+                    item_reference: read_text(&payload, "item_reference"),
+                    description: read_text(&payload, "description"),
+                    quantity_micros: read_number(&payload, "quantity_micros", true)?,
+                    unit_price_minor: read_number(&payload, "unit_price_minor", true)?,
+                    currency_code: read_text(&payload, "currency_code"),
+                    fx_numerator: read_number(&payload, "fx_numerator", true)?,
+                    fx_denominator: read_number(&payload, "fx_denominator", true)?,
+                    weight_micros: read_number(&payload, "weight_micros", false)?,
+                    volume_micros: read_number(&payload, "volume_micros", false)?,
+                });
+            }
+            "Cost component" => {
+                components.push(CostComponentInput {
+                    component_reference: read_text(&payload, "component_reference"),
+                    category: read_text(&payload, "category"),
+                    amount_minor: read_number(&payload, "amount_minor", true)?,
+                    currency_code: read_text(&payload, "currency_code"),
+                    fx_numerator: read_number(&payload, "fx_numerator", true)?,
+                    fx_denominator: read_number(&payload, "fx_denominator", true)?,
+                    allocation_basis: read_text(&payload, "allocation_basis"),
+                    direct_item_reference: read_text(&payload, "direct_item_reference"),
+                    treatment: read_text(&payload, "treatment"),
+                });
+            }
+            _ => return Err(format!("Import-cost input '{title}' must be classified as Goods line or Cost component.")),
+        }
+    }
+    if goods.is_empty() {
+        return Err("Add at least one saved Goods line for this import case.".into());
+    }
+    calculate_import_cost(&base_currency, &goods, &components)
+}
+
 #[tauri::command]
 pub fn list_records(record_type: String, client_id: Option<String>, state: State<'_, AppState>) -> Result<Vec<WorkspaceRecord>, String> {
     if !allowed_record_type(&record_type) { return Err("Unsupported workspace record type.".into()); }
@@ -859,9 +978,6 @@ pub fn list_records(record_type: String, client_id: Option<String>, state: State
 pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<WorkspaceRecord, String> {
     if !allowed_record_type(&input.record_type) {
         return Err("Unsupported workspace record type.".into());
-    }
-    if input.record_type == "import_cost_input" {
-        return Err("Import-cost inputs remain locked until Gate 5-A discovery is approved. Record discovery questions in the import case instead.".into());
     }
     if !allowed_status(&input.record_type, &input.status) {
         return Err("Unsupported status for this record type.".into());
