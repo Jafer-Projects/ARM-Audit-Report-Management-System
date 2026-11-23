@@ -517,6 +517,10 @@ mod tests {
             rusqlite::params![firm,actor],
         ).expect("create review note");
         assert!(db.connection.execute("DELETE FROM task_review_note WHERE id='note-test'", []).is_err());
+        assert!(db.connection.execute("UPDATE task_review_note SET description='rewritten' WHERE id='note-test'", []).is_err());
+        assert!(db.connection.execute("UPDATE task_review_note SET status='Cleared' WHERE id='note-test'", []).is_err());
+        db.connection.execute("UPDATE task_review_note SET status='Responded',preparer_response='Evidence attached',response_actor_id='00000000-0000-4000-8000-000000000013',responded_at='now',updated_at='now' WHERE id='note-test'", []).expect("valid response transition");
+        db.connection.execute("UPDATE task_review_note SET status='Cleared',disposition='Reviewed and accepted',disposition_actor_id='00000000-0000-4000-8000-000000000012',disposition_at='now',updated_at='now' WHERE id='note-test'", []).expect("valid disposition transition");
     }
 
     #[test]
