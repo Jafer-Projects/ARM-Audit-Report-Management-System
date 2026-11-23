@@ -141,7 +141,7 @@ impl Database {
             )?;
             tx.commit()?;
         }
-        if applied > 7 {
+        if applied > 8 {
             return Err(rusqlite::Error::InvalidQuery);
         }
         if applied < 3 {
@@ -260,6 +260,28 @@ impl Database {
             )?;
             tx.commit()?;
         }
+        if applied < 8 {
+            let tx = self.connection.unchecked_transaction()?;
+            tx.execute_batch(
+                "CREATE TRIGGER client_change_no_update BEFORE UPDATE ON client_change
+                 BEGIN SELECT RAISE(ABORT, 'client change history is immutable'); END;
+                 CREATE TRIGGER client_change_no_delete BEFORE DELETE ON client_change
+                 BEGIN SELECT RAISE(ABORT, 'client change history is immutable'); END;
+                 CREATE TRIGGER workspace_record_version_no_update BEFORE UPDATE ON workspace_record_version
+                 BEGIN SELECT RAISE(ABORT, 'workspace record versions are immutable'); END;
+                 CREATE TRIGGER workspace_record_version_no_delete BEFORE DELETE ON workspace_record_version
+                 BEGIN SELECT RAISE(ABORT, 'workspace record versions are immutable'); END;
+                 CREATE TRIGGER historical_import_batch_no_update BEFORE UPDATE ON historical_import_batch
+                 BEGIN SELECT RAISE(ABORT, 'historical import batches are immutable'); END;
+                 CREATE TRIGGER historical_import_batch_no_delete BEFORE DELETE ON historical_import_batch
+                 BEGIN SELECT RAISE(ABORT, 'historical import batches are immutable'); END;"
+            )?;
+            tx.execute(
+                "INSERT INTO schema_migration(version, checksum, applied_at) VALUES(8, ?1, ?2)",
+                rusqlite::params!["arm-immutable-history-artifacts-v8", now_utc()],
+            )?;
+            tx.commit()?;
+        }
         for (version, expected_checksum) in [
             (1_i64, "arm-initial-schema-v1"),
             (2_i64, "arm-local-notes-v2"),
@@ -268,6 +290,7 @@ impl Database {
             (5_i64, "arm-workspace-record-versions-v5"),
             (6_i64, "arm-historical-import-batches-v6"),
             (7_i64, "arm-task-review-notes-v7"),
+            (8_i64, "arm-immutable-history-artifacts-v8"),
         ] {
             let actual: String = self.connection.query_row(
                 "SELECT checksum FROM schema_migration WHERE version=?1",
@@ -368,7 +391,7 @@ mod tests {
         let staff: i64 = db.connection.query_row("SELECT COUNT(*) FROM workspace_record WHERE record_type='staff'", [], |r| r.get(0)).unwrap();
         assert_eq!(clients, 1);
         assert_eq!(actors, 4);
-        assert_eq!(migrations, 7);
+        assert_eq!(migrations, 8);
         assert_eq!(staff, 3);
     }
 
