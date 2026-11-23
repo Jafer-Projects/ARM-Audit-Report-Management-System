@@ -119,3 +119,8 @@ These implementation notes describe code added, not test results, increment acce
 ## Collective verification entry point
 
 Implementation code for the current prototype increments 0–5 is now present on the bound branch. This is the point at which the product-owner-directed collective verification and test program may begin. No individual increment is accepted. The overall result remains pending until typecheck, domain tests, Rust tests, frontend build, Windows Tauri build, and the integrated acceptance workflow have completed and any defects have been corrected.
+
+
+### Verification availability note
+
+The collective verification gate is open after the Increment 5 prototype implementation. The connected GitHub workflow-run lookup returned no PR-triggered run for the current head at the time of inspection. No local repository archive/runtime was available through the connected GitHub interface. Therefore no test, typecheck, frontend build, Rust build or Windows Tauri build result is claimed here. The gate remains pending; the configured workflow remains the intended execution path.
