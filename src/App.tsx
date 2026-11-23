@@ -358,12 +358,19 @@ export default function App() {
           duplicateReason = reason.trim();
         }
       }
+      const fields = recordFields[recordType] ?? [];
+      const lockedPayload = Object.fromEntries(fields.map(field => [field.key, recordPayload[field.key] ?? ""]));
       await desktop.saveRecord({
         duplicate_acknowledged: duplicateAcknowledged, duplicate_acknowledgement_reason: duplicateReason,
         id: recordEditor?.id || undefined, row_version: recordEditor?.id ? recordEditor.row_version : undefined,
-        client_id: v.client_id || null, record_type: recordType, title: v.title,
-        status: v.status || (statusOptions[recordType] ?? config.statuses)[0], reference: v.reference || "",
-        amount_text: v.amount_text || "", notes: v.notes || "", payload_json: JSON.stringify(Object.fromEntries((recordFields[recordType] ?? []).map(field => [field.key, v[field.key] ?? ""]))),
+        client_id: taskContentLocked ? recordEditor?.client_id ?? null : v.client_id || null,
+        record_type: recordType,
+        title: taskContentLocked ? recordEditor?.title ?? "" : v.title ?? "",
+        status: v.status || recordEditor?.status || (statusOptions[recordType] ?? config.statuses)[0],
+        reference: taskContentLocked ? recordEditor?.reference ?? "" : v.reference || "",
+        amount_text: taskContentLocked ? recordEditor?.amount_text ?? "" : v.amount_text || "",
+        notes: taskContentLocked ? recordEditor?.notes ?? "" : v.notes || "",
+        payload_json: JSON.stringify(taskContentLocked ? lockedPayload : Object.fromEntries(fields.map(field => [field.key, v[field.key] ?? ""]))),
       });
       setRecordEditor(null); setRecords(await desktop.records(recordType, recordType === "staff" ? undefined : selectedClientId || undefined)); if (recordType === "staff") setStaffRecords(await desktop.records("staff"));
     } catch (e) { setError(String(e)); } finally { setBusy(false); }
