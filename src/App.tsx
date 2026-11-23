@@ -34,6 +34,83 @@ const statusOptions: Record<string, string[]> = {
   import_case: ["Discovery","Inputs captured","Needs review","Reviewed","Returned"],
   import_cost_input: ["Discovery","Inputs captured","Needs review","Reviewed","Returned"],
 };
+type RecordField = { key: string; label: string; kind?: "text" | "date" | "select" | "textarea"; options?: string[]; placeholder?: string; wide?: boolean };
+const recordFields: Record<string, RecordField[]> = {
+  category: [
+    { key: "description", label: "Description", kind: "textarea", wide: true },
+    { key: "parent_category", label: "Parent category (optional)" },
+  ],
+  product: [
+    { key: "category", label: "Category" },
+    { key: "description", label: "Description", kind: "textarea", wide: true },
+    { key: "item_code", label: "Internal code / SKU (optional)" },
+    { key: "unit", label: "Unit / quantity description (optional)" },
+  ],
+  invoice: [
+    { key: "transaction_class", label: "Transaction class", kind: "select", options: ["Sales","Purchase"] },
+    { key: "invoice_number", label: "Invoice number (source text)" },
+    { key: "invoice_date", label: "Invoice date", kind: "date" },
+    { key: "party_name", label: "Customer / supplier name" },
+    { key: "party_tin", label: "Customer / supplier TIN (not verified)" },
+    { key: "source_type", label: "Source type", kind: "select", options: ["Paper","PDF","Spreadsheet","Other"] },
+    { key: "financial_period", label: "Period label (as supplied)" },
+    { key: "vat_amount", label: "VAT amount as shown on source (text)" },
+    { key: "currency", label: "Currency as shown on source" },
+    { key: "line_items", label: "Invoice lines — one per line: description | quantity | amount before VAT | VAT as stated", kind: "textarea", wide: true },
+  ],
+  period: [
+    { key: "period_label", label: "Period label" },
+    { key: "start_date", label: "Start date", kind: "date" },
+    { key: "end_date", label: "End date", kind: "date" },
+    { key: "period_type", label: "Period type", kind: "select", options: ["Not classified","Month","Quarter","Year","Custom"] },
+    { key: "authority_source", label: "Period definition source" },
+  ],
+  historical_record: [
+    { key: "historical_class", label: "Record type", kind: "select", options: ["Purchase","Expense","Other"] },
+    { key: "transaction_date", label: "Transaction date", kind: "date" },
+    { key: "source_period", label: "Source period label" },
+    { key: "supplier", label: "Supplier / payee" },
+    { key: "supplier_tin", label: "TIN (opaque text)" },
+    { key: "description", label: "Description / category" },
+    { key: "currency", label: "Currency as stated" },
+    { key: "vat_amount", label: "VAT amount as stated (text)" },
+    { key: "invoice_reference", label: "Invoice / reference number" },
+    { key: "entry_method", label: "Entry method", kind: "select", options: ["Manual","Imported"] },
+    { key: "source_filename", label: "Source filename / reference" },
+  ],
+  staff: [
+    { key: "staff_reference", label: "Demo staff reference" },
+    { key: "job_title", label: "Job title" },
+    { key: "discipline", label: "Discipline / work category" },
+  ],
+  task: [
+    { key: "description", label: "Description / expected output", kind: "textarea", wide: true },
+    { key: "assignee", label: "Assignee (demo staff reference)" },
+    { key: "due_date", label: "Due date", kind: "date" },
+    { key: "priority", label: "Priority", kind: "select", options: ["Not set","Low","Normal","High","Urgent"] },
+    { key: "task_type", label: "Task type", kind: "select", options: ["Data capture","Review","Follow-up","Other"] },
+    { key: "related_record", label: "Related record reference" },
+    { key: "completion_summary", label: "Work performed / completion summary", kind: "textarea", wide: true },
+  ],
+  import_case: [
+    { key: "discovery_stage", label: "Discovery stage", kind: "select", options: ["Workflow discovery","Source inventory","Cost component discovery","FX policy discovery","Allocation method discovery","Review and approval discovery"] },
+    { key: "shipment_identifier", label: "Shipment / import event identifier (as described)" },
+    { key: "supplier", label: "Supplier / source party" },
+    { key: "relevant_dates", label: "Relevant dates (source wording)" },
+    { key: "currency", label: "Currencies involved (as described)" },
+    { key: "intended_purpose", label: "Intended purpose of calculation", kind: "textarea", wide: true },
+    { key: "unresolved_questions", label: "Unresolved questions", kind: "textarea", wide: true },
+  ],
+  import_cost_input: [
+    { key: "component_name", label: "Component name (not approved)" },
+    { key: "amount_and_currency", label: "Amount and currency as shown" },
+    { key: "source_reference", label: "Source document / reference" },
+    { key: "source_date", label: "Source date", kind: "date" },
+    { key: "fx_rate_and_source", label: "FX rate and source (if supplied)" },
+    { key: "allocation_basis", label: "Allocation basis (unapproved)", kind: "textarea", wide: true },
+    { key: "inclusion_reason", label: "Inclusion / exclusion reason", kind: "textarea", wide: true },
+  ],
+};
 const personaLabels: Record<Persona, string> = {
   administrator: "Demo Firm Administrator", manager: "Demo Engagement Manager",
   auditor: "Demo Auditor", reviewer: "Demo Read-only Reviewer",
@@ -78,6 +155,11 @@ export default function App() {
     }
   }, [recordType, section]);
 
+  const recordPayload = useMemo<Record<string, string>>(() => {
+    if (!recordEditor?.payload_json) return {};
+    try { return JSON.parse(recordEditor.payload_json) as Record<string, string>; }
+    catch { return {}; }
+  }, [recordEditor]);
   const filteredClients = useMemo(() => clients.filter((c) =>
     [c.legal_name, c.display_name, c.tin_raw].join(" ").toLowerCase().includes(search.toLowerCase())), [clients, search]);
   const canMutate = workspace?.persona !== "reviewer";
@@ -215,7 +297,7 @@ export default function App() {
 
     {recordEditor && <div className="modal-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setRecordEditor(null); }}><form className="modal" onSubmit={saveRecord}>
       <div className="modal-head"><div><span className="overline">WORKFLOW RECORD</span><h2>{recordEditor.id ? "Edit record" : "Add record"}</h2><p>Store source information and review state; do not infer professional conclusions.</p></div><button type="button" className="close" onClick={() => setRecordEditor(null)}>×</button></div>
-      <div className="form-grid"><label className="wide">Title *<input name="title" required maxLength={200} defaultValue={recordEditor.title} /></label><label>Client<select name="client_id" defaultValue={recordEditor.client_id ?? ""}><option value="">No client selected</option>{clients.map(c => <option value={c.id} key={c.id}>{c.display_name || c.legal_name}</option>)}</select></label><label>Status<select name="status" defaultValue={recordEditor.status}>{(statusOptions[recordType] ?? recordTypes[section as keyof typeof recordTypes]?.statuses ?? []).map(s => <option key={s}>{s}</option>)}</select></label><label>Source / reference<input name="reference" defaultValue={recordEditor.reference} /></label><label>Amount / value (text only)<input name="amount_text" defaultValue={recordEditor.amount_text} placeholder="Preserve source notation; no calculation" /></label><label className="wide">Notes and assumptions<textarea name="notes" defaultValue={recordEditor.notes} /></label></div>
+      <div className="form-grid"><label className="wide">Title / primary name *<input name="title" required maxLength={200} defaultValue={recordEditor.title} /></label><label>Client<select name="client_id" defaultValue={recordEditor.client_id ?? ""}><option value="">No client selected</option>{clients.map(c => <option value={c.id} key={c.id}>{c.display_name || c.legal_name}</option>)}</select></label><label>Status<select name="status" defaultValue={recordEditor.status}>{(statusOptions[recordType] ?? recordTypes[section as keyof typeof recordTypes]?.statuses ?? []).map(s => <option key={s}>{s}</option>)}</select></label><label>Source / reference<input name="reference" defaultValue={recordEditor.reference} /></label><label>{recordType === "invoice" || recordType === "historical_record" ? "Amount before VAT / source amount (text)" : "Amount / value (text only)"}<input name="amount_text" defaultValue={recordEditor.amount_text} placeholder="Preserve source notation; no calculation" /></label>{(recordFields[recordType] ?? []).map(field => <label key={field.key} className={field.wide ? "wide" : ""}>{field.label}{field.kind === "select" ? <select name={field.key} defaultValue={recordPayload[field.key] ?? field.options?.[0] ?? ""}>{(field.options ?? []).map(option => <option key={option}>{option}</option>)}</select> : field.kind === "textarea" ? <textarea name={field.key} defaultValue={recordPayload[field.key] ?? ""} placeholder={field.placeholder} /> : <input name={field.key} type={field.kind === "date" ? "date" : "text"} defaultValue={recordPayload[field.key] ?? ""} placeholder={field.placeholder} />}</label>)}<label className="wide">Notes and assumptions<textarea name="notes" defaultValue={recordEditor.notes} /></label></div>
       <div className="modal-actions"><button type="button" className="secondary" onClick={() => setRecordEditor(null)}>Cancel</button><button className="primary" disabled={!canMutate || busy}>Save local record</button></div>
     </form></div>}
   </div>;
