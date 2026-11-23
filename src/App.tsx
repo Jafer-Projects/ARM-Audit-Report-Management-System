@@ -152,6 +152,7 @@ export default function App() {
   useEffect(() => {
     if (["catalogue", "history", "work", "imports"].includes(section)) {
       void desktop.records(recordType).then(setRecords).catch((e) => setError(String(e)));
+      void desktop.clients(false).then(setClients).catch((e) => setError(String(e)));
     }
   }, [recordType, section]);
 
