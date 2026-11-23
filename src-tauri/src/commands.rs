@@ -853,6 +853,10 @@ pub fn calculate_import_cost_preview(
         return Err("The import discovery case must be marked Reviewed before a draft calculation can be prepared.".into());
     }
     let case_data: serde_json::Value = serde_json::from_str(&case_payload).unwrap_or_else(|_| json!({}));
+    let case_base_currency = case_data.get("base_currency").and_then(|v| v.as_str()).unwrap_or("").trim().to_ascii_uppercase();
+    if case_base_currency.len() != 3 || case_base_currency != base_currency.trim().to_ascii_uppercase() {
+        return Err("The calculation base currency must match the three-letter base currency recorded on the reviewed import case.".into());
+    }
     for key in ["component_policy_reference", "fx_policy_reference", "allocation_policy_reference", "synthetic_example_reference"] {
         if case_data.get(key).and_then(|v| v.as_str()).unwrap_or("").trim().is_empty() {
             return Err(format!("The reviewed discovery case is missing {key}. Record the supporting policy or synthetic worked-example reference first."));
