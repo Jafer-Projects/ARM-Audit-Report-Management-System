@@ -1830,8 +1830,20 @@ pub fn reset_demo_data(state: State<'_, AppState>) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{detected_document_type, valid_record_transition};
+    use super::{detected_document_type, valid_iso_date, valid_record_transition};
 
+
+
+    #[test]
+    fn reporting_dates_must_be_real_iso_calendar_dates() {
+        assert!(valid_iso_date("2024-02-29"));
+        assert!(valid_iso_date("2025-12-31"));
+        assert!(!valid_iso_date("2025-02-29"));
+        assert!(!valid_iso_date("2025-13-01"));
+        assert!(!valid_iso_date("2025-04-31"));
+        assert!(!valid_iso_date("2025/04/30"));
+        assert!(!valid_iso_date("２０２５-04-30"));
+    }
 
     #[test]
     fn source_document_type_uses_file_signature_not_declared_extension() {
