@@ -418,14 +418,29 @@ pub fn save_note(input: LocalNoteInput, state: State<'_, AppState>) -> Result<Lo
 }
 
 #[tauri::command]
-pub fn list_records(record_type: String, state: State<'_, AppState>) -> Result<Vec<WorkspaceRecord>, String> {
+pub fn list_records(record_type: String, client_id: Option<String>, state: State<'_, AppState>) -> Result<Vec<WorkspaceRecord>, String> {
     if !allowed_record_type(&record_type) { return Err("Unsupported workspace record type.".into()); }
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
-    let mut stmt = db.connection.prepare("SELECT id,client_id,record_type,title,status,reference,amount_text,notes,payload_json,row_version,updated_at FROM workspace_record WHERE firm_id=?1 AND record_type=?2 ORDER BY updated_at DESC").map_err(|e| e.to_string())?;
-    let rows = stmt.query_map(params![FIRM_ID,record_type], |r| Ok(WorkspaceRecord {
-        id:r.get(0)?,client_id:r.get(1)?,record_type:r.get(2)?,title:r.get(3)?,status:r.get(4)?,reference:r.get(5)?,amount_text:r.get(6)?,notes:r.get(7)?,payload_json:r.get(8)?,row_version:r.get(9)?,updated_at:r.get(10)?
-    })).map_err(|e| e.to_string())?;
-    rows.collect::<Result<Vec<_>,_>>().map_err(|e| e.to_string())
+    let client_filter = if record_type == "staff" {
+        None
+    } else {
+        let selected = client_id.ok_or_else(||"Select a client workspace before viewing these records.".to_string())?;
+        let active: bool = db.connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM client WHERE id=?1 AND firm_id=?2 AND status='Active')",
+            params![selected,FIRM_ID], |r|r.get(0)
+        ).map_err(|e|e.to_string())?;
+        if !active { return Err("Selected client is not active in this demonstration firm.".into()); }
+        Some(selected)
+    };
+    let mut stmt = db.connection.prepare(
+        "SELECT id,client_id,record_type,title,status,reference,amount_text,notes,payload_json,row_version,updated_at
+         FROM workspace_record WHERE firm_id=?1 AND record_type=?2 AND client_id IS ?3 ORDER BY updated_at DESC"
+    ).map_err(|e|e.to_string())?;
+    let rows = stmt.query_map(params![FIRM_ID,record_type,client_filter], |r| Ok(WorkspaceRecord {
+        id:r.get(0)?,client_id:r.get(1)?,record_type:r.get(2)?,title:r.get(3)?,status:r.get(4)?,
+        reference:r.get(5)?,amount_text:r.get(6)?,notes:r.get(7)?,payload_json:r.get(8)?,row_version:r.get(9)?,updated_at:r.get(10)?
+    })).map_err(|e|e.to_string())?;
+    rows.collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())
 }
 
 #[tauri::command]
