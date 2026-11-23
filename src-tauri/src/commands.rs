@@ -1967,7 +1967,7 @@ pub fn reset_demo_data(state: State<'_, AppState>) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{detected_document_type, valid_iso_date, valid_record_transition};
+    use super::*;
 
 
 

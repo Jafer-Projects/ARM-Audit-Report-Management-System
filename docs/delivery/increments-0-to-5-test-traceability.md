@@ -13,7 +13,7 @@
 |---|---|---|---|
 | I0-01 | First launch shows synthetic-data warning and opens demo workspace without network access | Windows first-launch/offline UI acceptance; no automated UI harness yet | PENDING |
 | I0-02 | Persona selector exposes exactly four demo personas and labels active persona | `commands.rs::set_demo_persona`; four-persona UI enumeration test still required | PARTIAL |
-| I0-03 | Read-only reviewer cannot invoke create/update/archive commands | `commands.rs::read_only_reviewer_is_rejected_by_client_mutation_command`; extend to every mutating command | PARTIAL |
+| I0-03 | Read-only reviewer cannot invoke create/update/archive commands | `commands.rs::read_only_reviewer_is_rejected_by_the_shared_mutation_guard`; extend to every mutating command | PARTIAL |
 | I0-04 | Local note survives application restart with identical content and association | `db.rs::local_notes_survive_database_reopen`; full UI restart/association evidence pending | PARTIAL |
 | I0-05 | Activity view shows corresponding event and actor | `db.rs::local_event_actor_and_scope_are_retained_for_material_mutations`; activity UI assertion pending | PARTIAL |
 | I0-06 | Reset requires confirmation and restores only synthetic fixtures | Reset dialog + destructive-boundary integration test required | PENDING |
@@ -23,28 +23,28 @@
 
 | ID | Normative scenario | Test / evidence | Status |
 |---|---|---|---|
-| I1-01 | Minimal Company profile saves as Draft and completeness is correct | `commands.rs::client_create_command_writes_draft_history_and_event`; completeness calculation test pending | PARTIAL |
+| I1-01 | Minimal Company profile saves as Draft and completeness is correct | No direct command test yet; profile completeness and create/update UI integration tests required | PARTIAL |
 | I1-02 | Optional TIN/contact/sector updates profile summary | Command update + summary UI integration test required | PENDING |
-| I1-03 | Invalid email is flagged without losing other entered values | `commands.rs::invalid_client_email_command_does_not_partially_create_record`; dirty-form retention UI test pending | PARTIAL |
-| I1-04 | Duplicate name/TIN warns and never silently merges/overwrites | `commands.rs::duplicate_client_requires_explicit_acknowledgement_and_records_it`; verify candidate comparison and no-merge UI state | PARTIAL |
+| I1-03 | Invalid email is flagged without losing other entered values | Client email validator is currently embedded in save command; extract and test validator plus dirty-form retention | PARTIAL |
+| I1-04 | Duplicate name/TIN warns and never silently merges/overwrites | Duplicate matching/acknowledgment are implemented in save command; command integration test for advisory/no-merge behavior pending | PARTIAL |
 | I1-05 | Search is firm-scoped; archived hidden by default and shown on request | Client query command integration tests required | PENDING |
 | I1-06 | Update history contains changed fields and before/after values | `db.rs::client_change_history_stores_before_and_after_snapshots`, `client_change_history_is_immutable`; command-generated update snapshot test pending | PARTIAL |
-| I1-07 | Reviewer can view but cannot mutate | Reviewer command test plus list/read permission test required | PARTIAL |
-| I1-08 | Stale row_version conflicts without losing user's values | `commands.rs::stale_client_version_is_rejected_without_overwriting_current_values` | AUTOMATED |
-| I1-09 | Mutation and duplicate acknowledgment each have one audit event in the same transaction | Client create/duplicate event assertions exist; injected audit-write failure/atomicity test pending | PARTIAL |
+| I1-07 | Reviewer can view but cannot mutate | `commands.rs::read_only_reviewer_is_rejected_by_the_shared_mutation_guard`; full command read/write permission matrix pending | PARTIAL |
+| I1-08 | Stale row_version conflicts without losing user's values | Client command stale-version branch is implemented; command integration test required | AUTOMATED |
+| I1-09 | Mutation and duplicate acknowledgment each have one audit event in the same transaction | Existing client-history/event database tests cover stored records only; command transaction atomicity test pending | PARTIAL |
 | I1-10 | Restart and offline operation preserve committed records | Note restart test exists; client/profile full restart test required | PARTIAL |
 
 ### Increment 2 — Product/category register and invoice capture (11)
 
 | ID | Normative scenario | Test / evidence | Status |
 |---|---|---|---|
-| I2-01 | Product/category records are client-scoped; cross-client ID substitution is rejected | `commands.rs::cross_client_id_substitution_cannot_create_workspace_records`; two-real-client read/write substitution matrix pending | PARTIAL |
+| I2-01 | Product/category records are client-scoped; cross-client ID substitution is rejected | `commands.rs::client_workspace_access_is_scoped_to_assigned_persona_and_non_draft_task`; two-real-client record-ID substitution matrix pending | PARTIAL |
 | I2-02 | Archived product remains visible on historical invoice | Product archive + historical invoice rendering integration test required | PENDING |
 | I2-03 | Draft invoice saves with permitted missing fields and shows exact missing list | Draft-save and UI missing-field-list test required | PENDING |
 | I2-04 | Invalid values do not erase other entered values | Form state retention/UI validation test required | PENDING |
 | I2-05 | Duplicate invoice candidate is advisory; no automatic overwrite/merge | Invoice duplicate command + no-merge integration test required | PENDING |
 | I2-06 | Source attachment metadata and association survive restart | Attachment command/reopen/read-back test required | PENDING |
-| I2-07 | Unsupported or unsafe file type is rejected clearly | `commands.rs::source_document_type_uses_file_signature_not_declared_extension`; attachment command mismatch/extension/size/path tests pending | PARTIAL |
+| I2-07 | Unsupported or unsafe file type is rejected clearly | `commands.rs::source_document_type_uses_file_signature_not_declared_extension`; command-level MIME/extension/size/path checks still pending | PARTIAL |
 | I2-08 | Preparer cannot mark own work reviewed | Assigned preparer/reviewer command integration test required | PENDING |
 | I2-09 | Reviewer decision and preparer correction are distinct events | Review/correction event-separation integration test required | PENDING |
 | I2-10 | Offline capture and restart preserve records | Invoice/product/attachment restart integration test required | PENDING |
@@ -77,14 +77,14 @@
 | I4-06 | Blocked task requires reason and appears in manager queue | Block reason + queue command/UI integration test required | PENDING |
 | I4-07 | Overdue calculation uses stored due date and local display timezone | Deterministic clock/timezone boundary test required | PENDING |
 | I4-08 | Cancelled task retains history and work product | Cancellation preservation integration test required | PENDING |
-| I4-09 | Cross-client task access is rejected | `commands.rs::client_workspace_access_requires_a_non_draft_task_assignment`; full command read/write matrix pending | PARTIAL |
+| I4-09 | Cross-client task access is rejected | `commands.rs::client_workspace_access_is_scoped_to_assigned_persona_and_non_draft_task`; full command read/write matrix pending | PARTIAL |
 | I4-10 | Offline task updates persist after restart; no sync status fabricated | Task restart + UI sync-claim regression required | PENDING |
 
 ### Increment 5 — Import-cost worksheet (9)
 
 | ID | Normative scenario | Test / evidence | Status |
 |---|---|---|---|
-| I5-01 | No approved discovery brief means calculation cannot be activated | `commands.rs::import_cost_calculation_input_cannot_bypass_discovery_gate`; preview command Gate 5-A integration test pending | PARTIAL |
+| I5-01 | No approved discovery brief means calculation cannot be activated | `commands.rs::import_cost_calculation_input_cannot_bypass_discovery_gate`; discovery decision/approval evidence test pending; preview command Gate 5-A integration test pending | PARTIAL |
 | I5-02 | Each cost input traces to source and preserves original currency | Existing costing provenance validation; command persistence/read-back test required | PARTIAL |
 | I5-03 | FX rate has source, date and authorization | New costing provenance negative tests in `import_cost.rs`; saved-input command test pending | PARTIAL |
 | I5-04 | Allocation is reproducible and versioned | New quantity/weight/volume/value and deterministic remainder tests in `import_cost.rs`; persisted revision version test pending | PARTIAL |
