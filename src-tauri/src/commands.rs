@@ -1614,7 +1614,7 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
         if input.status != "Draft" && !assignee.is_empty() && (assignee != previous_assignee || (input.status == "Assigned" && previous_status == "Draft")) {
             emit_notification(assignee,"task_assigned","New task assigned",&task_body)?;
         }
-        if input.status != "Draft" && reviewer != previous_reviewer && !reviewer.is_empty() {
+        if input.status != "Draft" && !reviewer.is_empty() && (reviewer != previous_reviewer || (input.status == "Assigned" && previous_status == "Draft")) {
             emit_notification(reviewer,"review_assigned","Review responsibility assigned",&task_body)?;
         }
         if input.status == "Submitted" && previous_status != "Submitted" {
