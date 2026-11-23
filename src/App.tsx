@@ -405,6 +405,8 @@ export default function App() {
     } catch (e) { setError(String(e)); } finally { setBusy(false); }
   }
   async function openRecord(record: WorkspaceRecord) {
+    setRecordType(record.record_type);
+    if ((record.record_type === "import_case" || record.record_type === "import_cost_input") && record.reference) setImportCostCaseReference(record.reference);
     setRecordEditor(record);
     setTaskReviewNotes([]); setRecordVersions([]); setSourceDocuments([]);
     try { setRecordVersions(await desktop.recordVersions(record.id)); } catch (e) { setError(String(e)); }
