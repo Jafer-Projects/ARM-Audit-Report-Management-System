@@ -141,7 +141,7 @@ impl Database {
             )?;
             tx.commit()?;
         }
-        if applied > 8 {
+        if applied > 9 {
             return Err(rusqlite::Error::InvalidQuery);
         }
         if applied < 3 {
@@ -282,6 +282,27 @@ impl Database {
             )?;
             tx.commit()?;
         }
+        if applied < 9 {
+            let tx = self.connection.unchecked_transaction()?;
+            tx.execute_batch(
+                "CREATE TRIGGER task_review_note_content_immutable BEFORE UPDATE ON task_review_note
+                 WHEN NEW.firm_id<>OLD.firm_id OR NEW.task_id<>OLD.task_id OR NEW.reviewer_actor_id<>OLD.reviewer_actor_id
+                   OR NEW.category<>OLD.category OR NEW.description<>OLD.description
+                   OR NEW.affected_record_reference<>OLD.affected_record_reference
+                   OR NEW.required_response<>OLD.required_response OR NEW.created_at<>OLD.created_at
+                   OR NEW.correlation_id<>OLD.correlation_id
+                 BEGIN SELECT RAISE(ABORT, 'task review note content is immutable'); END;
+                 CREATE TRIGGER task_review_note_status_transition BEFORE UPDATE OF status ON task_review_note
+                 WHEN NOT ((OLD.status IN ('Open','Reopened') AND NEW.status='Responded')
+                    OR (OLD.status='Responded' AND NEW.status IN ('Cleared','Reopened')))
+                 BEGIN SELECT RAISE(ABORT, 'invalid task review note transition'); END;"
+            )?;
+            tx.execute(
+                "INSERT INTO schema_migration(version, checksum, applied_at) VALUES(9, ?1, ?2)",
+                rusqlite::params!["arm-review-note-transition-guards-v9", now_utc()],
+            )?;
+            tx.commit()?;
+        }
         for (version, expected_checksum) in [
             (1_i64, "arm-initial-schema-v1"),
             (2_i64, "arm-local-notes-v2"),
@@ -291,6 +312,7 @@ impl Database {
             (6_i64, "arm-historical-import-batches-v6"),
             (7_i64, "arm-task-review-notes-v7"),
             (8_i64, "arm-immutable-history-artifacts-v8"),
+            (9_i64, "arm-review-note-transition-guards-v9"),
         ] {
             let actual: String = self.connection.query_row(
                 "SELECT checksum FROM schema_migration WHERE version=?1",
@@ -391,7 +413,7 @@ mod tests {
         let staff: i64 = db.connection.query_row("SELECT COUNT(*) FROM workspace_record WHERE record_type='staff'", [], |r| r.get(0)).unwrap();
         assert_eq!(clients, 1);
         assert_eq!(actors, 4);
-        assert_eq!(migrations, 8);
+        assert_eq!(migrations, 9);
         assert_eq!(staff, 3);
     }
 
