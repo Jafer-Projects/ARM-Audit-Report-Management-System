@@ -305,9 +305,11 @@ mod tests {
         let clients: i64 = db.connection.query_row("SELECT COUNT(*) FROM client", [], |r| r.get(0)).unwrap();
         let actors: i64 = db.connection.query_row("SELECT COUNT(*) FROM demo_actor", [], |r| r.get(0)).unwrap();
         let migrations: i64 = db.connection.query_row("SELECT COUNT(*) FROM schema_migration", [], |r| r.get(0)).unwrap();
+        let staff: i64 = db.connection.query_row("SELECT COUNT(*) FROM workspace_record WHERE record_type='staff'", [], |r| r.get(0)).unwrap();
         assert_eq!(clients, 1);
         assert_eq!(actors, 4);
         assert_eq!(migrations, 5);
+        assert_eq!(staff, 3);
     }
 
     #[test]
