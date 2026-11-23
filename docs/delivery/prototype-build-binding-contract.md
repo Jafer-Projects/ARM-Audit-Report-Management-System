@@ -55,8 +55,8 @@ The current increment definitions remain the implementation scope:
 
 - **Increment 0:** Local desktop shell, workspace, safe local persistence, migrations, synthetic data, notes/activity and restart durability.
 - **Increment 1:** Client/company registration, validation, duplicate handling, lifecycle, archive/restore and change history.
-- **Increment 2:** Client-scoped product/category register and sales/purchase invoice capture, source metadata, duplicate review and workpaper linkage.
-- **Increment 3:** Historical data capture/import, source retention, row-level provenance, period assignment, reconciliation and draft VAT workpaper organization.
+- **Increment 2:** Client-scoped product/category register; sales/purchase invoices with structured source line items; source metadata; duplicate review; and local, immutable PDF/JPEG/PNG evidence attachments linked to invoices, historical records and import-cost inputs.
+- **Increment 3:** Historical data capture/import, retained CSV/source evidence, row-level provenance, explicit reviewed-period assignment with date-window validation, reconciliation and draft VAT workpaper organization.
 - **Increment 4:** Staff/task workflow, assignments, due-state/workload views, preparer/reviewer workflow, review notes and task history.
 - **Increment 5:** Import-cost worksheet prototype, evidence capture, cost component structure, allocation model, transparent calculations where the method is supported, and explicit review/exception states.
 
@@ -77,7 +77,7 @@ Use the principles in IAASB ISA 230 (Audit Documentation) and ISA 500 (Audit Evi
 - Keep preparer and reviewer identities and timestamps.
 - Record review findings, responses, resolution, and unresolved exceptions.
 
-These are product design controls; the prototype must not claim ISA compliance or replace firm methodology.
+These are product design controls; the prototype must not claim ISA compliance or replace firm methodology. Caseware-style engagement context, client requests, assigned work, review notes and sign-off patterns are workflow references; Xero-style transaction attachments and dated user history inform the source-evidence and audit-history experience.
 
 ### 6.2 Financial statement boundaries
 
