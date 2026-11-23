@@ -56,3 +56,32 @@ These checkmarks mean source code has been added, not that the feature has passe
 The product owner has issued a later, explicit decision recorded in [PR #2](https://github.com/Jafermenza/ARM-Audit-Report-Management-System/pull/2) and [Prototype Build Binding Contract](prototype-build-binding-contract.md). ARM is a controlled prototype using synthetic data. All implementation remains on `implementation/increments-0-to-5` in PR #2. Close the outstanding Increments 0–5 implementation gaps to the best practical professional standard, preserving existing behavior and avoiding scope expansion.
 
 **This later decision supersedes any earlier wording in this file that requires continuous test execution or increment-level verification.** Formal verification and testing of the integrated Increments 0–5 delivery occur only after Increment 5 implementation is complete. Do not declare any increment accepted, passed, or independently complete. Test plans and fixtures may be prepared during implementation, but partial checks must not be presented as acceptance. This timing decision does not permit test deletion, assertion weakening, or unsupported claims. The one collective gate and separate production/legal/security/professional gates remain mandatory.
+
+
+## Product-owner-directed prototype completion update
+
+**Binding rule:** See [Prototype Build Binding Contract](prototype-build-binding-contract.md). Implementation continues on this branch and PR #2. Formal verification and testing are deferred until Increment 5 implementation is complete. No increment is individually accepted.
+
+### Increment 5 prototype implementation added
+
+- Source-linked goods-line and cost-component input records can be captured under a unique client import-case reference.
+- Import cases require discovery, source/component policy, FX policy, allocation policy and synthetic worked-example references before calculation.
+- Cost inputs require source references and dates, currency codes, explicit FX numerator/denominator, FX source/date/authorizer, and an explicit cost treatment.
+- The Rust calculation module uses integer minor units and checked integer arithmetic; no floating-point money arithmetic.
+- Goods values are converted using the explicit FX ratio supplied for the source record.
+- Shared cost allocation supports Direct, Quantity, Weight, Volume and Value bases. Shared allocations use deterministic largest-remainder distribution so allocated minor units reconcile exactly to the component amount.
+- Cost treatment keeps Capitalize, Exclude, Recoverable tax, Customs-value-only and Needs review separate. Recoverable tax, customs-value-only and unresolved items are not silently capitalized.
+- Generated calculation snapshots are saved as immutable draft records with source and FX provenance. A new calculation creates a new snapshot rather than overwriting a prior result.
+- UI shows line-level and component-level allocations and clearly labels the output as a draft management-cost worksheet, not customs value, tax computation or approved accounting valuation.
+- Rust unit fixtures have been added for exact allocation reconciliation, direct allocation, recoverable tax exclusion, invalid FX and separation of customs-value-only/pending items. They have **not been executed** under the product owner's deferred-testing instruction.
+
+### Remaining prototype limitations
+
+- No live bank/official FX rate provider; FX source, date, authorization and ratio are explicit user-entered evidence.
+- No Ethiopian customs valuation or tariff engine; customs-value-only inputs are segregated and not calculated.
+- No approved accounting policy engine for capitalization, inventory valuation or recoverability.
+- No external OCR or document ingestion pipeline.
+- Local SQLite remains unencrypted and the app remains synthetic-data-only.
+- The calculation is a transparent prototype worksheet, not a practitioner-approved or production financial output.
+
+These implementation notes describe code added, not test results, increment acceptance, or production readiness.
