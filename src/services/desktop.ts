@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Client, ClientChange, ClientInput, DuplicateCandidate, EventItem, HistoricalImportBatch, HistoricalImportResult, HistoricalImportRow, ImportCostResult, InvoiceDuplicateCandidate, LocalNote, RecordInput, TaskReviewNote, WorkspaceInfo, WorkspaceRecord, WorkspaceRecordVersion } from "../types";
+import type { Client, ClientChange, ClientInput, DuplicateCandidate, EventItem, HistoricalImportBatch, HistoricalImportResult, HistoricalImportRow, ImportCostResult, SourceDocumentContent, SourceDocumentMeta, InvoiceDuplicateCandidate, LocalNote, RecordInput, TaskReviewNote, WorkspaceInfo, WorkspaceRecord, WorkspaceRecordVersion } from "../types";
 
 export const desktop = {
   initialize: () => invoke<WorkspaceInfo>("initialize_workspace"),
@@ -22,6 +22,9 @@ export const desktop = {
   importBatches: (clientId: string) => invoke<HistoricalImportBatch[]>("list_historical_import_batches", { clientId }),
   findInvoiceDuplicates: (clientId: string, invoiceNumber: string, excludeId?: string) => invoke<InvoiceDuplicateCandidate[]>("find_invoice_duplicates", { clientId, invoiceNumber, excludeId }),
   calculateImportCostPreview: (clientId: string, caseReference: string, baseCurrency: string) => invoke<ImportCostResult>("calculate_import_cost_preview", { clientId, caseReference, baseCurrency }),
+  attachSourceDocument: (input: { clientId: string; recordId: string; fileName: string; mediaType: string; content: number[] }) => invoke<SourceDocumentMeta>("attach_source_document", input),
+  listSourceDocuments: (recordId: string) => invoke<SourceDocumentMeta[]>("list_source_documents", { recordId }),
+  readSourceDocument: (id: string) => invoke<SourceDocumentContent>("read_source_document", { id }),
   records: (recordType: string, clientId?: string) => invoke<WorkspaceRecord[]>("list_records", { recordType, clientId: clientId ?? null }),
   saveRecord: (input: RecordInput) => invoke<WorkspaceRecord>("save_record", { input }),
   events: () => invoke<EventItem[]>("list_events"),
