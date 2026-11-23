@@ -2119,6 +2119,73 @@ mod tests {
     }
 
     #[test]
+    fn all_workspace_record_types_enforce_their_declared_state_machines() {
+        let valid = [
+            ("category", None, "Draft"),
+            ("category", Some("Draft"), "Active"),
+            ("category", Some("Active"), "Archived"),
+            ("product", None, "Draft"),
+            ("product", Some("Draft"), "Active"),
+            ("product", Some("Active"), "Archived"),
+            ("invoice", None, "Draft"),
+            ("invoice", Some("Draft"), "Ready for review"),
+            ("invoice", Some("Ready for review"), "Needs correction"),
+            ("invoice", Some("Ready for review"), "Reviewed"),
+            ("historical_record", None, "Draft"),
+            ("historical_record", Some("Draft"), "Needs source"),
+            ("historical_record", Some("Ready for review"), "Reviewed"),
+            ("period", None, "Draft"),
+            ("period", Some("Draft"), "Ready for review"),
+            ("period", Some("Ready for review"), "Reviewed"),
+            ("staff", None, "Draft"),
+            ("staff", Some("Draft"), "Active"),
+            ("staff", Some("Active"), "Inactive"),
+            ("staff", Some("Inactive"), "Active"),
+            ("task", None, "Draft"),
+            ("task", Some("Draft"), "Assigned"),
+            ("task", Some("Assigned"), "In progress"),
+            ("task", Some("In progress"), "Blocked"),
+            ("task", Some("Blocked"), "In progress"),
+            ("task", Some("In progress"), "Submitted"),
+            ("task", Some("Submitted"), "Returned"),
+            ("task", Some("Returned"), "In progress"),
+            ("task", Some("Submitted"), "Completed"),
+            ("task", Some("Submitted"), "Cancelled"),
+            ("import_case", None, "Discovery"),
+            ("import_case", Some("Discovery"), "Inputs captured"),
+            ("import_case", Some("Inputs captured"), "Needs review"),
+            ("import_case", Some("Needs review"), "Reviewed"),
+            ("import_case", Some("Reviewed"), "Deferred"),
+            ("import_cost_input", None, "Draft"),
+            ("import_cost_input", Some("Draft"), "Needs source"),
+            ("import_cost_input", Some("Draft"), "Ready for review"),
+            ("import_cost_input", Some("Ready for review"), "Reviewed"),
+        ];
+        for (record_type, previous, next) in valid {
+            assert!(valid_record_transition(record_type, previous, next), "expected {record_type}: {previous:?} -> {next} to be valid");
+            assert!(allowed_status(record_type, next), "expected {next} to be an allowed {record_type} status");
+        }
+
+        let invalid = [
+            ("category", Some("Draft"), "Archived"),
+            ("product", Some("Archived"), "Active"),
+            ("invoice", None, "Reviewed"),
+            ("invoice", Some("Reviewed"), "Draft"),
+            ("historical_record", Some("Draft"), "Reviewed"),
+            ("period", Some("Draft"), "Reviewed"),
+            ("staff", Some("Inactive"), "Draft"),
+            ("task", Some("In progress"), "Completed"),
+            ("task", Some("Completed"), "In progress"),
+            ("import_case", Some("Discovery"), "Reviewed"),
+            ("import_cost_input", None, "Ready for review"),
+            ("import_cost_input", Some("Reviewed"), "Draft"),
+        ];
+        for (record_type, previous, next) in invalid {
+            assert!(!valid_record_transition(record_type, previous, next), "expected {record_type}: {previous:?} -> {next} to be rejected");
+        }
+    }
+
+    #[test]
     fn historical_import_row_validation_rejects_duplicates_empty_values_and_invalid_row_numbers() {
         let make_row = |source_row, description: &str, amount_text: &str| HistoricalImportRow {
             source_row, transaction_date: "2026-01-01".into(), description: description.into(),
