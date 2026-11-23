@@ -223,6 +223,86 @@ fn allowed_record_type(value: &str) -> bool {
     matches!(value,"category"|"product"|"invoice"|"historical_record"|"period"|"staff"|"task"|"import_case"|"import_cost_input")
 }
 
+fn allowed_status(record_type: &str, status: &str) -> bool {
+    match record_type {
+        "category" | "product" => ["Draft","Active","Archived"].contains(&status),
+        "invoice" => ["Draft","Submitted for review","Reviewed","Returned","Archived"].contains(&status),
+        "historical_record" | "period" => ["Draft","Needs source","Ready for review","Reviewed","Locked"].contains(&status),
+        "staff" => ["Draft","Active","Inactive"].contains(&status),
+        "task" => ["Draft","Assigned","In progress","Blocked","Submitted","Returned","Completed","Cancelled"].contains(&status),
+        "import_case" | "import_cost_input" => ["Discovery","Inputs captured","Needs review","Reviewed","Returned"].contains(&status),
+        _ => false,
+    }
+}
+
+#[tauri::command]
+pub fn activate_client(id: String, state: State<'_, AppState>) -> Result<(), String> {
+    let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
+    let (actor_id,_,_) = ensure_can_mutate(&db)?;
+    let tx = db.connection.unchecked_transaction().map_err(|e|e.to_string())?;
+    let changed = tx.execute("UPDATE client SET status='Active',updated_at=?1,updated_by=?2,row_version=row_version+1 WHERE id=?3 AND firm_id=?4 AND status='Draft' AND length(trim(legal_name))>=2",
+        params![now_utc(),actor_id,id,FIRM_ID]).map_err(|e|e.to_string())?;
+    if changed == 0 { return Err("Only a valid draft client can be activated.".into()); }
+    tx.execute("INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json) VALUES(?1,?2,?3,'client_activated','client',?4,?5,?6,'{}')",
+        params![Uuid::new_v4().to_string(),FIRM_ID,actor_id,id,now_utc(),Uuid::new_v4().to_string()]).map_err(|e|e.to_string())?;
+    tx.commit().map_err(|e|e.to_string())
+}
+
+#[tauri::command]
+pub fn restore_client(id: String, state: State<'_, AppState>) -> Result<(), String> {
+    let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
+    let (actor_id,_,_) = ensure_can_mutate(&db)?;
+    let tx = db.connection.unchecked_transaction().map_err(|e|e.to_string())?;
+    let changed = tx.execute("UPDATE client SET status='Active',archived_at=NULL,updated_at=?1,updated_by=?2,row_version=row_version+1 WHERE id=?3 AND firm_id=?4 AND status='Archived'",
+        params![now_utc(),actor_id,id,FIRM_ID]).map_err(|e|e.to_string())?;
+    if changed == 0 { return Err("Archived client was not found.".into()); }
+    tx.execute("INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json) VALUES(?1,?2,?3,'client_restored','client',?4,?5,?6,'{}')",
+        params![Uuid::new_v4().to_string(),FIRM_ID,actor_id,id,now_utc(),Uuid::new_v4().to_string()]).map_err(|e|e.to_string())?;
+    tx.commit().map_err(|e|e.to_string())
+}
+
+#[derive(Serialize)]
+pub struct LocalNote {
+    id: String, client_id: Option<String>, title: String, body: String, status: String, updated_at: String,
+}
+
+#[derive(Deserialize)]
+pub struct LocalNoteInput {
+    id: Option<String>, client_id: Option<String>, title: String, body: String,
+}
+
+#[tauri::command]
+pub fn list_notes(state: State<'_, AppState>) -> Result<Vec<LocalNote>, String> {
+    let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
+    let mut stmt = db.connection.prepare("SELECT id,client_id,title,body,status,updated_at FROM local_note WHERE firm_id=?1 ORDER BY updated_at DESC").map_err(|e|e.to_string())?;
+    let rows = stmt.query_map([FIRM_ID], |r| Ok(LocalNote { id:r.get(0)?,client_id:r.get(1)?,title:r.get(2)?,body:r.get(3)?,status:r.get(4)?,updated_at:r.get(5)? })).map_err(|e|e.to_string())?;
+    rows.collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())
+}
+
+#[tauri::command]
+pub fn save_note(input: LocalNoteInput, state: State<'_, AppState>) -> Result<LocalNote, String> {
+    let title = input.title.trim();
+    if title.is_empty() || title.chars().count() > 120 || input.body.chars().count() > 2000 {
+        return Err("A note title (1–120 characters) and body (up to 2,000 characters) are required.".into());
+    }
+    let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
+    let (actor_id,_,_) = ensure_can_mutate(&db)?;
+    if let Some(client_id) = input.client_id.as_deref() {
+        let found: bool = db.connection.query_row("SELECT EXISTS(SELECT 1 FROM client WHERE id=?1 AND firm_id=?2)",params![client_id,FIRM_ID],|r|r.get(0)).map_err(|e|e.to_string())?;
+        if !found { return Err("Selected client is not part of this demo workspace.".into()); }
+    }
+    let id = input.id.unwrap_or_else(||Uuid::new_v4().to_string());
+    let now = now_utc();
+    let tx = db.connection.unchecked_transaction().map_err(|e|e.to_string())?;
+    tx.execute("INSERT INTO local_note(id,firm_id,client_id,actor_id,title,body,status,created_at,updated_at) VALUES(?1,?2,?3,?4,?5,?6,'Local draft',?7,?7)
+        ON CONFLICT(id) DO UPDATE SET client_id=excluded.client_id,actor_id=excluded.actor_id,title=excluded.title,body=excluded.body,updated_at=excluded.updated_at WHERE local_note.firm_id=excluded.firm_id",
+        params![id,FIRM_ID,input.client_id,actor_id,title,input.body,now]).map_err(|e|e.to_string())?;
+    tx.execute("INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json) VALUES(?1,?2,?3,'local_note_saved','local_note',?4,?5,?6,?7)",
+        params![Uuid::new_v4().to_string(),FIRM_ID,actor_id,id,now,Uuid::new_v4().to_string(),json!({"title":title}).to_string()]).map_err(|e|e.to_string())?;
+    tx.commit().map_err(|e|e.to_string())?;
+    db.connection.query_row("SELECT id,client_id,title,body,status,updated_at FROM local_note WHERE id=?1 AND firm_id=?2",params![id,FIRM_ID],|r|Ok(LocalNote{id:r.get(0)?,client_id:r.get(1)?,title:r.get(2)?,body:r.get(3)?,status:r.get(4)?,updated_at:r.get(5)?})).map_err(|e|e.to_string())
+}
+
 #[tauri::command]
 pub fn list_records(record_type: String, state: State<'_, AppState>) -> Result<Vec<WorkspaceRecord>, String> {
     if !allowed_record_type(&record_type) { return Err("Unsupported workspace record type.".into()); }
@@ -237,6 +317,8 @@ pub fn list_records(record_type: String, state: State<'_, AppState>) -> Result<V
 #[tauri::command]
 pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<WorkspaceRecord, String> {
     if !allowed_record_type(&input.record_type) { return Err("Unsupported workspace record type.".into()); }
+    if !allowed_status(&input.record_type, &input.status) { return Err("Unsupported status for this record type.".into()); }
+    if let Some(payload) = input.payload_json.as_deref() { if payload.len() > 16_384 || serde_json::from_str::<serde_json::Value>(payload).is_err() { return Err("Record metadata must be valid JSON under 16 KB.".into()); } }
     if input.title.trim().is_empty() || input.title.chars().count() > 200 { return Err("A title of 1–200 characters is required.".into()); }
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
     let (actor_id,_,_) = ensure_can_mutate(&db)?;
