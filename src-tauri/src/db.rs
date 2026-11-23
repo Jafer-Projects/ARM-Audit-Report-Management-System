@@ -141,7 +141,7 @@ impl Database {
             )?;
             tx.commit()?;
         }
-        if applied > 3 {
+        if applied > 4 {
             return Err(rusqlite::Error::InvalidQuery);
         }
         if applied < 3 {
@@ -158,10 +158,33 @@ impl Database {
             )?;
             tx.commit()?;
         }
+        if applied < 4 {
+            let tx = self.connection.unchecked_transaction()?;
+            tx.execute_batch(
+                "CREATE TABLE client_change (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    client_id TEXT NOT NULL REFERENCES client(id),
+                    firm_id TEXT NOT NULL REFERENCES demo_firm(id),
+                    actor_id TEXT NOT NULL REFERENCES demo_actor(id),
+                    action TEXT NOT NULL CHECK(action IN ('created','updated')),
+                    changed_at TEXT NOT NULL,
+                    before_json TEXT NOT NULL,
+                    after_json TEXT NOT NULL,
+                    correlation_id TEXT NOT NULL
+                );
+                CREATE INDEX client_change_history ON client_change(firm_id,client_id,changed_at DESC);"
+            )?;
+            tx.execute(
+                "INSERT INTO schema_migration(version, checksum, applied_at) VALUES(4, ?1, ?2)",
+                rusqlite::params!["arm-client-change-history-v4", now_utc()],
+            )?;
+            tx.commit()?;
+        }
         for (version, expected_checksum) in [
             (1_i64, "arm-initial-schema-v1"),
             (2_i64, "arm-local-notes-v2"),
             (3_i64, "arm-append-only-events-v3"),
+            (4_i64, "arm-client-change-history-v4"),
         ] {
             let actual: String = self.connection.query_row(
                 "SELECT checksum FROM schema_migration WHERE version=?1",
@@ -239,7 +262,7 @@ mod tests {
         let migrations: i64 = db.connection.query_row("SELECT COUNT(*) FROM schema_migration", [], |r| r.get(0)).unwrap();
         assert_eq!(clients, 1);
         assert_eq!(actors, 4);
-        assert_eq!(migrations, 3);
+        assert_eq!(migrations, 4);
     }
 
     #[test]
