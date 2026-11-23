@@ -114,3 +114,8 @@ These implementation notes describe code added, not test results, increment acce
 - The inbox is recipient-scoped, filters notifications through the active persona's client access, shows unread state, and routes to the linked task and client workspace.
 - Read state is one-way; notification content is immutable and history cannot be deleted except through the explicit synthetic-demo reset.
 - Notifications are in-app/local only. No email, SMS, push, background due-date scheduler or production identity delivery is implemented.
+
+
+## Collective verification entry point
+
+Implementation code for the current prototype increments 0–5 is now present on the bound branch. This is the point at which the product-owner-directed collective verification and test program may begin. No individual increment is accepted. The overall result remains pending until typecheck, domain tests, Rust tests, frontend build, Windows Tauri build, and the integrated acceptance workflow have completed and any defects have been corrected.
