@@ -141,7 +141,7 @@ impl Database {
             )?;
             tx.commit()?;
         }
-        if applied > 6 {
+        if applied > 7 {
             return Err(rusqlite::Error::InvalidQuery);
         }
         if applied < 3 {
@@ -227,6 +227,39 @@ impl Database {
             )?;
             tx.commit()?;
         }
+        if applied < 7 {
+            let tx = self.connection.unchecked_transaction()?;
+            tx.execute_batch(
+                "CREATE TABLE task_review_note (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    firm_id TEXT NOT NULL REFERENCES demo_firm(id),
+                    task_id TEXT NOT NULL REFERENCES workspace_record(id),
+                    reviewer_actor_id TEXT NOT NULL REFERENCES demo_actor(id),
+                    category TEXT NOT NULL,
+                    description TEXT NOT NULL,
+                    affected_record_reference TEXT NOT NULL DEFAULT '',
+                    required_response TEXT NOT NULL,
+                    status TEXT NOT NULL CHECK(status IN ('Open','Responded','Cleared','Reopened')),
+                    preparer_response TEXT NOT NULL DEFAULT '',
+                    response_actor_id TEXT REFERENCES demo_actor(id),
+                    responded_at TEXT,
+                    disposition TEXT NOT NULL DEFAULT '',
+                    disposition_actor_id TEXT REFERENCES demo_actor(id),
+                    disposition_at TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    correlation_id TEXT NOT NULL
+                );
+                CREATE INDEX task_review_note_history ON task_review_note(firm_id,task_id,created_at);
+                CREATE TRIGGER task_review_note_no_delete BEFORE DELETE ON task_review_note
+                BEGIN SELECT RAISE(ABORT, 'task review notes cannot be deleted'); END;"
+            )?;
+            tx.execute(
+                "INSERT INTO schema_migration(version, checksum, applied_at) VALUES(7, ?1, ?2)",
+                rusqlite::params!["arm-task-review-notes-v7", now_utc()],
+            )?;
+            tx.commit()?;
+        }
         for (version, expected_checksum) in [
             (1_i64, "arm-initial-schema-v1"),
             (2_i64, "arm-local-notes-v2"),
@@ -234,6 +267,7 @@ impl Database {
             (4_i64, "arm-client-change-history-v4"),
             (5_i64, "arm-workspace-record-versions-v5"),
             (6_i64, "arm-historical-import-batches-v6"),
+            (7_i64, "arm-task-review-notes-v7"),
         ] {
             let actual: String = self.connection.query_row(
                 "SELECT checksum FROM schema_migration WHERE version=?1",
@@ -334,7 +368,7 @@ mod tests {
         let staff: i64 = db.connection.query_row("SELECT COUNT(*) FROM workspace_record WHERE record_type='staff'", [], |r| r.get(0)).unwrap();
         assert_eq!(clients, 1);
         assert_eq!(actors, 4);
-        assert_eq!(migrations, 6);
+        assert_eq!(migrations, 7);
         assert_eq!(staff, 3);
     }
 
