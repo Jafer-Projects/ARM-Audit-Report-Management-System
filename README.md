@@ -49,6 +49,9 @@ These are architecture directions to validate; final versions, licenses, mainten
 
 ## Product and delivery documents
 
+- [Implementation evidence log — Increments 0–5](docs/delivery/implementation-evidence-log.md)
+- [PR #2 — single-branch implementation and collective acceptance contract](https://github.com/Jafermenza/ARM-Audit-Report-Management-System/pull/2)
+
 - [Product requirements baseline](docs/product/software-requirements-specification.md)
 - [Auditor pain points and initial workflow requirements (derived from the supplied 9 January 2025 proposal)](docs/product/auditor-pain-points-and-initial-workflow-requirements.md)
 - [Roles, permissions and workflows](docs/product/user-roles-and-permissions.md)
@@ -91,4 +94,4 @@ These are architecture directions to validate; final versions, licenses, mainten
 
 ## Current delivery state
 
-Phase 0 approval permits controlled initial development and practitioner demonstrations using synthetic data. Real client data, live accounting/tax operations, desktop distribution and production deployment remain subject to the corresponding legal, security, professional and operational approvals. The repository remains a specification and delivery-governance baseline until implementation work is completed and verified.
+Phase 0 approval permits controlled initial development and practitioner demonstrations using synthetic data. Real client data, live accounting/tax operations, desktop distribution and production deployment remain subject to the corresponding legal, security, professional and operational approvals. The repository now includes the initial Tauri/React desktop application scaffold and synthetic-data workflow prototype on the PR #2 implementation branch. This is early, unverified implementation work: CI, full integrated acceptance, encryption, practitioner review and production gates remain outstanding. See the implementation evidence log and PR #2 for the current scope and limitations.
