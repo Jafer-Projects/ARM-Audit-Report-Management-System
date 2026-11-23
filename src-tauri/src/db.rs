@@ -141,7 +141,7 @@ impl Database {
             )?;
             tx.commit()?;
         }
-        if applied > 5 {
+        if applied > 6 {
             return Err(rusqlite::Error::InvalidQuery);
         }
         if applied < 3 {
@@ -202,12 +202,38 @@ impl Database {
             )?;
             tx.commit()?;
         }
+        if applied < 6 {
+            let tx = self.connection.unchecked_transaction()?;
+            tx.execute_batch(
+                "CREATE TABLE historical_import_batch (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    firm_id TEXT NOT NULL REFERENCES demo_firm(id),
+                    client_id TEXT NOT NULL REFERENCES client(id),
+                    actor_id TEXT NOT NULL REFERENCES demo_actor(id),
+                    source_filename TEXT NOT NULL,
+                    source_checksum_sha256 TEXT NOT NULL CHECK(length(source_checksum_sha256)=64),
+                    source_content TEXT NOT NULL,
+                    mapping_json TEXT NOT NULL,
+                    source_row_count INTEGER NOT NULL,
+                    imported_row_count INTEGER NOT NULL,
+                    imported_at TEXT NOT NULL,
+                    correlation_id TEXT NOT NULL
+                );
+                CREATE INDEX historical_import_batch_client ON historical_import_batch(firm_id,client_id,imported_at DESC);"
+            )?;
+            tx.execute(
+                "INSERT INTO schema_migration(version, checksum, applied_at) VALUES(6, ?1, ?2)",
+                rusqlite::params!["arm-historical-import-batches-v6", now_utc()],
+            )?;
+            tx.commit()?;
+        }
         for (version, expected_checksum) in [
             (1_i64, "arm-initial-schema-v1"),
             (2_i64, "arm-local-notes-v2"),
             (3_i64, "arm-append-only-events-v3"),
             (4_i64, "arm-client-change-history-v4"),
             (5_i64, "arm-workspace-record-versions-v5"),
+            (6_i64, "arm-historical-import-batches-v6"),
         ] {
             let actual: String = self.connection.query_row(
                 "SELECT checksum FROM schema_migration WHERE version=?1",
@@ -308,7 +334,7 @@ mod tests {
         let staff: i64 = db.connection.query_row("SELECT COUNT(*) FROM workspace_record WHERE record_type='staff'", [], |r| r.get(0)).unwrap();
         assert_eq!(clients, 1);
         assert_eq!(actors, 4);
-        assert_eq!(migrations, 5);
+        assert_eq!(migrations, 6);
         assert_eq!(staff, 3);
     }
 
