@@ -1545,7 +1545,7 @@ pub fn attach_source_document(
     if record_client_id != client_id || client_status != "Active" {
         return Err("The record must belong to the selected active client workspace.".into());
     }
-    if !["invoice", "historical_record"].contains(&record_type.as_str()) {
+    if !["invoice", "historical_record", "import_cost_input"].contains(&record_type.as_str()) {
         return Err("Source documents can be attached only to invoice or historical-record evidence in this prototype.".into());
     }
     if !actor_has_client_access(&db, &client_id, &actor_name, &persona)? {
@@ -1582,7 +1582,7 @@ pub fn attach_source_document(
 pub fn list_source_documents(record_id: String, state: State<'_, AppState>) -> Result<Vec<SourceDocumentMeta>, String> {
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
     let (client_id, record_type, client_status, _) = document_record_context(&db, &record_id)?;
-    if client_status != "Active" || !["invoice","historical_record"].contains(&record_type.as_str()) {
+    if client_status != "Active" || !["invoice","historical_record","import_cost_input"].contains(&record_type.as_str()) {
         return Err("Source evidence is unavailable for this record.".into());
     }
     let (_, actor_name, persona) = active_actor(&db)?;
@@ -1610,7 +1610,7 @@ pub fn read_source_document(id: String, state: State<'_, AppState>) -> Result<So
          WHERE d.id=?1 AND d.firm_id=?2 AND r.firm_id=?2 AND c.firm_id=?2",
         params![id,FIRM_ID], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))
     ).map_err(|_| "Source document not found in this demonstration firm.".to_string())?;
-    if client_status != "Active" || !["invoice","historical_record"].contains(&record_type.as_str()) {
+    if client_status != "Active" || !["invoice","historical_record","import_cost_input"].contains(&record_type.as_str()) {
         return Err("Source evidence is unavailable for this record.".into());
     }
     let (_, actor_name, persona) = active_actor(&db)?;
