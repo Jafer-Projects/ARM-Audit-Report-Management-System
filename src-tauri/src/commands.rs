@@ -391,10 +391,11 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
     }
     let id = input.id.unwrap_or_else(|| Uuid::new_v4().to_string());
     let now = now_utc();
-    let exists: Option<i64> = db.connection.query_row("SELECT row_version FROM workspace_record WHERE id=?1 AND firm_id=?2",params![id,FIRM_ID],|r|r.get(0)).optional().map_err(|e|e.to_string())?;
+    let exists: Option<(i64,String)> = db.connection.query_row("SELECT row_version,record_type FROM workspace_record WHERE id=?1 AND firm_id=?2",params![id,FIRM_ID],|r|Ok((r.get(0)?,r.get(1)?))).optional().map_err(|e|e.to_string())?;
     let tx = db.connection.unchecked_transaction().map_err(|e|e.to_string())?;
-    if let Some(version) = exists {
-        if input.row_version != Some(version) { return Err("This record changed since it was opened. Reload before saving.".into()); }
+    if let Some((version, existing_type)) = exists.as_ref() {
+        if existing_type != &input.record_type { return Err("A record cannot be changed into a different record type.".into()); }
+        if input.row_version != Some(*version) { return Err("This record changed since it was opened. Reload before saving.".into()); }
         tx.execute("UPDATE workspace_record SET client_id=?1,title=?2,status=?3,reference=?4,amount_text=?5,notes=?6,payload_json=?7,row_version=row_version+1,updated_at=?8,updated_by=?9 WHERE id=?10 AND firm_id=?11",
             params![input.client_id,input.title.trim(),input.status,input.reference.unwrap_or_default(),input.amount_text.unwrap_or_default(),input.notes.unwrap_or_default(),input.payload_json.unwrap_or_else(||"{}".into()),now,actor_id,id,FIRM_ID]).map_err(|e|e.to_string())?;
     } else {
