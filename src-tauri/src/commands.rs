@@ -379,7 +379,7 @@ fn valid_record_transition(record_type: &str, previous: Option<&str>, next: &str
         ("import_cost_input", None, "Draft") => true,
         ("import_cost_input", Some("Draft"), "Draft" | "Needs source" | "Ready for review") => true,
         ("import_cost_input", Some("Needs source"), "Needs source" | "Draft" | "Ready for review") => true,
-        ("import_cost_input", Some("Ready for review"), "Ready for review" | "Reviewed") => true,
+        ("import_cost_input", Some("Ready for review"), "Ready for review" | "Needs source" | "Reviewed") => true,
         ("import_cost_input", Some("Reviewed"), "Reviewed") => true,
         _ => false,
     }
@@ -1750,6 +1750,19 @@ pub fn attach_source_document(
         return Err("The filename extension must match the detected file content.".into());
     }
     let (record_client_id, record_type, client_status, _) = document_record_context(&db, &record_id)?;
+    let (record_status, record_payload): (String,String) = db.connection.query_row(
+        "SELECT status,payload_json FROM workspace_record WHERE id=?1 AND firm_id=?2",
+        params![record_id,FIRM_ID], |r|Ok((r.get(0)?,r.get(1)?))
+    ).map_err(|e|e.to_string())?;
+    if !["Draft","Needs source","Needs correction"].contains(&record_status.as_str()) {
+        return Err("Return the record for correction or source completion before adding evidence; reviewed and review-queued evidence is locked.".into());
+    }
+    if record_type == "import_cost_input" {
+        let payload: serde_json::Value = serde_json::from_str(&record_payload).unwrap_or_else(|_|json!({}));
+        if payload.get("entry_kind").and_then(|v|v.as_str()) == Some("calculation_result") {
+            return Err("Attach evidence to the source goods line or cost component, not to the immutable calculation snapshot.".into());
+        }
+    }
     if record_client_id != client_id || client_status != "Active" {
         return Err("The record must belong to the selected active client workspace.".into());
     }
