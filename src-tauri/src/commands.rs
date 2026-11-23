@@ -333,7 +333,7 @@ fn allowed_record_type(value: &str) -> bool {
 fn allowed_status(record_type: &str, status: &str) -> bool {
     match record_type {
         "category" | "product" => ["Draft","Active","Archived"].contains(&status),
-        "invoice" => ["Draft","Needs correction","Ready for review","Reviewed","Archived"].contains(&status),
+        "invoice" => ["Draft","Needs correction","Ready for review","Reviewed"].contains(&status),
         "historical_record" | "period" => ["Draft","Needs source","Ready for review","Reviewed"].contains(&status),
         "staff" => ["Draft","Active","Inactive"].contains(&status),
         "task" => ["Draft","Assigned","In progress","Blocked","Submitted","Returned","Completed","Cancelled"].contains(&status),
@@ -349,11 +349,10 @@ fn valid_record_transition(record_type: &str, previous: Option<&str>, next: &str
         ("category" | "product", Some("Draft"), "Draft" | "Active") => true,
         ("category" | "product", Some("Active"), "Active" | "Archived") => true,
         ("invoice", None, "Draft") => true,
-        ("invoice", Some("Draft"), "Draft" | "Ready for review" | "Archived") => true,
+        ("invoice", Some("Draft"), "Draft" | "Ready for review") => true,
         ("invoice", Some("Ready for review"), "Ready for review" | "Needs correction" | "Reviewed") => true,
         ("invoice", Some("Needs correction"), "Needs correction" | "Draft" | "Ready for review") => true,
-        ("invoice", Some("Reviewed"), "Reviewed" | "Archived") => true,
-        ("invoice", Some("Archived"), "Archived") => true,
+        ("invoice", Some("Reviewed"), "Reviewed") => true,
         ("historical_record" | "period", None, "Draft") => true,
         ("historical_record" | "period", Some("Draft"), "Draft" | "Needs source" | "Ready for review") => true,
         ("historical_record" | "period", Some("Needs source"), "Needs source" | "Ready for review") => true,
@@ -879,9 +878,6 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
     let (actor_id, actor_name, persona) = ensure_can_mutate(&db)?;
     if input.record_type == "staff" && !["administrator","manager"].contains(&persona.as_str()) { return Err("Only the demo administrator or manager can edit the staff directory.".into()); }
-    if input.record_type == "staff" && !["administrator","manager"].contains(&persona.as_str()) {
-        return Err("Only the demo administrator or manager can maintain staff records.".into());
-    }
     if input.record_type == "staff" {
         if input.client_id.is_some() { return Err("Staff records belong to the demonstration firm, not a client workspace.".into()); }
     } else {
@@ -927,6 +923,75 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
         |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?))
     ).optional().map_err(|e|e.to_string())?;
 
+    if input.record_type == "invoice" {
+        if ["Needs correction","Reviewed"].contains(&input.status.as_str()) && !["administrator","manager"].contains(&persona.as_str()) {
+            return Err("Only the demo administrator or engagement manager can record an invoice review decision.".into());
+        }
+        if input.status == "Needs correction" && payload.get("reviewer_note").and_then(|v|v.as_str()).unwrap_or("").trim().chars().count() < 3 {
+            return Err("Record the specific correction required before returning this invoice.".into());
+        }
+        if let Some((_,existing_type,previous_status,previous_payload,_)) = exists.as_ref() {
+            if existing_type != "invoice" { return Err("Invoice record type mismatch.".into()); }
+            if ["Ready for review","Reviewed"].contains(&previous_status.as_str())
+                || (previous_status == "Needs correction" && persona != "auditor") {
+                let previous: serde_json::Value = serde_json::from_str(previous_payload).unwrap_or_else(|_|json!({}));
+                let mut previous_compare = previous.clone();
+                let mut payload_compare = payload.clone();
+                if previous_status == "Ready for review" {
+                    if let Some(object) = previous_compare.as_object_mut() { object.remove("reviewer_note"); }
+                    if let Some(object) = payload_compare.as_object_mut() { object.remove("reviewer_note"); }
+                }
+                let old_values: (String,String,String,String) = db.connection.query_row(
+                    "SELECT title,reference,amount_text,notes FROM workspace_record WHERE id=?1 AND firm_id=?2",
+                    params![id,FIRM_ID], |r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))
+                ).map_err(|e|e.to_string())?;
+                if previous_compare != payload_compare || old_values.0 != input.title.trim()
+                    || old_values.1 != input.reference.as_deref().unwrap_or("")
+                    || old_values.2 != input.amount_text.as_deref().unwrap_or("")
+                    || old_values.3 != input.notes.as_deref().unwrap_or("") {
+                    return Err("Invoice source values are locked during review and after review. Return for correction or create a separately traceable revision.".into());
+                }
+            }
+            if ["Needs correction","Reviewed"].contains(&input.status.as_str()) && previous_status != "Ready for review" {
+                return Err("An invoice review decision can only be recorded from Ready for review.".into());
+            }
+            if previous_status == "Reviewed" && input.status != "Reviewed" {
+                return Err("Reviewed invoices are immutable in this prototype.".into());
+            }
+        } else if ["Needs correction","Reviewed"].contains(&input.status.as_str()) {
+            return Err("A new invoice must be captured before it can enter review.".into());
+        }
+    }
+    if input.record_type == "historical_record" || input.record_type == "period" {
+        if input.status == "Reviewed" && !["administrator","manager"].contains(&persona.as_str()) {
+            return Err("Only the demo administrator or engagement manager can mark historical work reviewed.".into());
+        }
+        if let Some((_,existing_type,previous_status,previous_payload,_)) = exists.as_ref() {
+            if existing_type != input.record_type { return Err("Workspace record type mismatch.".into()); }
+            if ["Ready for review","Reviewed"].contains(&previous_status.as_str()) {
+                let previous: serde_json::Value = serde_json::from_str(previous_payload).unwrap_or_else(|_|json!({}));
+                if previous != payload {
+                    return Err("Historical source records are locked while awaiting or after review; return to Needs source before correction.".into());
+                }
+                let old_values: (String,String,String,String) = db.connection.query_row(
+                    "SELECT title,reference,amount_text,notes FROM workspace_record WHERE id=?1 AND firm_id=?2",
+                    params![id,FIRM_ID], |r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))
+                ).map_err(|e|e.to_string())?;
+                if old_values.0 != input.title.trim() || old_values.1 != input.reference.as_deref().unwrap_or("")
+                    || old_values.2 != input.amount_text.as_deref().unwrap_or("") || old_values.3 != input.notes.as_deref().unwrap_or("") {
+                    return Err("Historical source records cannot be edited while awaiting or after review.".into());
+                }
+            }
+            if input.status == "Reviewed" && previous_status != "Ready for review" && previous_status != "Reviewed" {
+                return Err("Historical work can be marked reviewed only from Ready for review.".into());
+            }
+            if previous_status == "Reviewed" && input.status != "Reviewed" {
+                return Err("Reviewed historical records are immutable in this prototype.".into());
+            }
+        } else if input.status == "Reviewed" {
+            return Err("A historical record must exist before it can be marked reviewed.".into());
+        }
+    }
     if input.record_type == "task" {
         let description = payload.get("description").and_then(|v|v.as_str()).unwrap_or("").trim();
         let assignee = payload.get("assignee").and_then(|v|v.as_str()).unwrap_or("").trim();
