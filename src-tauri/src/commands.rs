@@ -671,6 +671,7 @@ pub fn reset_demo_data(state: State<'_, AppState>) -> Result<(), String> {
     let tx = db.connection.unchecked_transaction().map_err(|e|e.to_string())?;
     tx.execute("DELETE FROM workspace_record WHERE firm_id=?1 AND record_type<>'staff'",[FIRM_ID]).map_err(|e|e.to_string())?;
     tx.execute("DELETE FROM local_note WHERE firm_id=?1",[FIRM_ID]).map_err(|e|e.to_string())?;
+    tx.execute("DELETE FROM historical_import_batch WHERE firm_id=?1",[FIRM_ID]).map_err(|e|e.to_string())?;
     tx.execute("DELETE FROM client_change WHERE firm_id=?1",[FIRM_ID]).map_err(|e|e.to_string())?;
     tx.execute("DELETE FROM client WHERE firm_id=?1",[FIRM_ID]).map_err(|e|e.to_string())?;
     tx.execute("INSERT INTO client(id,firm_id,record_kind,legal_name,display_name,status,created_at,updated_at,created_by,updated_by) VALUES(?1,?2,'Company','Sample Trading PLC','Sample Trading','Active',?3,?3,?4,?4)",
