@@ -986,6 +986,39 @@ pub fn list_records(record_type: String, client_id: Option<String>, state: State
     Ok(records)
 }
 
+
+fn validate_period_assignment(
+    db: &Database,
+    client_id: &str,
+    period_reference: &str,
+    transaction_date: Option<&str>,
+) -> Result<(), String> {
+    let period: Option<(String,String)> = db.connection.query_row(
+        "SELECT status,payload_json FROM workspace_record
+         WHERE firm_id=?1 AND client_id=?2 AND record_type='period' AND reference=?3
+         ORDER BY updated_at DESC LIMIT 1",
+        params![FIRM_ID,client_id,period_reference.trim()],
+        |r| Ok((r.get(0)?,r.get(1)?))
+    ).optional().map_err(|e| e.to_string())?;
+    let (status,raw) = period.ok_or_else(|| "The reporting period reference does not exist for this client. Create and review the period first.".to_string())?;
+    if status != "Reviewed" {
+        return Err("The referenced financial period must be reviewed before transactions can be submitted for review.".into());
+    }
+    let payload: serde_json::Value = serde_json::from_str(&raw).unwrap_or_else(|_| json!({}));
+    let start = payload.get("start_date").and_then(|v| v.as_str()).unwrap_or("").trim();
+    let end = payload.get("end_date").and_then(|v| v.as_str()).unwrap_or("").trim();
+    if start.len() != 10 || end.len() != 10 || start > end {
+        return Err("The reviewed period must have valid ISO start and end dates.".into());
+    }
+    if let Some(date) = transaction_date {
+        let date = date.trim();
+        if date.len() != 10 || date < start || date > end {
+            return Err(format!("Transaction date {date} falls outside the reviewed period {start} to {end}."));
+        }
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<WorkspaceRecord, String> {
     if !allowed_record_type(&input.record_type) {
@@ -1120,6 +1153,66 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
         }
     }
 
+
+
+    if input.record_type == "period" {
+        let reference = input.reference.as_deref().unwrap_or("").trim();
+        if input.status != "Draft" && reference.is_empty() {
+            return Err("A reporting period needs a unique reference before it can be reviewed.".into());
+        }
+        if input.status == "Reviewed" && !["administrator","manager"].contains(&persona.as_str()) {
+            return Err("Only the demo administrator or engagement manager may review a financial period.".into());
+        }
+        if input.status == "Ready for review" {
+            for key in ["period_source_reference","calendar_policy_reference"] {
+                if payload.get(key).and_then(|v| v.as_str()).unwrap_or("").trim().is_empty() {
+                    return Err(format!("Record {key} before submitting the period for review."));
+                }
+            }
+        }
+        if input.status != "Draft" {
+            let start = payload.get("start_date").and_then(|v| v.as_str()).unwrap_or("").trim();
+            let end = payload.get("end_date").and_then(|v| v.as_str()).unwrap_or("").trim();
+            if start.len() != 10 || end.len() != 10 || start > end {
+                return Err("A reporting period requires valid ISO start and end dates, with start on or before end.".into());
+            }
+        }
+        if !reference.is_empty() {
+            let duplicate: bool = db.connection.query_row(
+                "SELECT EXISTS(SELECT 1 FROM workspace_record WHERE firm_id=?1 AND client_id=?2 AND record_type='period' AND reference=?3 AND id<>?4)",
+                params![FIRM_ID,input.client_id.as_deref().unwrap_or(""),reference,input.id.as_deref().unwrap_or("")],
+                |r| r.get(0)
+            ).map_err(|e| e.to_string())?;
+            if duplicate { return Err("This reporting period reference is already used by another period for this client.".into()); }
+        }
+    }
+    if input.record_type == "historical_record" && input.status == "Ready for review" {
+        let client_id = input.client_id.as_deref().unwrap_or("");
+        let period_reference = payload.get("period_reference").and_then(|v| v.as_str()).unwrap_or("").trim();
+        if period_reference.is_empty() {
+            return Err("Assign the historical record to an explicitly reviewed financial period before review.".into());
+        }
+        let class = payload.get("historical_class").and_then(|v| v.as_str()).unwrap_or("");
+        if ["Tax history","VAT carry-forward (source wording)"].contains(&class) {
+            let tax_period = payload.get("tax_period_as_stated").and_then(|v| v.as_str()).unwrap_or("").trim();
+            if tax_period.is_empty() { return Err("Preserve the tax period exactly as stated on the source.".into()); }
+            validate_period_assignment(&db,client_id,period_reference,None)?;
+        } else {
+            let date = payload.get("transaction_date").and_then(|v| v.as_str()).unwrap_or("").trim();
+            if date.is_empty() { return Err("Record the source transaction date before period assignment.".into()); }
+            validate_period_assignment(&db,client_id,period_reference,Some(date))?;
+        }
+        let source_reference = payload.get("source_reference").and_then(|v| v.as_str()).unwrap_or("").trim();
+        let has_attachment = if let Some(record_id) = input.id.as_deref() {
+            db.connection.query_row(
+                "SELECT EXISTS(SELECT 1 FROM source_document WHERE firm_id=?1 AND client_id=?2 AND record_id=?3)",
+                params![FIRM_ID,client_id,record_id], |r| r.get::<_,bool>(0)
+            ).unwrap_or(false)
+        } else { false };
+        if source_reference.is_empty() && !has_attachment {
+            return Err("Add a source document reference or attach the original evidence before review.".into());
+        }
+    }
 
     if input.record_type == "import_case" {
         let reference = input.reference.as_deref().unwrap_or("").trim();
