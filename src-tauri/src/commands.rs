@@ -163,7 +163,25 @@ pub fn list_clients(state: State<'_, AppState>, include_archived: bool) -> Resul
         contact_phone:r.get(8)?,address_text:r.get(9)?,internal_reference:r.get(10)?,
         notes:r.get(11)?,status:r.get(12)?,row_version:r.get(13)?,updated_at:r.get(14)?
     })).map_err(|e| e.to_string())?;
-    rows.collect::<Result<Vec<_>,_>>().map_err(|e| e.to_string())
+    let mut clients = rows.collect::<Result<Vec<_>,_>>().map_err(|e| e.to_string())?;
+    let (_, actor_name, persona) = active_actor(&db)?;
+    if persona == "auditor" || persona == "reviewer" {
+        let field = if persona == "auditor" { "assignee" } else { "reviewer" };
+        let mut task_stmt = db.connection.prepare(
+            "SELECT client_id,payload_json FROM workspace_record WHERE firm_id=?1 AND record_type='task' AND client_id IS NOT NULL"
+        ).map_err(|e|e.to_string())?;
+        let task_rows = task_stmt.query_map([FIRM_ID], |r| Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?))).map_err(|e|e.to_string())?;
+        let mut assigned_clients = std::collections::HashSet::new();
+        for task_row in task_rows {
+            let (client_id,raw) = task_row.map_err(|e|e.to_string())?;
+            let payload: serde_json::Value = serde_json::from_str(&raw).unwrap_or_else(|_|json!({}));
+            if payload.get(field).and_then(|v|v.as_str()) == Some(actor_name.as_str()) {
+                assigned_clients.insert(client_id);
+            }
+        }
+        clients.retain(|client| assigned_clients.contains(&client.id));
+    }
+    Ok(clients)
 }
 
 #[tauri::command]
