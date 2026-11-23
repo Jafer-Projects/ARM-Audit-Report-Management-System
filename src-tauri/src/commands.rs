@@ -2545,17 +2545,27 @@ mod tests {
             reference:Some("INV-REVIEW-01".into()),amount_text:None,notes:None,payload_json:Some(invoice_payload.to_string()),
             duplicate_acknowledged:None,duplicate_acknowledgement_reason:None,
         },app.state::<AppState>()).expect("submit complete invoice for review");
-        assert!(save_record(RecordInput {
+        set_demo_persona("administrator".into(),app.state::<AppState>()).unwrap();
+        let mut reviewer_note_payload = invoice_payload.clone();
+        reviewer_note_payload["reviewer_note"] = json!("Source reference checked by independent reviewer.");
+        let noted = save_record(RecordInput {
             id:Some(ready.id.clone()),row_version:Some(ready.row_version),client_id:Some(client_id.clone()),
+            record_type:"invoice".into(),title:"Synthetic invoice review".into(),status:"Ready for review".into(),
+            reference:Some("INV-REVIEW-01".into()),amount_text:None,notes:None,payload_json:Some(reviewer_note_payload.to_string()),
+            duplicate_acknowledged:None,duplicate_acknowledgement_reason:None,
+        },app.state::<AppState>()).expect("independent reviewer may record a note without changing preparer identity");
+        set_demo_persona("manager".into(),app.state::<AppState>()).unwrap();
+        assert!(save_record(RecordInput {
+            id:Some(noted.id.clone()),row_version:Some(noted.row_version),client_id:Some(client_id.clone()),
             record_type:"invoice".into(),title:"Synthetic invoice review".into(),status:"Reviewed".into(),
-            reference:Some("INV-REVIEW-01".into()),amount_text:None,notes:None,payload_json:Some(invoice_payload.to_string()),
+            reference:Some("INV-REVIEW-01".into()),amount_text:None,notes:None,payload_json:Some(reviewer_note_payload.to_string()),
             duplicate_acknowledged:None,duplicate_acknowledgement_reason:None,
         },app.state::<AppState>()).is_err());
         set_demo_persona("administrator".into(),app.state::<AppState>()).unwrap();
         let reviewed = save_record(RecordInput {
-            id:Some(ready.id.clone()),row_version:Some(ready.row_version),client_id:Some(client_id),
+            id:Some(noted.id.clone()),row_version:Some(noted.row_version),client_id:Some(client_id),
             record_type:"invoice".into(),title:"Synthetic invoice review".into(),status:"Reviewed".into(),
-            reference:Some("INV-REVIEW-01".into()),amount_text:None,notes:None,payload_json:Some(invoice_payload.to_string()),
+            reference:Some("INV-REVIEW-01".into()),amount_text:None,notes:None,payload_json:Some(reviewer_note_payload.to_string()),
             duplicate_acknowledged:None,duplicate_acknowledgement_reason:None,
         },app.state::<AppState>()).expect("independent administrator review");
         assert_eq!(reviewed.status,"Reviewed");
