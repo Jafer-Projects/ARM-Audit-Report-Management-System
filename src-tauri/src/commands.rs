@@ -1747,6 +1747,27 @@ fn detected_document_type(content: &[u8]) -> Option<&'static str> {
     else { None }
 }
 
+fn validate_source_document(file_name: &str, media_type: &str, content: &[u8]) -> Result<&'static str, String> {
+    if content.is_empty() || content.len() > 5 * 1024 * 1024 {
+        return Err("Choose a non-empty PDF, JPEG or PNG file no larger than 5 MB.".into());
+    }
+    let name = file_name.trim();
+    if name.is_empty() || name.chars().count() > 180 || name.contains('/') || name.contains('\\') || name.chars().any(char::is_control) {
+        return Err("The filename is invalid; paths and control characters are not accepted.".into());
+    }
+    let detected = detected_document_type(content).ok_or_else(|| "The file content is not a supported PDF, JPEG or PNG document.".to_string())?;
+    let supplied = media_type.trim().to_ascii_lowercase();
+    if !supplied.is_empty() && supplied != detected {
+        return Err("The file's declared type does not match its actual content.".into());
+    }
+    let extension = name.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
+    let expected_extension = match detected { "application/pdf" => "pdf", "image/jpeg" => "jpg", "image/png" => "png", _ => "" };
+    if extension != expected_extension && !(detected == "image/jpeg" && extension == "jpeg") {
+        return Err("The filename extension must match the detected file content.".into());
+    }
+    Ok(detected)
+}
+
 #[tauri::command]
 pub fn attach_source_document(
     client_id: String,
@@ -1758,23 +1779,8 @@ pub fn attach_source_document(
 ) -> Result<SourceDocumentMeta, String> {
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
     let (actor_id, actor_name, persona) = ensure_can_mutate(&db)?;
-    if content.is_empty() || content.len() > 5 * 1024 * 1024 {
-        return Err("Choose a non-empty PDF, JPEG or PNG file no larger than 5 MB.".into());
-    }
     let name = file_name.trim();
-    if name.is_empty() || name.chars().count() > 180 || name.contains('/') || name.contains('\\') || name.chars().any(char::is_control) {
-        return Err("The filename is invalid; paths and control characters are not accepted.".into());
-    }
-    let detected = detected_document_type(&content).ok_or_else(|| "The file content is not a supported PDF, JPEG or PNG document.".to_string())?;
-    let supplied = media_type.trim().to_ascii_lowercase();
-    if !supplied.is_empty() && supplied != detected {
-        return Err("The file's declared type does not match its actual content.".into());
-    }
-    let extension = name.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
-    let expected_extension = match detected { "application/pdf" => "pdf", "image/jpeg" => "jpg", "image/png" => "png", _ => "" };
-    if extension != expected_extension && !(detected == "image/jpeg" && extension == "jpeg") {
-        return Err("The filename extension must match the detected file content.".into());
-    }
+    let detected = validate_source_document(&file_name, &media_type, &content)?;
     let (record_client_id, record_type, client_status, _) = document_record_context(&db, &record_id)?;
     let (record_status, record_payload): (String,String) = db.connection.query_row(
         "SELECT status,payload_json FROM workspace_record WHERE id=?1 AND firm_id=?2",
@@ -1998,6 +2004,21 @@ mod tests {
         assert!(!valid_iso_date("2025-04-31"));
         assert!(!valid_iso_date("2025/04/30"));
         assert!(!valid_iso_date("２０２５-04-30"));
+    }
+
+    #[test]
+    fn source_document_validation_checks_content_name_mime_extension_and_size() {
+        assert_eq!(validate_source_document("invoice.pdf","application/pdf",b"%PDF-1.7 synthetic").unwrap(),"application/pdf");
+        assert_eq!(validate_source_document("photo.jpeg","image/jpeg",&[0xFF,0xD8,0xFF,0x00]).unwrap(),"image/jpeg");
+        assert_eq!(validate_source_document("scan.png","image/png",&[0x89,b'P',b'N',b'G',0x0D,0x0A,0x1A,0x0A]).unwrap(),"image/png");
+        assert!(validate_source_document("invoice.pdf","image/png",b"%PDF-1.7 synthetic").is_err());
+        assert!(validate_source_document("invoice.exe","application/pdf",b"%PDF-1.7 synthetic").is_err());
+        assert!(validate_source_document("../invoice.pdf","application/pdf",b"%PDF-1.7 synthetic").is_err());
+        assert!(validate_source_document("folder\\invoice.pdf","application/pdf",b"%PDF-1.7 synthetic").is_err());
+        assert!(validate_source_document("invoice.pdf","application/pdf",b"").is_err());
+        assert!(validate_source_document("invoice.pdf","application/pdf",b"<html>unsafe</html>").is_err());
+        let oversized = vec![0_u8; 5 * 1024 * 1024 + 1];
+        assert!(validate_source_document("large.pdf","application/pdf",&oversized).is_err());
     }
 
     #[test]
