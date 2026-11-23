@@ -38,12 +38,12 @@ export type TaskReviewNote = { id: string; task_id: string; category: string; de
 export type WorkspaceRecordVersion = { id: string; row_version: number; actor_name: string; changed_at: string; snapshot_json: string };
 
 export type ImportCostLineResult = {
-  item_reference: string; description: string; quantity_micros: number;
+  item_reference: string; description: string; source_reference: string; fx_rate_source: string; fx_rate_date: string; fx_authorized_by: string; quantity_micros: number;
   goods_value_minor: number; allocated_cost_minor: number; landed_cost_minor: number;
 };
 export type ImportCostComponentAllocation = { item_reference: string; amount_minor: number };
 export type ImportCostComponentResult = {
-  component_reference: string; category: string; source_currency: string; source_amount_minor: number;
+  component_reference: string; category: string; source_reference: string; fx_rate_source: string; fx_rate_date: string; fx_authorized_by: string; source_currency: string; source_amount_minor: number;
   base_amount_minor: number; treatment: string; allocation_basis: string; allocations: ImportCostComponentAllocation[];
 };
 export type ImportCostResult = {
