@@ -16,7 +16,8 @@ export type EventItem = {
   id: string; event_type: string; target_type: string; target_id: string;
   occurred_at_utc: string; actor_name: string; payload_json: string;
 };
-export type ClientInput = Omit<Client, "id" | "row_version" | "status" | "updated_at"> & { id?: string; row_version?: number };
+export type ClientInput = Omit<Client, "id" | "row_version" | "status" | "updated_at"> & { id?: string; row_version?: number; duplicate_acknowledged?: boolean };
+export type DuplicateCandidate = Pick<Client, "id" | "record_kind" | "legal_name" | "tin_raw" | "status">;
 export type RecordInput = {
   id?: string; row_version?: number; client_id?: string | null; record_type: string;
   title: string; status: string; reference?: string; amount_text?: string; notes?: string; payload_json?: string;
