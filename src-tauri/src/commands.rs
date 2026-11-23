@@ -2495,7 +2495,7 @@ mod tests {
     fn import_historical_batch_command_reconciles_all_rows_and_retains_row_provenance() {
         let app = test_app();
         let client_id = command_active_client_id(&app);
-        let source_content = "Date,Description,Amount\\n2026-01-01,First purchase,10.00\\n2026-01-02,Second purchase,20.00";
+        let source_content = "Date,Description,Amount\n2026-01-01,First purchase,10.00\n2026-01-02,Second purchase,20.00";
         let make_row = |source_row, description: &str, amount: &str| HistoricalImportRow {
             source_row,transaction_date:"2026-01-01".into(),description:description.into(),
             amount_text:amount.into(),currency:"ETB".into(),supplier:"Synthetic supplier".into(),
@@ -2503,7 +2503,7 @@ mod tests {
         };
         let result = import_historical_batch(HistoricalImportInput {
             client_id:client_id.clone(),source_filename:"history.csv".into(),source_content:source_content.into(),
-            mapping_json:"{\\\"description\\\":\\\"Description\\\",\\\"amount_text\\\":\\\"Amount\\\"}".into(),
+            mapping_json:"{\"description\":\"Description\",\"amount_text\":\"Amount\"}".into(),
             rows:vec![make_row(2,"First purchase","10.00"),make_row(3,"Second purchase","20.00")],
         },app.state::<AppState>()).expect("import synthetic history");
         assert_eq!(result.source_row_count,2);
