@@ -1,0 +1,284 @@
+use crate::{db::{now_utc, Database}, AppState};
+use rusqlite::{params, OptionalExtension};
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+use tauri::State;
+use uuid::Uuid;
+
+const FIRM_ID: &str = "00000000-0000-4000-8000-000000000001";
+
+#[derive(Serialize)]
+pub struct WorkspaceInfo {
+    firm_name: String,
+    actor_name: String,
+    persona: String,
+    clients_count: i64,
+    sync_state: &'static str,
+}
+
+#[derive(Serialize)]
+pub struct Client {
+    id: String,
+    record_kind: String,
+    legal_name: String,
+    display_name: String,
+    tin_raw: String,
+    sector: String,
+    contact_name: String,
+    contact_email: String,
+    contact_phone: String,
+    address_text: String,
+    internal_reference: String,
+    notes: String,
+    status: String,
+    row_version: i64,
+    updated_at: String,
+}
+
+#[derive(Deserialize)]
+pub struct ClientInput {
+    id: Option<String>,
+    row_version: Option<i64>,
+    record_kind: String,
+    legal_name: String,
+    display_name: Option<String>,
+    tin_raw: Option<String>,
+    sector: Option<String>,
+    contact_name: Option<String>,
+    contact_email: Option<String>,
+    contact_phone: Option<String>,
+    address_text: Option<String>,
+    internal_reference: Option<String>,
+    notes: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct WorkspaceRecord {
+    id: String,
+    client_id: Option<String>,
+    record_type: String,
+    title: String,
+    status: String,
+    reference: String,
+    amount_text: String,
+    notes: String,
+    row_version: i64,
+    updated_at: String,
+}
+
+#[derive(Deserialize)]
+pub struct RecordInput {
+    id: Option<String>,
+    row_version: Option<i64>,
+    client_id: Option<String>,
+    record_type: String,
+    title: String,
+    status: String,
+    reference: Option<String>,
+    amount_text: Option<String>,
+    notes: Option<String>,
+    payload_json: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct EventItem {
+    id: String,
+    event_type: String,
+    target_type: String,
+    target_id: String,
+    occurred_at_utc: String,
+    actor_name: String,
+    payload_json: String,
+}
+
+fn active_actor(db: &Database) -> Result<(String, String, String), String> {
+    db.connection.query_row(
+        "SELECT a.id,a.display_name,a.persona FROM demo_actor a
+         JOIN app_setting s ON s.value=a.id WHERE s.key='active_actor_id'",
+        [], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?))
+    ).map_err(|e| e.to_string())
+}
+
+fn ensure_can_mutate(db: &Database) -> Result<(String, String, String), String> {
+    let actor = active_actor(db)?;
+    if actor.2 == "reviewer" { return Err("The read-only demo reviewer cannot change records.".into()); }
+    Ok(actor)
+}
+
+fn event(db: &Database, actor_id: &str, event_type: &str, target_type: &str, target_id: &str, payload: serde_json::Value) -> rusqlite::Result<()> {
+    db.connection.execute(
+        "INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json)
+         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+        params![
+            Uuid::new_v4().to_string(),FIRM_ID,actor_id,event_type,target_type,target_id,
+            now_utc(),Uuid::new_v4().to_string(),payload.to_string()
+        ],
+    )?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn initialize_workspace(state: State<'_, AppState>) -> Result<WorkspaceInfo, String> {
+    let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
+    let (_, actor_name, persona) = active_actor(&db)?;
+    let clients_count = db.connection.query_row(
+        "SELECT COUNT(*) FROM client WHERE firm_id=?1 AND status<>'Archived'", [FIRM_ID], |r| r.get(0)
+    ).map_err(|e| e.to_string())?;
+    Ok(WorkspaceInfo {
+        firm_name: "ARM Demonstration Firm".into(), actor_name, persona, clients_count,
+        sync_state: "Sync is not enabled in this prototype",
+    })
+}
+
+#[tauri::command]
+pub fn set_demo_persona(persona: String, state: State<'_, AppState>) -> Result<WorkspaceInfo, String> {
+    let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
+    let actor_id: String = db.connection.query_row(
+        "SELECT id FROM demo_actor WHERE persona=?1", [&persona], |r| r.get(0)
+    ).map_err(|_| "Unknown demo persona".to_string())?;
+    db.connection.execute("UPDATE app_setting SET value=?1 WHERE key='active_actor_id'", [&actor_id]).map_err(|e| e.to_string())?;
+    event(&db, &actor_id, "demo_persona_changed", "demo_actor", &actor_id, json!({"persona":persona})).map_err(|e| e.to_string())?;
+    let (_, actor_name, current_persona) = active_actor(&db)?;
+    let clients_count = db.connection.query_row("SELECT COUNT(*) FROM client WHERE firm_id=?1 AND status<>'Archived'", [FIRM_ID], |r| r.get(0)).map_err(|e| e.to_string())?;
+    Ok(WorkspaceInfo { firm_name:"ARM Demonstration Firm".into(), actor_name, persona:current_persona, clients_count, sync_state:"Sync is not enabled in this prototype" })
+}
+
+#[tauri::command]
+pub fn list_clients(state: State<'_, AppState>, include_archived: bool) -> Result<Vec<Client>, String> {
+    let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
+    let sql = if include_archived {
+        "SELECT id,record_kind,legal_name,display_name,tin_raw,sector,contact_name,contact_email,contact_phone,address_text,internal_reference,notes,status,row_version,updated_at FROM client WHERE firm_id=?1 ORDER BY updated_at DESC"
+    } else {
+        "SELECT id,record_kind,legal_name,display_name,tin_raw,sector,contact_name,contact_email,contact_phone,address_text,internal_reference,notes,status,row_version,updated_at FROM client WHERE firm_id=?1 AND status<>'Archived' ORDER BY updated_at DESC"
+    };
+    let mut stmt = db.connection.prepare(sql).map_err(|e| e.to_string())?;
+    let rows = stmt.query_map([FIRM_ID], |r| Ok(Client {
+        id:r.get(0)?,record_kind:r.get(1)?,legal_name:r.get(2)?,display_name:r.get(3)?,
+        tin_raw:r.get(4)?,sector:r.get(5)?,contact_name:r.get(6)?,contact_email:r.get(7)?,
+        contact_phone:r.get(8)?,address_text:r.get(9)?,internal_reference:r.get(10)?,
+        notes:r.get(11)?,status:r.get(12)?,row_version:r.get(13)?,updated_at:r.get(14)?
+    })).map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>,_>>().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn save_client(input: ClientInput, state: State<'_, AppState>) -> Result<Client, String> {
+    let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
+    let (actor_id, _, _) = ensure_can_mutate(&db)?;
+    let legal_name = input.legal_name.trim();
+    if legal_name.chars().count() < 2 || legal_name.chars().count() > 200 {
+        return Err("Legal or full name must contain 2–200 characters.".into());
+    }
+    if !["Company","Individual","Other organization"].contains(&input.record_kind.as_str()) {
+        return Err("Choose a supported record kind.".into());
+    }
+    if let Some(email) = input.contact_email.as_deref() {
+        let email = email.trim();
+        if !email.is_empty() && (!email.contains('@') || email.starts_with('@') || email.ends_with('@') || email.chars().any(char::is_whitespace)) {
+            return Err("Enter a valid contact email address or leave it blank.".into());
+        }
+    }
+    let id = input.id.unwrap_or_else(|| Uuid::new_v4().to_string());
+    let now = now_utc();
+    let exists: Option<i64> = db.connection.query_row("SELECT row_version FROM client WHERE id=?1 AND firm_id=?2", params![id,FIRM_ID], |r| r.get(0)).optional().map_err(|e| e.to_string())?;
+    let tx = db.connection.unchecked_transaction().map_err(|e| e.to_string())?;
+    if let Some(current_version) = exists {
+        if input.row_version != Some(current_version) { return Err("This client changed since it was opened. Reload or copy your changes before saving.".into()); }
+        tx.execute(
+            "UPDATE client SET record_kind=?1,legal_name=?2,display_name=?3,tin_raw=?4,sector=?5,contact_name=?6,contact_email=?7,contact_phone=?8,address_text=?9,internal_reference=?10,notes=?11,row_version=row_version+1,updated_at=?12,updated_by=?13 WHERE id=?14 AND firm_id=?15",
+            params![input.record_kind,legal_name,input.display_name.unwrap_or_default(),input.tin_raw.unwrap_or_default().trim(),input.sector.unwrap_or_default(),input.contact_name.unwrap_or_default(),input.contact_email.unwrap_or_default().trim(),input.contact_phone.unwrap_or_default(),input.address_text.unwrap_or_default(),input.internal_reference.unwrap_or_default(),input.notes.unwrap_or_default(),now,actor_id,id,FIRM_ID]
+        ).map_err(|e| e.to_string())?;
+        tx.execute("INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json) VALUES(?1,?2,?3,'client_updated','client',?4,?5,?6,?7)",
+            params![Uuid::new_v4().to_string(),FIRM_ID,actor_id,id,now,Uuid::new_v4().to_string(),json!({"legal_name":legal_name}).to_string()]).map_err(|e| e.to_string())?;
+    } else {
+        tx.execute(
+            "INSERT INTO client(id,firm_id,record_kind,legal_name,display_name,tin_raw,sector,contact_name,contact_email,contact_phone,address_text,internal_reference,notes,status,row_version,created_at,updated_at,created_by,updated_by)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,'Draft',1,?14,?14,?15,?15)",
+            params![id,FIRM_ID,input.record_kind,legal_name,input.display_name.unwrap_or_default(),input.tin_raw.unwrap_or_default().trim(),input.sector.unwrap_or_default(),input.contact_name.unwrap_or_default(),input.contact_email.unwrap_or_default().trim(),input.contact_phone.unwrap_or_default(),input.address_text.unwrap_or_default(),input.internal_reference.unwrap_or_default(),input.notes.unwrap_or_default(),now,actor_id]
+        ).map_err(|e| e.to_string())?;
+        tx.execute("INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json) VALUES(?1,?2,?3,'client_created','client',?4,?5,?6,'{}')",
+            params![Uuid::new_v4().to_string(),FIRM_ID,actor_id,id,now,Uuid::new_v4().to_string()]).map_err(|e| e.to_string())?;
+    }
+    tx.commit().map_err(|e| e.to_string())?;
+    let mut stmt = db.connection.prepare("SELECT id,record_kind,legal_name,display_name,tin_raw,sector,contact_name,contact_email,contact_phone,address_text,internal_reference,notes,status,row_version,updated_at FROM client WHERE id=?1").map_err(|e| e.to_string())?;
+    stmt.query_row([id], |r| Ok(Client {
+        id:r.get(0)?,record_kind:r.get(1)?,legal_name:r.get(2)?,display_name:r.get(3)?,tin_raw:r.get(4)?,sector:r.get(5)?,contact_name:r.get(6)?,contact_email:r.get(7)?,contact_phone:r.get(8)?,address_text:r.get(9)?,internal_reference:r.get(10)?,notes:r.get(11)?,status:r.get(12)?,row_version:r.get(13)?,updated_at:r.get(14)?
+    })).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn archive_client(id: String, state: State<'_, AppState>) -> Result<(), String> {
+    let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
+    let (actor_id,_,_) = ensure_can_mutate(&db)?;
+    let tx = db.connection.unchecked_transaction().map_err(|e| e.to_string())?;
+    let changed = tx.execute("UPDATE client SET status='Archived',archived_at=?1,updated_at=?1,updated_by=?2,row_version=row_version+1 WHERE id=?3 AND firm_id=?4 AND status<>'Archived'",
+        params![now_utc(),actor_id,id,FIRM_ID]).map_err(|e| e.to_string())?;
+    if changed == 0 { return Err("Client was not found or is already archived.".into()); }
+    tx.execute("INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json) VALUES(?1,?2,?3,'client_archived','client',?4,?5,?6,'{}')",
+        params![Uuid::new_v4().to_string(),FIRM_ID,actor_id,id,now_utc(),Uuid::new_v4().to_string()]).map_err(|e| e.to_string())?;
+    tx.commit().map_err(|e| e.to_string())
+}
+
+fn allowed_record_type(value: &str) -> bool {
+    matches!(value,"category"|"product"|"invoice"|"historical_record"|"period"|"staff"|"task"|"import_case"|"import_cost_input")
+}
+
+#[tauri::command]
+pub fn list_records(record_type: String, state: State<'_, AppState>) -> Result<Vec<WorkspaceRecord>, String> {
+    if !allowed_record_type(&record_type) { return Err("Unsupported workspace record type.".into()); }
+    let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
+    let mut stmt = db.connection.prepare("SELECT id,client_id,record_type,title,status,reference,amount_text,notes,row_version,updated_at FROM workspace_record WHERE firm_id=?1 AND record_type=?2 ORDER BY updated_at DESC").map_err(|e| e.to_string())?;
+    let rows = stmt.query_map(params![FIRM_ID,record_type], |r| Ok(WorkspaceRecord {
+        id:r.get(0)?,client_id:r.get(1)?,record_type:r.get(2)?,title:r.get(3)?,status:r.get(4)?,reference:r.get(5)?,amount_text:r.get(6)?,notes:r.get(7)?,row_version:r.get(8)?,updated_at:r.get(9)?
+    })).map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>,_>>().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<WorkspaceRecord, String> {
+    if !allowed_record_type(&input.record_type) { return Err("Unsupported workspace record type.".into()); }
+    if input.title.trim().is_empty() || input.title.chars().count() > 200 { return Err("A title of 1–200 characters is required.".into()); }
+    let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
+    let (actor_id,_,_) = ensure_can_mutate(&db)?;
+    let id = input.id.unwrap_or_else(|| Uuid::new_v4().to_string());
+    let now = now_utc();
+    let exists: Option<i64> = db.connection.query_row("SELECT row_version FROM workspace_record WHERE id=?1 AND firm_id=?2",params![id,FIRM_ID],|r|r.get(0)).optional().map_err(|e|e.to_string())?;
+    let tx = db.connection.unchecked_transaction().map_err(|e|e.to_string())?;
+    if let Some(version) = exists {
+        if input.row_version != Some(version) { return Err("This record changed since it was opened. Reload before saving.".into()); }
+        tx.execute("UPDATE workspace_record SET client_id=?1,title=?2,status=?3,reference=?4,amount_text=?5,notes=?6,payload_json=?7,row_version=row_version+1,updated_at=?8,updated_by=?9 WHERE id=?10 AND firm_id=?11",
+            params![input.client_id,input.title.trim(),input.status,input.reference.unwrap_or_default(),input.amount_text.unwrap_or_default(),input.notes.unwrap_or_default(),input.payload_json.unwrap_or_else(||"{}".into()),now,actor_id,id,FIRM_ID]).map_err(|e|e.to_string())?;
+    } else {
+        tx.execute("INSERT INTO workspace_record(id,firm_id,client_id,record_type,title,status,reference,amount_text,notes,payload_json,row_version,created_at,updated_at,created_by,updated_by) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,1,?11,?11,?12,?12)",
+            params![id,FIRM_ID,input.client_id,input.record_type,input.title.trim(),input.status,input.reference.unwrap_or_default(),input.amount_text.unwrap_or_default(),input.notes.unwrap_or_default(),input.payload_json.unwrap_or_else(||"{}".into()),now,actor_id]).map_err(|e|e.to_string())?;
+    }
+    tx.execute("INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json) VALUES(?1,?2,?3,?4,'workspace_record',?5,?6,?7,?8)",
+        params![Uuid::new_v4().to_string(),FIRM_ID,actor_id,if exists.is_some(){"workspace_record_updated"}else{"workspace_record_created"},id,now,Uuid::new_v4().to_string(),json!({"record_type":input.record_type,"status":input.status}).to_string()]).map_err(|e|e.to_string())?;
+    tx.commit().map_err(|e|e.to_string())?;
+    let mut stmt = db.connection.prepare("SELECT id,client_id,record_type,title,status,reference,amount_text,notes,row_version,updated_at FROM workspace_record WHERE id=?1").map_err(|e|e.to_string())?;
+    stmt.query_row([id], |r| Ok(WorkspaceRecord {
+        id:r.get(0)?,client_id:r.get(1)?,record_type:r.get(2)?,title:r.get(3)?,status:r.get(4)?,reference:r.get(5)?,amount_text:r.get(6)?,notes:r.get(7)?,row_version:r.get(8)?,updated_at:r.get(9)?
+    })).map_err(|e|e.to_string())
+}
+
+#[tauri::command]
+pub fn list_events(state: State<'_, AppState>) -> Result<Vec<EventItem>, String> {
+    let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
+    let mut stmt = db.connection.prepare("SELECT e.id,e.event_type,e.target_type,e.target_id,e.occurred_at_utc,a.display_name,e.payload_json FROM local_event e JOIN demo_actor a ON a.id=e.actor_id WHERE e.firm_id=?1 ORDER BY e.occurred_at_utc DESC LIMIT 250").map_err(|e|e.to_string())?;
+    let rows = stmt.query_map([FIRM_ID], |r| Ok(EventItem { id:r.get(0)?,event_type:r.get(1)?,target_type:r.get(2)?,target_id:r.get(3)?,occurred_at_utc:r.get(4)?,actor_name:r.get(5)?,payload_json:r.get(6)? })).map_err(|e|e.to_string())?;
+    rows.collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())
+}
+
+#[tauri::command]
+pub fn reset_demo_data(state: State<'_, AppState>) -> Result<(), String> {
+    let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
+    let (actor_id,_,_) = ensure_can_mutate(&db)?;
+    let tx = db.connection.unchecked_transaction().map_err(|e|e.to_string())?;
+    tx.execute("DELETE FROM workspace_record WHERE firm_id=?1",[FIRM_ID]).map_err(|e|e.to_string())?;
+    tx.execute("DELETE FROM client WHERE firm_id=?1",[FIRM_ID]).map_err(|e|e.to_string())?;
+    tx.execute("INSERT INTO client(id,firm_id,record_kind,legal_name,display_name,status,created_at,updated_at,created_by,updated_by) VALUES(?1,?2,'Company','Sample Trading PLC','Sample Trading','Active',?3,?3,?4,?4)",
+        params!["00000000-0000-4000-8000-000000000101",FIRM_ID,now_utc(),actor_id]).map_err(|e|e.to_string())?;
+    tx.execute("INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json) VALUES(?1,?2,?3,'demo_data_reset','demo_workspace',?2,?4,?5,'{}')",
+        params![Uuid::new_v4().to_string(),FIRM_ID,actor_id,now_utc(),Uuid::new_v4().to_string()]).map_err(|e|e.to_string())?;
+    tx.commit().map_err(|e|e.to_string())
+}
