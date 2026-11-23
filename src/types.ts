@@ -57,3 +57,9 @@ export type SourceDocumentMeta = {
   size_bytes: number; sha256: string; actor_name: string; created_at: string;
 };
 export type SourceDocumentContent = { metadata: SourceDocumentMeta; content: number[] };
+
+export type InvoiceLineDraft = {
+  item_reference: string; category_reference: string; description: string;
+  quantity_text: string; unit_text: string; unit_price_text: string;
+  line_amount_text: string; tax_label: string; tax_amount_text: string;
+};
