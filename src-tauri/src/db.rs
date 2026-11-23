@@ -339,4 +339,35 @@ mod tests {
         assert!(after.contains("After"));
     }
 
+
+    #[test]
+    fn workspace_record_versions_preserve_each_snapshot() {
+        let db = Database::memory().expect("in-memory db");
+        let firm = "00000000-0000-4000-8000-000000000001";
+        let actor = "00000000-0000-4000-8000-000000000011";
+        let client = "00000000-0000-4000-8000-000000000101";
+        db.connection.execute(
+            "INSERT INTO workspace_record(id,firm_id,client_id,record_type,title,status,row_version,created_at,updated_at,created_by,updated_by)
+             VALUES('record-1',?1,?2,'invoice','Invoice A','Draft',1,'2026-11-23T00:00:00Z','2026-11-23T00:00:00Z',?3,?3)",
+            rusqlite::params![firm,client,actor],
+        ).expect("create record");
+        db.connection.execute(
+            "INSERT INTO workspace_record_version(id,firm_id,record_id,row_version,actor_id,changed_at,snapshot_json,correlation_id)
+             VALUES('version-1',?1,'record-1',1,?2,'2026-11-23T00:00:00Z','{\"title\":\"Invoice A\"}','corr-1')",
+            rusqlite::params![firm,actor],
+        ).expect("save first snapshot");
+        db.connection.execute("UPDATE workspace_record SET title='Invoice B',row_version=2 WHERE id='record-1'", []).expect("update record");
+        db.connection.execute(
+            "INSERT INTO workspace_record_version(id,firm_id,record_id,row_version,actor_id,changed_at,snapshot_json,correlation_id)
+             VALUES('version-2',?1,'record-1',2,?2,'2026-11-23T00:01:00Z','{\"title\":\"Invoice B\"}','corr-2')",
+            rusqlite::params![firm,actor],
+        ).expect("save second snapshot");
+        let count: i64 = db.connection.query_row("SELECT COUNT(*) FROM workspace_record_version WHERE record_id='record-1'", [], |r| r.get(0)).unwrap();
+        let first: String = db.connection.query_row("SELECT snapshot_json FROM workspace_record_version WHERE row_version=1", [], |r| r.get(0)).unwrap();
+        let second: String = db.connection.query_row("SELECT snapshot_json FROM workspace_record_version WHERE row_version=2", [], |r| r.get(0)).unwrap();
+        assert_eq!(count, 2);
+        assert!(first.contains("Invoice A"));
+        assert!(second.contains("Invoice B"));
+    }
+
 }
