@@ -174,8 +174,15 @@ export default function App() {
     const input = Object.fromEntries(data.entries()) as Record<string, string>;
     try {
       setBusy(true); setError("");
+      const duplicateCandidates = await desktop.findClientDuplicates(input.legal_name, input.tin_raw ?? "", clientEditor?.id);
+      let duplicateAcknowledged = false;
+      if (duplicateCandidates.length > 0) {
+        const names = duplicateCandidates.map(candidate => `• ${candidate.legal_name} (${candidate.record_kind}, TIN: ${candidate.tin_raw || "not provided"}, ${candidate.status})`).join("\\n");
+        duplicateAcknowledged = window.confirm(`Possible existing client records were found:\\n\\n${names}\\n\\nNo records will be merged. Continue saving this as a separate client and record that you acknowledged the possible duplicate?`);
+        if (!duplicateAcknowledged) return;
+      }
       await desktop.saveClient({
-        ...input, id: clientEditor?.id, row_version: clientEditor?.row_version,
+        ...input, id: clientEditor?.id, row_version: clientEditor?.row_version, duplicate_acknowledged: duplicateAcknowledged,
         record_kind: input.record_kind, legal_name: input.legal_name,
         display_name: input.display_name ?? "", tin_raw: input.tin_raw ?? "", sector: input.sector ?? "",
         contact_name: input.contact_name ?? "", contact_email: input.contact_email ?? "",
