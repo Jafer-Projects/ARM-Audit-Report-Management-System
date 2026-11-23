@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { desktop } from "./services/desktop";
-import type { Client, ClientChange, EventItem, LocalNote, Persona, WorkspaceInfo, WorkspaceRecord } from "./types";
+import type { Client, ClientChange, EventItem, HistoricalImportBatch, HistoricalImportRow, LocalNote, Persona, WorkspaceInfo, WorkspaceRecord } from "./types";
 
 type Section = "home" | "clients" | "catalogue" | "history" | "work" | "imports" | "activity";
 const nav: { id: Section; label: string; eyebrow: string }[] = [
@@ -220,6 +220,7 @@ export default function App() {
       void desktop.clients(false).then(items => { setClients(items); setSelectedClientId(current => items.some(item => item.id === current) ? current : items[0]?.id || ""); }).catch((e) => setError(String(e)));
       if (recordType === "staff" || selectedClientId) {
         void desktop.records(recordType, recordType === "staff" ? undefined : selectedClientId).then(setRecords).catch((e) => setError(String(e)));
+        if (section === "history" && recordType === "historical_record" && selectedClientId) void desktop.importBatches(selectedClientId).then(setImportBatches).catch((e) => setError(String(e)));
       } else { setRecords([]); }
     }
   }, [recordType, section, selectedClientId]);
@@ -326,6 +327,72 @@ export default function App() {
       setNoteEditor(undefined); setNotes(await desktop.notes());
     } catch (e) { setError(String(e)); } finally { setBusy(false); }
   }
+  async function handleCsvFile(file?: File) {
+    if (!file) return;
+    try {
+      setError("");
+      if (!file.name.toLowerCase().endsWith(".csv") || file.size > 5 * 1024 * 1024) {
+        throw new Error("Choose a CSV file no larger than 5 MB.");
+      }
+      const content = await file.text();
+      const parsed = parseCsv(content);
+      if (parsed.length < 2 || parsed.length > 1001) throw new Error("CSV needs a header and 1–1,000 data rows.");
+      const headers = parsed[0].map(header => header.trim());
+      if (headers.some(header => !header) || new Set(headers.map(h => h.toLowerCase())).size !== headers.length) {
+        throw new Error("CSV headers must be non-empty and unique.");
+      }
+      setCsvFileName(file.name);
+      setCsvContent(content);
+      setCsvHeaders(headers);
+      setCsvRows(parsed.slice(1));
+      setCsvMapping({
+        transaction_date: suggestedHeader(headers, ["date","transaction date","invoice date"]),
+        description: suggestedHeader(headers, ["description","details","narration","particulars"]),
+        amount_text: suggestedHeader(headers, ["amount","gross amount","net amount","total"]),
+        currency: suggestedHeader(headers, ["currency","ccy"]),
+        supplier: suggestedHeader(headers, ["supplier","vendor","payee"]),
+        supplier_tin: suggestedHeader(headers, ["supplier tin","tin","tax id"]),
+        vat_amount: suggestedHeader(headers, ["vat","vat amount","tax amount"]),
+        invoice_reference: suggestedHeader(headers, ["invoice number","invoice no","reference","document number"]),
+      });
+    } catch (error) {
+      setCsvFileName(""); setCsvContent(""); setCsvHeaders([]); setCsvRows([]);
+      setError(String(error));
+    }
+  }
+
+  async function commitCsvImport() {
+    if (!selectedClientId || csvRows.length === 0) return;
+    try {
+      setBusy(true); setError("");
+      const indexOf = (key: string) => csvHeaders.indexOf(csvMapping[key] ?? "");
+      const mappedRows: HistoricalImportRow[] = csvRows.map((cells, index) => ({
+        source_row: index + 2,
+        transaction_date: cells[indexOf("transaction_date")] ?? "",
+        description: cells[indexOf("description")] ?? "",
+        amount_text: cells[indexOf("amount_text")] ?? "",
+        currency: cells[indexOf("currency")] ?? "",
+        supplier: cells[indexOf("supplier")] ?? "",
+        supplier_tin: cells[indexOf("supplier_tin")] ?? "",
+        vat_amount: cells[indexOf("vat_amount")] ?? "",
+        invoice_reference: cells[indexOf("invoice_reference")] ?? "",
+      }));
+      const invalidRows = mappedRows.filter(row => !row.description.trim() || !row.amount_text.trim());
+      if (invalidRows.length) {
+        setError("Import stopped: " + invalidRows.length + " rows are missing a mapped description or source amount. No rows were written.");
+        return;
+      }
+      await desktop.importHistoricalBatch({
+        client_id: selectedClientId, source_filename: csvFileName, source_content: csvContent,
+        mapping_json: JSON.stringify(csvMapping), rows: mappedRows,
+      });
+      setRecords(await desktop.records("historical_record", selectedClientId));
+      setImportBatches(await desktop.importBatches(selectedClientId));
+      setShowImportModal(false); setCsvFileName(""); setCsvContent(""); setCsvHeaders([]); setCsvRows([]);
+    } catch (error) { setError(String(error)); }
+    finally { setBusy(false); }
+  }
+
   async function resetDemo() {
     if (!window.confirm("Reset the synthetic demonstration workspace? All demo changes will be removed. This does not affect files outside the ARM demo database.")) return;
     try { await desktop.reset(); await refresh("home"); setSection("home"); }
