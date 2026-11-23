@@ -1203,12 +1203,12 @@ pub fn list_events(state: State<'_, AppState>) -> Result<Vec<EventItem>, String>
             "workspace_record" => db.connection.query_row(
                 "SELECT client_id FROM workspace_record WHERE id=?1 AND firm_id=?2",
                 params![event.target_id,FIRM_ID], |r|r.get(0)
-            ).optional().map_err(|e|e.to_string())?,
+            ).optional().map_err(|e|e.to_string())?.flatten(),
             "task_review_note" => db.connection.query_row(
                 "SELECT t.client_id FROM task_review_note n JOIN workspace_record t ON t.id=n.task_id
                  WHERE n.id=?1 AND n.firm_id=?2 AND t.firm_id=?2",
                 params![event.target_id,FIRM_ID], |r|r.get(0)
-            ).optional().map_err(|e|e.to_string())?,
+            ).optional().map_err(|e|e.to_string())?.flatten(),
             "historical_import_batch" => db.connection.query_row(
                 "SELECT client_id FROM historical_import_batch WHERE id=?1 AND firm_id=?2",
                 params![event.target_id,FIRM_ID], |r|r.get(0)
@@ -1216,7 +1216,7 @@ pub fn list_events(state: State<'_, AppState>) -> Result<Vec<EventItem>, String>
             "local_note" => db.connection.query_row(
                 "SELECT client_id FROM local_note WHERE id=?1 AND firm_id=?2 AND actor_id=?3",
                 params![event.target_id,FIRM_ID,active_actor(&db)?.0], |r|r.get(0)
-            ).optional().map_err(|e|e.to_string())?,
+            ).optional().map_err(|e|e.to_string())?.flatten(),
             _ => None,
         };
         if let Some(client_id) = client_id {
