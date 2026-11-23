@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Client, ClientChange, ClientInput, DuplicateCandidate, EventItem, HistoricalImportBatch, HistoricalImportResult, HistoricalImportRow, InvoiceDuplicateCandidate, LocalNote, RecordInput, WorkspaceInfo, WorkspaceRecord } from "../types";
+import type { Client, ClientChange, ClientInput, DuplicateCandidate, EventItem, HistoricalImportBatch, HistoricalImportResult, HistoricalImportRow, InvoiceDuplicateCandidate, LocalNote, RecordInput, TaskReviewNote, WorkspaceInfo, WorkspaceRecord } from "../types";
 
 export const desktop = {
   initialize: () => invoke<WorkspaceInfo>("initialize_workspace"),
@@ -13,6 +13,10 @@ export const desktop = {
   restoreClient: (id: string) => invoke<void>("restore_client", { id }),
   notes: () => invoke<LocalNote[]>("list_notes"),
   saveNote: (input: { id?: string; client_id?: string | null; title: string; body: string }) => invoke<LocalNote>("save_note", { input }),
+  taskReviewNotes: (taskId: string) => invoke<TaskReviewNote[]>("list_task_review_notes", { taskId }),
+  addTaskReviewNote: (input: { taskId: string; category: string; description: string; affectedRecordReference: string; requiredResponse: string }) => invoke<TaskReviewNote>("add_task_review_note", input),
+  respondTaskReviewNote: (noteId: string, response: string) => invoke<void>("respond_task_review_note", { noteId, response }),
+  dispositionTaskReviewNote: (noteId: string, decision: string, reason: string) => invoke<void>("disposition_task_review_note", { noteId, decision, reason }),
   importHistoricalBatch: (input: { client_id: string; source_filename: string; source_content: string; mapping_json: string; rows: HistoricalImportRow[] }) => invoke<HistoricalImportResult>("import_historical_batch", { input }),
   importBatches: (clientId: string) => invoke<HistoricalImportBatch[]>("list_historical_import_batches", { clientId }),
   findInvoiceDuplicates: (clientId: string, invoiceNumber: string, excludeId?: string) => invoke<InvoiceDuplicateCandidate[]>("find_invoice_duplicates", { clientId, invoiceNumber, excludeId }),
