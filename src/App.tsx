@@ -120,6 +120,16 @@ const recordFields: Record<string, RecordField[]> = {
     { key: "inclusion_reason", label: "Inclusion / exclusion reason", kind: "textarea", wide: true },
   ],
 };
+const csvMappingFields = [
+  { key: "transaction_date", label: "Transaction date", required: false },
+  { key: "description", label: "Description", required: true },
+  { key: "amount_text", label: "Source amount (text)", required: true },
+  { key: "currency", label: "Currency", required: false },
+  { key: "supplier", label: "Supplier / payee", required: false },
+  { key: "supplier_tin", label: "Supplier TIN (opaque)", required: false },
+  { key: "vat_amount", label: "VAT amount as stated (text)", required: false },
+  { key: "invoice_reference", label: "Invoice reference", required: false },
+];
 const personaLabels: Record<Persona, string> = {
   administrator: "Demo Firm Administrator", manager: "Demo Engagement Manager",
   auditor: "Demo Auditor", reviewer: "Demo Read-only Reviewer",
