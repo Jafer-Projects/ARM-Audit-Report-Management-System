@@ -66,6 +66,8 @@ A sprint/increment should end with something a practitioner can try, not only an
 
 **Demo:** reviewer reproduces the cost calculation from the saved inputs and assumptions.
 
+**Detailed user and window workflows:** [Window-by-window and user-by-user workflow specification — Increments 1–5](window-by-window-user-by-user-increments-1-to-5.md). This is the screen-flow companion to the Increment 0/1 normative developer contract. For Increments 2–5, fields and state rules explicitly marked as practitioner decisions must be confirmed before being implemented as business rules.
+
 ## 3. Practitioner demonstration protocol
 
 For each increment:
