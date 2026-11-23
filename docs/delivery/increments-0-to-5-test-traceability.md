@@ -40,11 +40,11 @@
 |---|---|---|---|
 | I2-01 | Product/category records are client-scoped; cross-client ID substitution is rejected | `commands.rs::save_record_command_rejects_moving_an_existing_record_between_two_clients`; extend to every record type and read command | PENDING |
 | I2-02 | Archived product remains visible on historical invoice | Product archive + historical invoice rendering integration test required | PENDING |
-| I2-03 | Draft invoice saves with permitted missing fields and shows exact missing list | Draft-save and UI missing-field-list test required | PENDING |
+| I2-03 | Draft invoice saves with permitted missing fields and shows exact missing list | `commands.rs::save_record_command_rejects_invoice_review_without_lines_source_and_period`; draft-save missing-field summary UI test pending | PENDING |
 | I2-04 | Invalid values do not erase other entered values | Form state retention/UI validation test required | PENDING |
 | I2-05 | Duplicate invoice candidate is advisory; no automatic overwrite/merge | Invoice duplicate command + no-merge integration test required | PENDING |
 | I2-06 | Source attachment metadata and association survive restart | `commands.rs::attach_source_document_command_persists_validated_evidence_and_rejects_spoofing`; restart/read-back test pending | PENDING |
-| I2-07 | Unsupported or unsafe file type is rejected clearly | `commands.rs::source_document_validation_checks_content_name_mime_extension_and_size` plus command-level spoofing rejection test | AUTOMATED |
+| I2-07 | Unsupported or unsafe file type is rejected clearly | `commands.rs::source_document_validation_checks_content_name_mime_extension_and_size` and `attach_source_document_command_persists_validated_evidence_and_rejects_spoofing` | AUTOMATED |
 | I2-08 | Preparer cannot mark own work reviewed | Assigned preparer/reviewer command integration test required | PENDING |
 | I2-09 | Reviewer decision and preparer correction are distinct events | Review/correction event-separation integration test required | PENDING |
 | I2-10 | Offline capture and restart preserve records | Invoice/product/attachment restart integration test required | PENDING |
@@ -72,9 +72,9 @@
 | I4-01 | Inactive staff cannot receive new assignment | Staff/task command integration test required | PENDING |
 | I4-02 | Reassignment retains prior assignee and reason | Immutable reassignment history test required | PENDING |
 | I4-03 | Preparer cannot clear own review note | Review-note actor-separation command test required | PENDING |
-| I4-04 | Task completion and professional approval are separate states | `commands.rs::task_lifecycle_requires_submission_before_completion`; UI/approval separation test pending | PARTIAL |
+| I4-04 | Task completion and professional approval are separate states | `commands.rs::task_workflow_requires_blocker_and_submission_evidence_then_separate_reviewer_completion`; UI/approval separation test pending | PARTIAL |
 | I4-05 | Reviewer action is attributable and cannot be deleted | `db.rs::task_review_notes_cannot_be_deleted`; reviewer identity and timestamp assertions required | PARTIAL |
-| I4-06 | Blocked task requires reason and appears in manager queue | Block reason + queue command/UI integration test required | PENDING |
+| I4-06 | Blocked task requires reason and appears in manager queue | `commands.rs::task_workflow_requires_blocker_and_submission_evidence_then_separate_reviewer_completion` verifies blocker reason; manager queue visibility test pending | PENDING |
 | I4-07 | Overdue calculation uses stored due date and local display timezone | Deterministic clock/timezone boundary test required | PENDING |
 | I4-08 | Cancelled task retains history and work product | Cancellation preservation integration test required | PENDING |
 | I4-09 | Cross-client task access is rejected | Assigned-persona access helper is tested; actual two-client task command boundary test pending | PARTIAL |
@@ -113,7 +113,7 @@
 ## 3. Newly added executable test groups
 
 The current commit adds:
-- Real Tauri-command tests using Tauri's mock runtime for client creation, draft state, audit/history creation, invalid email rejection, duplicate acknowledgment/no-merge, stale-version conflict, reviewer mutation rejection, invoice review prerequisites, cross-client record reassignment rejection, historical-import duplicate-row rejection and successful row reconciliation/provenance, source-document attachment validation, and import-cost discovery evidence gating.
+- Real Tauri-command tests using Tauri's mock runtime for client creation, draft state, audit/history creation, invalid email rejection, duplicate acknowledgment/no-merge, stale-version conflict, reviewer mutation rejection, invoice review prerequisites, cross-client record reassignment rejection, historical-import duplicate-row rejection and successful row reconciliation/provenance, source-document attachment validation, import-cost discovery evidence gating, task assignment notifications, blocker/submission evidence and separate reviewer completion.
 - Shared helper tests for reviewed-period date boundaries, client field validation, duplicate acknowledgment, optimistic version guards, persona assignment, record allowlists/transitions and historical import row validation.
 - Import-cost tests for quantity, weight, volume and value allocation; deterministic largest-remainder rounding; fractional quantity/FX rounding; duplicate references; invalid quantities/prices/weights/currencies/provenance; unknown direct targets; unsupported allocation/treatment; negative components; and arithmetic overflow.
 - Database tests for dropped-transaction rollback, foreign-key enforcement and actor/firm/target event scope.
