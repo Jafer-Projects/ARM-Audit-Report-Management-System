@@ -1846,6 +1846,63 @@ pub fn list_events(state: State<'_, AppState>) -> Result<Vec<EventItem>, String>
     rows.collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())
 }
 
+
+#[derive(Serialize, Clone)]
+pub struct WorkspaceNotification {
+    id: String,
+    client_id: String,
+    record_id: String,
+    record_type: String,
+    event_type: String,
+    title: String,
+    body: String,
+    created_at: String,
+    read_at: Option<String>,
+}
+
+#[tauri::command]
+pub fn list_workspace_notifications(state: State<'_, AppState>) -> Result<Vec<WorkspaceNotification>, String> {
+    let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
+    let (actor_id, actor_name, persona) = active_actor(&db)?;
+    let mut stmt = db.connection.prepare(
+        "SELECT id,client_id,record_id,record_type,event_type,title,body,created_at,read_at
+         FROM workspace_notification
+         WHERE firm_id=?1 AND recipient_actor_id=?2
+         ORDER BY created_at DESC LIMIT 100"
+    ).map_err(|e|e.to_string())?;
+    let rows = stmt.query_map(params![FIRM_ID,actor_id], |r| Ok(WorkspaceNotification {
+        id:r.get(0)?,client_id:r.get(1)?,record_id:r.get(2)?,record_type:r.get(3)?,
+        event_type:r.get(4)?,title:r.get(5)?,body:r.get(6)?,created_at:r.get(7)?,read_at:r.get(8)?
+    })).map_err(|e|e.to_string())?;
+    let candidates = rows.collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())?;
+    let mut visible = Vec::new();
+    for notification in candidates {
+        if actor_has_client_access(&db,&notification.client_id,&actor_name,&persona)? {
+            visible.push(notification);
+        }
+    }
+    Ok(visible)
+}
+
+#[tauri::command]
+pub fn mark_workspace_notification_read(id: String, state: State<'_, AppState>) -> Result<(), String> {
+    let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
+    let (actor_id,_,_) = active_actor(&db)?;
+    let changed = db.connection.execute(
+        "UPDATE workspace_notification SET read_at=?1
+         WHERE id=?2 AND firm_id=?3 AND recipient_actor_id=?4 AND read_at IS NULL",
+        params![now_utc(),id,FIRM_ID,actor_id]
+    ).map_err(|e|e.to_string())?;
+    if changed == 0 {
+        let owned: bool = db.connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM workspace_notification WHERE id=?1 AND firm_id=?2 AND recipient_actor_id=?3)",
+            params![id,FIRM_ID,actor_id], |r|r.get(0)
+        ).map_err(|e|e.to_string())?;
+        if !owned { return Err("Notification not found for the active demo user.".into()); }
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn reset_demo_data(state: State<'_, AppState>) -> Result<(), String> {
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
