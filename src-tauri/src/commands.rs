@@ -2789,6 +2789,7 @@ mod tests {
         let imported = stmt.query_map(params![client_id,result.batch_id],|row|Ok((row.get::<_,i64>(0)?,row.get::<_,String>(1)?,row.get::<_,String>(2)?))).unwrap()
             .collect::<Result<Vec<_>,_>>().unwrap();
         assert_eq!(imported,vec![(2,"First purchase".into(),"10.00".into()),(3,"Second purchase".into(),"20.00".into())]);
+        drop(stmt);
         drop(db);
         drop(app);
         let reopened = crate::db::Database::open(&path).expect("reopen historical import database");
