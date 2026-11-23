@@ -2324,6 +2324,91 @@ mod tests {
     }
 
     #[test]
+    fn inactive_staff_cannot_be_assigned_to_a_task() {
+        let app = test_app();
+        let client_id = command_active_client_id(&app);
+        set_demo_persona("manager".into(),app.state::<AppState>()).unwrap();
+        let draft = save_record(task_input(None,None,&client_id,"Draft",json!({"description":"Inactive staff test"})),app.state::<AppState>()).unwrap();
+        {
+            let state = app.state::<AppState>();
+            let db = state.database.lock().unwrap();
+            db.connection.execute("UPDATE workspace_record SET status='Inactive' WHERE record_type='staff' AND title='Demo Auditor'",[]).unwrap();
+        }
+        assert!(save_record(task_input(Some(draft.id),Some(draft.row_version),&client_id,"Assigned",assigned_task_payload()),app.state::<AppState>()).is_err());
+    }
+
+    #[test]
+    fn task_reassignment_requires_reason_and_preserves_previous_assignment_snapshot() {
+        let app = test_app();
+        let client_id = command_active_client_id(&app);
+        set_demo_persona("manager".into(),app.state::<AppState>()).unwrap();
+        let draft = save_record(task_input(None,None,&client_id,"Draft",json!({"description":"Reassignment test"})),app.state::<AppState>()).unwrap();
+        let assigned = save_record(task_input(Some(draft.id.clone()),Some(draft.row_version),&client_id,"Assigned",assigned_task_payload()),app.state::<AppState>()).unwrap();
+        let mut reassigned = json!({
+            "description":"Reassignment test",
+            "assignee":"Demo Firm Administrator",
+            "reviewer":"Demo Engagement Manager",
+            "due_date":"2026-11-30"
+        });
+        assert!(save_record(task_input(Some(assigned.id.clone()),Some(assigned.row_version),&client_id,"Assigned",reassigned.clone()),app.state::<AppState>()).is_err());
+        reassigned["reassignment_reason"] = json!("Rebalanced workload");
+        let updated = save_record(task_input(Some(assigned.id.clone()),Some(assigned.row_version),&client_id,"Assigned",reassigned),app.state::<AppState>()).unwrap();
+        let state = app.state::<AppState>();
+        let db = state.database.lock().unwrap();
+        let (previous,current):(String,String) = db.connection.query_row(
+            "SELECT (SELECT snapshot_json FROM workspace_record_version WHERE record_id=?1 AND row_version=2),
+                    (SELECT snapshot_json FROM workspace_record_version WHERE record_id=?1 AND row_version=3)",
+            [&updated.id],|row|Ok((row.get(0)?,row.get(1)?))
+        ).unwrap();
+        assert!(previous.contains("Demo Auditor"));
+        assert!(current.contains("Demo Firm Administrator"));
+        assert!(current.contains("Rebalanced workload"));
+    }
+
+    #[test]
+    fn review_note_requires_assigned_reviewer_and_preparer_response_before_disposition() {
+        let app = test_app();
+        let client_id = command_active_client_id(&app);
+        set_demo_persona("manager".into(),app.state::<AppState>()).unwrap();
+        let draft = save_record(task_input(None,None,&client_id,"Draft",json!({"description":"Review-note workflow"})),app.state::<AppState>()).unwrap();
+        let assigned = save_record(task_input(Some(draft.id.clone()),Some(draft.row_version),&client_id,"Assigned",assigned_task_payload()),app.state::<AppState>()).unwrap();
+        set_demo_persona("auditor".into(),app.state::<AppState>()).unwrap();
+        let in_progress = save_record(task_input(Some(assigned.id.clone()),Some(assigned.row_version),&client_id,"In progress",assigned_task_payload()),app.state::<AppState>()).unwrap();
+        let mut submitted_payload = assigned_task_payload();
+        submitted_payload["completion_summary"] = json!("Prepared source review for the manager.");
+        let submitted = save_record(task_input(Some(in_progress.id.clone()),Some(in_progress.row_version),&client_id,"Submitted",submitted_payload),app.state::<AppState>()).unwrap();
+
+        assert!(add_task_review_note(submitted.id.clone(),"Missing evidence".into(),"The invoice source is not attached.".into(),"INV-SYN-1".into(),"Attach the original synthetic invoice.".into(),app.state::<AppState>()).is_err());
+        set_demo_persona("manager".into(),app.state::<AppState>()).unwrap();
+        let note = add_task_review_note(submitted.id.clone(),"Missing evidence".into(),"The invoice source is not attached.".into(),"INV-SYN-1".into(),"Attach the original synthetic invoice.".into(),app.state::<AppState>()).unwrap();
+        assert!(respond_task_review_note(note.id.clone(),"Evidence is attached.".into(),app.state::<AppState>()).is_err());
+        assert!(disposition_task_review_note(note.id.clone(),"Cleared".into(),"Evidence reviewed".into(),app.state::<AppState>()).is_err());
+
+        set_demo_persona("auditor".into(),app.state::<AppState>()).unwrap();
+        respond_task_review_note(note.id.clone(),"Evidence is attached.".into(),app.state::<AppState>()).unwrap();
+        assert!(disposition_task_review_note(note.id.clone(),"Cleared".into(),"Evidence reviewed".into(),app.state::<AppState>()).is_err());
+        set_demo_persona("manager".into(),app.state::<AppState>()).unwrap();
+        disposition_task_review_note(note.id.clone(),"Cleared".into(),"Evidence reviewed".into(),app.state::<AppState>()).unwrap();
+        let completed = save_record(task_input(Some(submitted.id.clone()),Some(submitted.row_version),&client_id,"Completed",json!({
+            "description":"Review-note workflow",
+            "assignee":"Demo Auditor",
+            "reviewer":"Demo Engagement Manager",
+            "due_date":"2026-11-30",
+            "completion_summary":"Prepared source review for the manager."
+        })),app.state::<AppState>()).unwrap();
+        assert_eq!(completed.status,"Completed");
+        let state = app.state::<AppState>();
+        let db = state.database.lock().unwrap();
+        let (status,response_actor,disposition_actor):(String,String,String) = db.connection.query_row(
+            "SELECT status,response_actor_id,disposition_actor_id FROM task_review_note WHERE id=?1",
+            [&note.id],|row|Ok((row.get(0)?,row.get(1)?,row.get(2)?))
+        ).unwrap();
+        assert_eq!(status,"Cleared");
+        assert_eq!(response_actor,"00000000-0000-4000-8000-000000000013");
+        assert_eq!(disposition_actor,"00000000-0000-4000-8000-000000000012");
+    }
+
+    #[test]
     fn save_record_command_rejects_invoice_review_without_lines_source_and_period() {
         let app = test_app();
         let client_id = command_active_client_id(&app);
