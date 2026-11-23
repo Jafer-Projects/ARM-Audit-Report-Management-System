@@ -958,6 +958,32 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
         }
     }
 
+    if input.record_type == "task" && input.status == "Cancelled" {
+        if !["administrator","manager"].contains(&persona.as_str()) {
+            return Err("Only a manager can cancel a task.".into());
+        }
+        if payload.get("cancellation_reason").and_then(|v|v.as_str()).unwrap_or("").trim().chars().count() < 3 {
+            return Err("Record a cancellation reason of at least 3 characters.".into());
+        }
+    }
+    if input.record_type == "task" && ["administrator","manager"].contains(&persona.as_str()) {
+        if let Some((_,_,previous_status,previous_payload,_)) = exists.as_ref() {
+            if previous_status == "Submitted" {
+                let previous: serde_json::Value = serde_json::from_str(previous_payload).unwrap_or_else(|_|json!({}));
+                let old_values: (String,String,String,String) = db.connection.query_row(
+                    "SELECT title,reference,amount_text,notes FROM workspace_record WHERE id=?1 AND firm_id=?2",
+                    params![id,FIRM_ID], |r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))
+                ).map_err(|e|e.to_string())?;
+                if previous != payload || old_values.0 != input.title.trim()
+                    || old_values.1 != input.reference.as_deref().unwrap_or("")
+                    || old_values.2 != input.amount_text.as_deref().unwrap_or("")
+                    || old_values.3 != input.notes.as_deref().unwrap_or("") {
+                    return Err("Submitted preparer work is immutable during review. Record a review note and return it for correction instead of editing it.".into());
+                }
+            }
+        }
+    }
+
     if input.record_type == "invoice" && input.status == "Submitted for review"
         && payload.get("invoice_date").and_then(|v|v.as_str()).unwrap_or("").is_empty() {
         return Err("Enter the invoice date before submitting it for review.".into());
