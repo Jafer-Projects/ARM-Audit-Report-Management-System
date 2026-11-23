@@ -1684,7 +1684,16 @@ pub fn reset_demo_data(state: State<'_, AppState>) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::valid_record_transition;
+    use super::{detected_document_type, valid_record_transition};
+
+
+    #[test]
+    fn source_document_type_uses_file_signature_not_declared_extension() {
+        assert_eq!(detected_document_type(b"%PDF-1.7 synthetic"), Some("application/pdf"));
+        assert_eq!(detected_document_type(&[0x89,b'P',b'N',b'G',0x0D,0x0A,0x1A,0x0A]), Some("image/png"));
+        assert_eq!(detected_document_type(&[0xFF,0xD8,0xFF,0x00]), Some("image/jpeg"));
+        assert_eq!(detected_document_type(b"<html>not an invoice</html>"), None);
+    }
 
     #[test]
     fn invoice_and_tax_workflows_cannot_skip_review_or_claim_approval() {
