@@ -908,6 +908,7 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
 
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
     let (actor_id, actor_name, persona) = ensure_can_mutate(&db)?;
+    if input.record_type == "staff" && !["administrator","manager"].contains(&persona.as_str()) { return Err("Only the demo administrator or manager can edit the staff directory.".into()); }
     if input.record_type == "staff" && !["administrator","manager"].contains(&persona.as_str()) {
         return Err("Only the demo administrator or manager can maintain staff records.".into());
     }
