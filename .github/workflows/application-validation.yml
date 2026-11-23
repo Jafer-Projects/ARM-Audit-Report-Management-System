@@ -46,3 +46,11 @@ jobs:
         run: |
           npm install --no-audit --no-fund
           npm run tauri -- build --no-bundle
+      - name: Preserve generated dependency lockfiles for review
+        uses: actions/upload-artifact@v4
+        with:
+          name: arm-generated-lockfiles
+          path: |
+            package-lock.json
+            src-tauri/Cargo.lock
+          if-no-files-found: error
