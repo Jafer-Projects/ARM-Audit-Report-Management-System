@@ -456,16 +456,17 @@ pub fn save_note(input: LocalNoteInput, state: State<'_, AppState>) -> Result<Lo
         return Err("A note title (1–120 characters) and body (up to 2,000 characters) are required.".into());
     }
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
-    let (actor_id,_,_) = ensure_can_mutate(&db)?;
+    let (actor_id,actor_name,persona) = ensure_can_mutate(&db)?;
     if let Some(client_id) = input.client_id.as_deref() {
-        let found: bool = db.connection.query_row("SELECT EXISTS(SELECT 1 FROM client WHERE id=?1 AND firm_id=?2)",params![client_id,FIRM_ID],|r|r.get(0)).map_err(|e|e.to_string())?;
-        if !found { return Err("Selected client is not part of this demo workspace.".into()); }
+        let active: bool = db.connection.query_row("SELECT EXISTS(SELECT 1 FROM client WHERE id=?1 AND firm_id=?2 AND status='Active')",params![client_id,FIRM_ID],|r|r.get(0)).map_err(|e|e.to_string())?;
+        if !active { return Err("Selected client is not active in this demo workspace.".into()); }
+        if !actor_has_client_access(&db,client_id,&actor_name,&persona)? { return Err("This client workspace is not assigned to your demo persona.".into()); }
     }
     let id = input.id.unwrap_or_else(||Uuid::new_v4().to_string());
     let now = now_utc();
     let tx = db.connection.unchecked_transaction().map_err(|e|e.to_string())?;
     tx.execute("INSERT INTO local_note(id,firm_id,client_id,actor_id,title,body,status,created_at,updated_at) VALUES(?1,?2,?3,?4,?5,?6,'Local draft',?7,?7)
-        ON CONFLICT(id) DO UPDATE SET client_id=excluded.client_id,actor_id=excluded.actor_id,title=excluded.title,body=excluded.body,updated_at=excluded.updated_at WHERE local_note.firm_id=excluded.firm_id",
+        ON CONFLICT(id) DO UPDATE SET client_id=excluded.client_id,actor_id=excluded.actor_id,title=excluded.title,body=excluded.body,updated_at=excluded.updated_at WHERE local_note.firm_id=excluded.firm_id AND local_note.actor_id=excluded.actor_id",
         params![id,FIRM_ID,input.client_id,actor_id,title,input.body,now]).map_err(|e|e.to_string())?;
     tx.execute("INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json) VALUES(?1,?2,?3,'local_note_saved','local_note',?4,?5,?6,?7)",
         params![Uuid::new_v4().to_string(),FIRM_ID,actor_id,id,now,Uuid::new_v4().to_string(),json!({"title":title}).to_string()]).map_err(|e|e.to_string())?;
