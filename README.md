@@ -61,6 +61,17 @@ These are architectural selections, not a claim that every dependency has alread
 - [Deployment and operations](docs/delivery/deployment-and-operations.md)
 - [Architecture decisions](docs/governance/architecture-decision-records.md)
 
+## Phase 0 discovery and governance
+
+- [Phase 0 technical discovery plan](docs/discovery/phase-0-technical-discovery-plan.md)
+- [Open questions and evidence register](docs/discovery/open-questions-and-evidence-register.md)
+- [Technical spike and validation matrix](docs/discovery/technical-spike-and-validation-matrix.md)
+- [Phase 0 exit gates and approval record](docs/governance/phase-0-gate-record.md)
+- [Contribution and engineering rules](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
+
+Phase 0 is in progress. Repository scaffolding is not equivalent to completed discovery or approval; Phase 1 remains gated by the evidence and approvals recorded above.
+
 ## Non-negotiable engineering principles
 
 1. No silent loss or last-write-wins overwriting of posted financial records.
