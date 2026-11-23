@@ -151,7 +151,7 @@ function parseCsv(text: string): string[][] {
     else if (char === ",") { row.push(field); field = ""; }
     else if (char === "\n" || char === "\r") {
       row.push(field); field = "";
-      if (row.some(cell => cell.trim() !== "")) rows.push(row);
+      rows.push(row);
       row = [];
       if (char === "\r" && source[i + 1] === "\n") i += 1;
     } else field += char;
