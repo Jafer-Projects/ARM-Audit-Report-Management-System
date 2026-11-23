@@ -1407,6 +1407,11 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
                     params![FIRM_ID,staff_name], |r| r.get(0)
                 ).map_err(|e|e.to_string())?;
                 if !active_staff { return Err("Both preparer and reviewer must be active staff in this demo firm.".into()); }
+                let demo_identity: bool = db.connection.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM demo_actor WHERE display_name=?1)",
+                    params![staff_name], |r| r.get(0)
+                ).map_err(|e|e.to_string())?;
+                if !demo_identity { return Err("Task assignees and reviewers must have a corresponding active demo identity so notifications and workspace routing are meaningful.".into()); }
             }
         }
         if let Some((_, existing_type, _, existing_payload, _)) = exists.as_ref() {
@@ -1574,6 +1579,57 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
          VALUES(?1,?2,?3,?4,'workspace_record',?5,?6,?7,?8)",
         params![Uuid::new_v4().to_string(),FIRM_ID,actor_id,if exists.is_some(){"workspace_record_updated"}else{"workspace_record_created"},id,now,correlation_id,json!({"record_type":input.record_type,"status":input.status,"row_version":new_version,"possible_duplicate_count":invoice_duplicate_candidates.len(),"duplicate_acknowledgement_reason":input.duplicate_acknowledgement_reason.as_deref().unwrap_or("")}).to_string()]
     ).map_err(|e|e.to_string())?;
+
+    if input.record_type == "task" {
+        let client_id = input.client_id.as_deref().unwrap_or("");
+        let client_label: String = tx.query_row(
+            "SELECT COALESCE(NULLIF(display_name,''),legal_name) FROM client WHERE id=?1 AND firm_id=?2",
+            params![client_id,FIRM_ID], |r| r.get(0)
+        ).map_err(|e|e.to_string())?;
+        let previous_payload: serde_json::Value = exists.as_ref()
+            .map(|row| serde_json::from_str(&row.3).unwrap_or_else(|_|json!({})))
+            .unwrap_or_else(||json!({}));
+        let previous_assignee = previous_payload.get("assignee").and_then(|v|v.as_str()).unwrap_or("");
+        let previous_reviewer = previous_payload.get("reviewer").and_then(|v|v.as_str()).unwrap_or("");
+        let previous_status = exists.as_ref().map(|row|row.2.as_str()).unwrap_or("");
+        let assignee = payload.get("assignee").and_then(|v|v.as_str()).unwrap_or("");
+        let reviewer = payload.get("reviewer").and_then(|v|v.as_str()).unwrap_or("");
+        let task_body = format!("{} · {}", input.title.trim(), client_label);
+        let mut emit_notification = |recipient_name: &str, event_type: &str, title: &str, body: &str| -> Result<(),String> {
+            if recipient_name.trim().is_empty() { return Ok(()); }
+            let recipient_id: Option<String> = tx.query_row(
+                "SELECT id FROM demo_actor WHERE display_name=?1",
+                params![recipient_name], |r|r.get(0)
+            ).optional().map_err(|e|e.to_string())?;
+            if let Some(recipient_id) = recipient_id {
+                let key = format!("{}:{}:{}:{}",id,event_type,recipient_id,new_version);
+                tx.execute(
+                    "INSERT OR IGNORE INTO workspace_notification(id,firm_id,recipient_actor_id,client_id,record_id,record_type,event_type,title,body,created_at,idempotency_key)
+                     VALUES(?1,?2,?3,?4,?5,'task',?6,?7,?8,?9,?10)",
+                    params![Uuid::new_v4().to_string(),FIRM_ID,recipient_id,client_id,id,event_type,title,body,now,key]
+                ).map_err(|e|e.to_string())?;
+            }
+            Ok(())
+        };
+        if assignee != previous_assignee && !assignee.is_empty() {
+            emit_notification(assignee,"task_assigned","New task assigned",&task_body)?;
+        }
+        if reviewer != previous_reviewer && !reviewer.is_empty() {
+            emit_notification(reviewer,"review_assigned","Review responsibility assigned",&task_body)?;
+        }
+        if input.status == "Submitted" && previous_status != "Submitted" {
+            emit_notification(reviewer,"task_submitted_for_review","Task submitted for review",&task_body)?;
+        }
+        if input.status == "Blocked" && previous_status != "Blocked" {
+            emit_notification(reviewer,"task_blocked","Assigned task is blocked",&task_body)?;
+        }
+        if input.status == "Returned" && previous_status != "Returned" {
+            emit_notification(assignee,"task_returned","Task returned for correction",&task_body)?;
+        }
+        if input.status == "Completed" && previous_status != "Completed" {
+            emit_notification(assignee,"task_review_completed","Task review completed",&task_body)?;
+        }
+    }
     tx.commit().map_err(|e|e.to_string())?;
 
     let mut stmt = db.connection.prepare(
