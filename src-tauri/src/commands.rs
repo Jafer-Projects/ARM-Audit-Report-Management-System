@@ -890,9 +890,6 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
             params![client_id,FIRM_ID], |r| r.get(0)
         ).map_err(|e| e.to_string())?;
         if !active { return Err("Choose an active client in this demonstration firm.".into()); }
-        if !actor_has_client_access(&db,client_id,&actor_name,&persona)? {
-            return Err("This client workspace is not assigned to your demo persona.".into());
-        }
     }
 
     let id = input.id.clone().unwrap_or_else(|| Uuid::new_v4().to_string());
