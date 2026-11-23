@@ -145,6 +145,7 @@ const recordFields: Record<string, RecordField[]> = {
     { key: "supplier", label: "Supplier/source party" },
     { key: "relevant_dates", label: "Relevant dates (source wording)" },
     { key: "currency", label: "Currencies involved (as described)" },
+    { key: "base_currency", label: "Base currency for this cost worksheet (three-letter code)" },
     { key: "incoterms_rule", label: "Incoterms 2020 rule (as stated in the sales contract)" },
     { key: "named_place", label: "Incoterms named port/place (as stated in the contract)" },
     { key: "workflow_diagram_reference", label: "Approved workflow diagram reference" },
