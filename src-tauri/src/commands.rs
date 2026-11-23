@@ -2164,6 +2164,21 @@ mod tests {
     }
 
     #[test]
+    fn client_activation_archive_restore_and_archived_filter_are_consistent() {
+        let app = test_app();
+        let created = save_client(command_client_input("Lifecycle Synthetic Client",None),app.state::<AppState>()).unwrap();
+        activate_client(created.id.clone(),app.state::<AppState>()).expect("activate minimum profile");
+        assert!(list_clients(app.state::<AppState>(),false).unwrap().iter().any(|client|client.id==created.id && client.status=="Active"));
+        archive_client(created.id.clone(),app.state::<AppState>()).expect("archive client");
+        assert!(!list_clients(app.state::<AppState>(),false).unwrap().iter().any(|client|client.id==created.id));
+        assert!(list_clients(app.state::<AppState>(),true).unwrap().iter().any(|client|client.id==created.id && client.status=="Archived"));
+        restore_client(created.id.clone(),app.state::<AppState>()).expect("restore client");
+        assert!(list_clients(app.state::<AppState>(),false).unwrap().iter().any(|client|client.id==created.id && client.status=="Active"));
+        let history = list_client_changes(created.id.clone(),app.state::<AppState>()).unwrap();
+        assert!(history.len()>=3);
+    }
+
+    #[test]
     fn save_client_command_rejects_invalid_email_without_partial_write() {
         let app = test_app();
         assert!(save_client(command_client_input("Invalid Email Company",Some("not-an-email")),app.state::<AppState>()).is_err());
