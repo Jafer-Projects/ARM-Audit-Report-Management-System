@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Client, ClientChange, ClientInput, DuplicateCandidate, EventItem, HistoricalImportBatch, HistoricalImportResult, HistoricalImportRow, ImportCostResult, SourceDocumentContent, SourceDocumentMeta, InvoiceDuplicateCandidate, LocalNote, RecordInput, TaskReviewNote, WorkspaceInfo, WorkspaceRecord, WorkspaceRecordVersion } from "../types";
+import type { Client, ClientChange, ClientInput, DuplicateCandidate, EventItem, HistoricalImportBatch, HistoricalImportResult, HistoricalImportRow, ImportCostResult, SourceDocumentContent, SourceDocumentMeta, InvoiceDuplicateCandidate, LocalNote, RecordInput, TaskReviewNote, WorkspaceInfo, WorkspaceNotification, WorkspaceRecord, WorkspaceRecordVersion } from "../types";
 
 export const desktop = {
   initialize: () => invoke<WorkspaceInfo>("initialize_workspace"),
@@ -25,6 +25,8 @@ export const desktop = {
   attachSourceDocument: (input: { clientId: string; recordId: string; fileName: string; mediaType: string; content: number[] }) => invoke<SourceDocumentMeta>("attach_source_document", input),
   listSourceDocuments: (recordId: string) => invoke<SourceDocumentMeta[]>("list_source_documents", { recordId }),
   readSourceDocument: (id: string) => invoke<SourceDocumentContent>("read_source_document", { id }),
+  notifications: () => invoke<WorkspaceNotification[]>("list_workspace_notifications"),
+  markNotificationRead: (id: string) => invoke<void>("mark_workspace_notification_read", { id }),
   records: (recordType: string, clientId?: string) => invoke<WorkspaceRecord[]>("list_records", { recordType, clientId: clientId ?? null }),
   saveRecord: (input: RecordInput) => invoke<WorkspaceRecord>("save_record", { input }),
   events: () => invoke<EventItem[]>("list_events"),
