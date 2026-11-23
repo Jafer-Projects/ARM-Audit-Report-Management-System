@@ -283,11 +283,11 @@ fn allowed_record_type(value: &str) -> bool {
 fn allowed_status(record_type: &str, status: &str) -> bool {
     match record_type {
         "category" | "product" => ["Draft","Active","Archived"].contains(&status),
-        "invoice" => ["Draft","Submitted for review","Reviewed","Returned","Archived"].contains(&status),
-        "historical_record" | "period" => ["Draft","Needs source","Ready for review","Reviewed","Locked"].contains(&status),
+        "invoice" => ["Draft","Submitted for review","Returned","Archived"].contains(&status),
+        "historical_record" | "period" => ["Draft","Needs source","Ready for review"].contains(&status),
         "staff" => ["Draft","Active","Inactive"].contains(&status),
         "task" => ["Draft","Assigned","In progress","Blocked","Submitted","Returned","Completed","Cancelled"].contains(&status),
-        "import_case" | "import_cost_input" => ["Discovery","Inputs captured","Needs review","Reviewed","Returned"].contains(&status),
+        "import_case" | "import_cost_input" => ["Discovery","Needs practitioner input","Ready for workshop","Deferred"].contains(&status),
         _ => false,
     }
 }
