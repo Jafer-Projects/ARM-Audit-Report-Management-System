@@ -135,8 +135,9 @@ function taskDueState(value: string): "Overdue" | "Due soon" | "Scheduled" | "No
   if (!value) return "No due date";
   const parts = value.split("-").map(Number);
   if (parts.length !== 3 || parts.some(part => !Number.isFinite(part))) return "Invalid date";
+  if (parts[1] < 1 || parts[1] > 12 || parts[2] < 1 || parts[2] > 31) return "Invalid date";
   const due = new Date(parts[0], parts[1] - 1, parts[2], 23, 59, 59);
-  if (Number.isNaN(due.getTime())) return "Invalid date";
+  if (Number.isNaN(due.getTime()) || due.getFullYear() !== parts[0] || due.getMonth() !== parts[1] - 1 || due.getDate() !== parts[2]) return "Invalid date";
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const days = Math.ceil((due.getTime() - today.getTime()) / 86_400_000);
   if (days < 0) return "Overdue";
