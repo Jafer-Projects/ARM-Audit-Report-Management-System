@@ -2202,6 +2202,63 @@ mod tests {
     }
 
     #[test]
+    fn save_client_command_updates_optional_profile_fields_without_losing_existing_values() {
+        let app = test_app();
+        let created = save_client(command_client_input("Profile Update Synthetic",None),app.state::<AppState>()).unwrap();
+        let mut update = command_client_input("Profile Update Synthetic",Some("contact@example.org"));
+        update.id = Some(created.id.clone());
+        update.row_version = Some(created.row_version);
+        update.tin_raw = Some("TIN-SYN-88".into());
+        update.sector = Some("Professional services".into());
+        update.contact_phone = Some("+251-900-000-001".into());
+        let updated = save_client(update,app.state::<AppState>()).expect("update optional fields");
+        assert_eq!(updated.row_version,created.row_version+1);
+        let clients = list_clients(app.state::<AppState>(),false).unwrap();
+        let stored = clients.iter().find(|client|client.id==created.id).unwrap();
+        assert_eq!(stored.tin_raw,"TIN-SYN-88");
+        assert_eq!(stored.contact_email,"contact@example.org");
+        assert_eq!(stored.sector,"Professional services");
+        assert_eq!(stored.contact_phone,"+251-900-000-001");
+    }
+
+    #[test]
+    fn archived_product_remains_addressable_from_a_historical_invoice_record() {
+        let app = test_app();
+        let client_id = command_active_client_id(&app);
+        let product = save_record(RecordInput {
+            id:None,row_version:None,client_id:Some(client_id.clone()),record_type:"product".into(),
+            title:"Synthetic archived product".into(),status:"Draft".into(),reference:Some("SKU-ARCH-01".into()),
+            amount_text:None,notes:None,payload_json:Some(json!({"product_reference":"SKU-ARCH-01"}).to_string()),
+            duplicate_acknowledged:None,duplicate_acknowledgement_reason:None,
+        },app.state::<AppState>()).unwrap();
+        let active = save_record(RecordInput {
+            id:Some(product.id.clone()),row_version:Some(product.row_version),client_id:Some(client_id.clone()),
+            record_type:"product".into(),title:"Synthetic archived product".into(),status:"Active".into(),
+            reference:Some("SKU-ARCH-01".into()),amount_text:None,notes:None,payload_json:Some(json!({"product_reference":"SKU-ARCH-01"}).to_string()),
+            duplicate_acknowledged:None,duplicate_acknowledgement_reason:None,
+        },app.state::<AppState>()).unwrap();
+        let archived = save_record(RecordInput {
+            id:Some(active.id.clone()),row_version:Some(active.row_version),client_id:Some(client_id.clone()),
+            record_type:"product".into(),title:"Synthetic archived product".into(),status:"Archived".into(),
+            reference:Some("SKU-ARCH-01".into()),amount_text:None,notes:None,payload_json:Some(json!({"product_reference":"SKU-ARCH-01"}).to_string()),
+            duplicate_acknowledged:None,duplicate_acknowledgement_reason:None,
+        },app.state::<AppState>()).unwrap();
+        let invoice_payload = json!({"invoice_number":"INV-ARCH-01","invoice_lines_json":format!("[{{\\\"description\\\":\\\"Archived product\\\",\\\"line_amount_text\\\":\\\"50.00\\\",\\\"product_id\\\":\\\"{}\\\"}}]",product.id)});
+        let invoice = save_record(RecordInput {
+            id:None,row_version:None,client_id:Some(client_id.clone()),record_type:"invoice".into(),
+            title:"Historical invoice with archived product".into(),status:"Draft".into(),reference:Some("INV-ARCH-01".into()),
+            amount_text:None,notes:None,payload_json:Some(invoice_payload.to_string()),
+            duplicate_acknowledged:None,duplicate_acknowledgement_reason:None,
+        },app.state::<AppState>()).unwrap();
+        let products = list_records("product".into(),Some(client_id.clone()),app.state::<AppState>()).unwrap();
+        assert!(products.iter().any(|record|record.id==archived.id && record.status=="Archived"));
+        let state = app.state::<AppState>();
+        let db = state.database.lock().unwrap();
+        let payload: String = db.connection.query_row("SELECT payload_json FROM workspace_record WHERE id=?1",[&invoice.id],|row|row.get(0)).unwrap();
+        assert!(payload.contains(&product.id));
+    }
+
+    #[test]
     fn client_activation_archive_restore_and_archived_filter_are_consistent() {
         let app = test_app();
         let created = save_client(command_client_input("Lifecycle Synthetic Client",None),app.state::<AppState>()).unwrap();
