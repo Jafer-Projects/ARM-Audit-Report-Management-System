@@ -252,7 +252,7 @@ export default function App() {
   const canManageClients = canMutate && ["administrator","manager"].includes(workspace?.persona ?? "");
 
   async function switchPersona(persona: Persona) {
-    try { setBusy(true); setWorkspace(await desktop.setPersona(persona)); await refresh(); }
+    try { setBusy(true); setWorkspace(await desktop.setPersona(persona)); if (section === "work" && !["administrator","manager"].includes(persona)) { setRecordType("task"); setWorkDashboard(true); } await refresh(); }
     catch (e) { setError(String(e)); } finally { setBusy(false); }
   }
   async function saveClient(event: FormEvent<HTMLFormElement>) {
