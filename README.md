@@ -54,7 +54,7 @@ These are architecture directions to validate; final versions, licenses, mainten
 - [Roles, permissions and workflows](docs/product/user-roles-and-permissions.md)
 - [Ownership and licensing model](docs/product/data-ownership-and-licensing.md)
 - [Implementation roadmap and acceptance criteria](docs/delivery/implementation-roadmap-and-acceptance.md)
-- [Phase 1 incremental development and practitioner feedback](docs/delivery/phase-1-incremental-development-and-feedback.md)
+- [Phase 1 incremental development and practitioner feedback](docs/delivery/phase-1-incremental-development-and-feedback.md)\n- [Developer implementation specification for Increments 0 and 1](docs/delivery/developer-implementation-specification-increments-0-and-1.md)
 
 ## Architecture and domain references
 
