@@ -517,6 +517,33 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
     }
 
     let id = input.id.clone().unwrap_or_else(|| Uuid::new_v4().to_string());
+    let invoice_duplicate_candidates: Vec<(String,String)> = if input.record_type == "invoice" {
+        let invoice_number = payload.get("invoice_number").and_then(|v|v.as_str()).unwrap_or("").trim();
+        if invoice_number.is_empty() {
+            Vec::new()
+        } else {
+            let mut stmt = db.connection.prepare(
+                "SELECT id,payload_json FROM workspace_record WHERE firm_id=?1 AND client_id=?2 AND record_type='invoice' AND id<>?3 ORDER BY updated_at DESC LIMIT 500"
+            ).map_err(|e|e.to_string())?;
+            let rows = stmt.query_map(params![FIRM_ID,input.client_id.as_deref().unwrap_or(""),input.id.as_deref().unwrap_or("")], |r| Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?))).map_err(|e|e.to_string())?;
+            let mut matches = Vec::new();
+            for row in rows {
+                let (candidate_id,raw) = row.map_err(|e|e.to_string())?;
+                let candidate: serde_json::Value = serde_json::from_str(&raw).unwrap_or_else(|_|json!({}));
+                let candidate_number = candidate.get("invoice_number").and_then(|v|v.as_str()).unwrap_or("").trim();
+                if candidate_number.eq_ignore_ascii_case(invoice_number) {
+                    matches.push((candidate_id,candidate_number.to_string()));
+                }
+            }
+            matches
+        }
+    } else { Vec::new() };
+    if !invoice_duplicate_candidates.is_empty() {
+        let reason = input.duplicate_acknowledgement_reason.as_deref().unwrap_or("").trim();
+        if input.duplicate_acknowledged != Some(true) || reason.chars().count() < 3 || reason.chars().count() > 500 {
+            return Err("A possible duplicate invoice exists for this client. Compare it and record a 3–500 character reason before saving as a separate invoice.".into());
+        }
+    }
     let exists: Option<(i64,String,String,String,Option<String>)> = db.connection.query_row(
         "SELECT row_version,record_type,status,payload_json,client_id FROM workspace_record WHERE id=?1 AND firm_id=?2",
         params![id,FIRM_ID],
@@ -605,7 +632,7 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
         "client_id":input.client_id.as_deref(),"record_type":input.record_type,"title":input.title,
         "status":input.status,"reference":input.reference.as_deref().unwrap_or(""),
         "amount_text":input.amount_text.as_deref().unwrap_or(""),"notes":input.notes.as_deref().unwrap_or(""),
-        "payload":payload
+        "payload":payload,"duplicate_acknowledgement_reason":input.duplicate_acknowledgement_reason.as_deref().unwrap_or("")
     });
     let correlation_id = Uuid::new_v4().to_string();
     tx.execute(
@@ -616,7 +643,7 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
     tx.execute(
         "INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json)
          VALUES(?1,?2,?3,?4,'workspace_record',?5,?6,?7,?8)",
-        params![Uuid::new_v4().to_string(),FIRM_ID,actor_id,if exists.is_some(){"workspace_record_updated"}else{"workspace_record_created"},id,now,correlation_id,json!({"record_type":input.record_type,"status":input.status,"row_version":new_version}).to_string()]
+        params![Uuid::new_v4().to_string(),FIRM_ID,actor_id,if exists.is_some(){"workspace_record_updated"}else{"workspace_record_created"},id,now,correlation_id,json!({"record_type":input.record_type,"status":input.status,"row_version":new_version,"possible_duplicate_count":invoice_duplicate_candidates.len(),"duplicate_acknowledgement_reason":input.duplicate_acknowledgement_reason.as_deref().unwrap_or("")}).to_string()]
     ).map_err(|e|e.to_string())?;
     tx.commit().map_err(|e|e.to_string())?;
 
