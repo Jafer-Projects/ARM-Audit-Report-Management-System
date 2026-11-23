@@ -2163,7 +2163,7 @@ mod tests {
         let input = HistoricalImportInput {
             client_id, source_filename: "history.csv".into(),
             source_content: "Date,Description,Amount\n2026-01-01,Synthetic purchase,100.00".into(),
-            mapping_json: "{}".into(), rows: vec![row.clone(),row],
+            mapping_json: "{}".into(), rows: vec![row, HistoricalImportRow { source_row: 2, transaction_date: "2026-01-01".into(), description: "Synthetic purchase".into(), amount_text: "100.00".into(), currency: "ETB".into(), supplier: "Synthetic supplier".into(), supplier_tin: "".into(), vat_amount: "".into(), invoice_reference: "INV-1".into() }],
         };
         assert!(import_historical_batch(input,test_tauri_state(&app)).is_err());
         let db = app.database.lock().unwrap();

@@ -1,6 +1,6 @@
 # Increments 0–5 — implementation evidence log
 
-**Governing PR:** [#2](https://github.com/Jafermenza/ARM-Audit-Report-Management-System/pull/2)  
+**Governing PR:** [#2](https://github.com/Jafer-Projects/ARM-Audit-Report-Management-System/pull/1)  
 **Branch:** `implementation/increments-0-to-5`  
 **Acceptance model:** one collective gate after Increment 5; no increment-level acceptance/pass declarations.
 
@@ -48,19 +48,19 @@ These checkmarks mean source code has been added, not that the feature has passe
 
 | Date | Commit | Evidence | Result / limitation |
 |---|---|---|---|
-| 2026-11-23 | Initial PR #2 implementation series | Historical pre-deferral checks: 3 Node tests passed; SQLite DDL/trigger smoke checks passed (not acceptance and not a current integrated verification result) | Rust/TS/build CI unverified; no increment accepted; no collective acceptance decision |
+| 2026-11-23 | Initial PR #1 implementation series | Historical pre-deferral checks: 3 Node tests passed; SQLite DDL/trigger smoke checks passed (not acceptance and not a current integrated verification result) | Rust/TS/build CI unverified; no increment accepted; no collective acceptance decision |
 
 
 ## Binding override — prototype build and deferred collective verification
 
-The product owner has issued a later, explicit decision recorded in [PR #2](https://github.com/Jafermenza/ARM-Audit-Report-Management-System/pull/2) and [Prototype Build Binding Contract](prototype-build-binding-contract.md). ARM is a controlled prototype using synthetic data. All implementation remains on `implementation/increments-0-to-5` in PR #2. Close the outstanding Increments 0–5 implementation gaps to the best practical professional standard, preserving existing behavior and avoiding scope expansion.
+The product owner has issued a later, explicit decision recorded in [PR #1](https://github.com/Jafer-Projects/ARM-Audit-Report-Management-System/pull/1) and [Prototype Build Binding Contract](prototype-build-binding-contract.md). ARM is a controlled prototype using synthetic data. All implementation remains on `implementation/increments-0-to-5` in PR #1. Close the outstanding Increments 0–5 implementation gaps to the best practical professional standard, preserving existing behavior and avoiding scope expansion.
 
 **This later decision supersedes any earlier wording in this file that requires continuous test execution or increment-level verification.** Formal verification and testing of the integrated Increments 0–5 delivery occur only after Increment 5 implementation is complete. Do not declare any increment accepted, passed, or independently complete. Test plans and fixtures may be prepared during implementation, but partial checks must not be presented as acceptance. This timing decision does not permit test deletion, assertion weakening, or unsupported claims. The one collective gate and separate production/legal/security/professional gates remain mandatory.
 
 
 ## Product-owner-directed prototype completion update
 
-**Binding rule:** See [Prototype Build Binding Contract](prototype-build-binding-contract.md). Implementation continues on this branch and PR #2. Formal verification and testing are deferred until Increment 5 implementation is complete. No increment is individually accepted.
+**Binding rule:** See [Prototype Build Binding Contract](prototype-build-binding-contract.md). Implementation continues on this branch and PR #1. Formal verification and testing are deferred until Increment 5 implementation is complete. No increment is individually accepted.
 
 ### Increment 5 prototype implementation added
 
