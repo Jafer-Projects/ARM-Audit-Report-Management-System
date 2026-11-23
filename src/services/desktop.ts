@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Client, ClientInput, DuplicateCandidate, EventItem, LocalNote, RecordInput, WorkspaceInfo, WorkspaceRecord } from "../types";
+import type { Client, ClientChange, ClientInput, DuplicateCandidate, EventItem, LocalNote, RecordInput, WorkspaceInfo, WorkspaceRecord } from "../types";
 
 export const desktop = {
   initialize: () => invoke<WorkspaceInfo>("initialize_workspace"),
@@ -8,6 +8,7 @@ export const desktop = {
   findClientDuplicates: (legalName: string, tinRaw: string, excludeId?: string) => invoke<DuplicateCandidate[]>("find_client_duplicates", { legalName, tinRaw, excludeId }),
   saveClient: (input: ClientInput) => invoke<Client>("save_client", { input }),
   archiveClient: (id: string) => invoke<void>("archive_client", { id }),
+  clientChanges: (clientId: string) => invoke<ClientChange[]>("list_client_changes", { clientId }),
   activateClient: (id: string) => invoke<void>("activate_client", { id }),
   restoreClient: (id: string) => invoke<void>("restore_client", { id }),
   notes: () => invoke<LocalNote[]>("list_notes"),
