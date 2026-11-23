@@ -317,6 +317,7 @@ impl Database {
                 ("00000000-0000-4000-8000-000000000301","Demo Firm Administrator","DEMO-ADM","Firm administrator","Administration"),
                 ("00000000-0000-4000-8000-000000000302","Demo Engagement Manager","DEMO-MGR","Engagement manager","Audit management"),
                 ("00000000-0000-4000-8000-000000000303","Demo Auditor","DEMO-AUD","Auditor","Audit preparation"),
+                ("00000000-0000-4000-8000-000000000304","Demo Read-only Reviewer","DEMO-REV","Read-only reviewer","Review observation"),
             ] {
                 let created_at = now_utc();
                 let payload = serde_json::json!({"staff_reference":staff_ref,"job_title":job_title,"discipline":discipline});
@@ -369,7 +370,7 @@ mod tests {
         assert_eq!(clients, 1);
         assert_eq!(actors, 4);
         assert_eq!(migrations, 7);
-        assert_eq!(staff, 3);
+        assert_eq!(staff, 4);
     }
 
     #[test]
