@@ -825,10 +825,6 @@ pub fn list_records(record_type: String, client_id: Option<String>, state: State
             params![selected,FIRM_ID], |r|r.get(0)
         ).map_err(|e|e.to_string())?;
         if !active { return Err("Selected client is not active in this demonstration firm.".into()); }
-        let (_,actor_name,persona) = active_actor(&db)?;
-        if !actor_has_client_access(&db,&selected,&actor_name,&persona)? {
-            return Err("This client workspace is not assigned to your demo persona.".into());
-        }
         Some(selected)
     };
     if record_type == "staff" {
