@@ -1082,6 +1082,12 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
         if source_reference.is_empty() && !has_attachment {
             return Err("Add a source document reference or attach the original invoice before submitting it for review.".into());
         }
+        let period_reference = payload.get("financial_period_reference").and_then(|v| v.as_str()).unwrap_or("").trim();
+        let invoice_date = payload.get("invoice_date").and_then(|v| v.as_str()).unwrap_or("").trim();
+        if period_reference.is_empty() || invoice_date.is_empty() {
+            return Err("Record the invoice date and explicitly assign a reviewed financial period before review.".into());
+        }
+        validate_period_assignment(&db,input.client_id.as_deref().unwrap_or(""),period_reference,Some(invoice_date))?;
     }
 
     if input.record_type == "import_cost_input" {
