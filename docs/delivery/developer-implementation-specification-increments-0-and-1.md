@@ -70,6 +70,14 @@ Store the database and future document cache in the per-user application-data di
 
 ### 3.5 Date, number and identity conventions
 
+
+- Persist timestamps as UTC ISO-8601 values; display in the user's local timezone.
+- Store ETB amounts only when a later approved workflow defines amount semantics; no financial amount fields are part of client registration.
+- Generate internal IDs as UUIDs. Do not use TIN, company name or sequential database IDs as primary keys.
+- Preserve entered identity text. Do not normalize away meaningful punctuation or transliteration.
+- English is the initial application UI. Amharic documents/OCR are later capabilities and are not implied by this increment.
+
+
 ### 3.6 Windows compatibility target and WebView2 runtime
 
 The product-owner compatibility decision is broad Windows 10 x64 and Windows 11 x64 application compatibility, including ordinary Windows 10 22H2 installations that no longer receive Windows OS security updates. This is an application compatibility target, not a claim that an unsupported Windows installation is secure or vendor-supported.
@@ -91,13 +99,6 @@ Microsoft references:
 - [Tauri WebView2 installer modes](https://v2.tauri.app/distribute/windows-installer/)
 
 Do not promise support for a Windows build below the Microsoft WebView2 platform floor without a separately validated architecture decision. Do not disable Windows security features or describe unsupported Windows as secure. Real-client-data production use on unsupported Windows remains blocked pending a documented security risk assessment, compensating controls and explicit approval.
-
-- Persist timestamps as UTC ISO-8601 values; display in the user's local timezone.
-- Store ETB amounts only when a later approved workflow defines amount semantics; no financial amount fields are part of client registration.
-- Generate internal IDs as UUIDs. Do not use TIN, company name or sequential database IDs as primary keys.
-- Preserve entered identity text. Do not normalize away meaningful punctuation or transliteration.
-- English is the initial application UI. Amharic documents/OCR are later capabilities and are not implied by this increment.
-
 ## 4. Increment 0 — Screen and behavior specification
 
 ### 4.1 First launch
