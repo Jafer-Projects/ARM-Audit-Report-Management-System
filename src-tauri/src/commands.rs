@@ -1109,14 +1109,23 @@ pub fn reset_demo_data(state: State<'_, AppState>) -> Result<(), String> {
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
     let (actor_id,_,_) = ensure_can_mutate(&db)?;
     let tx = db.connection.unchecked_transaction().map_err(|e|e.to_string())?;
-    tx.execute_batch("DROP TRIGGER IF EXISTS task_review_note_no_delete").map_err(|e|e.to_string())?;
+    tx.execute_batch("DROP TRIGGER IF EXISTS task_review_note_no_delete;
+        DROP TRIGGER IF EXISTS client_change_no_update; DROP TRIGGER IF EXISTS client_change_no_delete;
+        DROP TRIGGER IF EXISTS workspace_record_version_no_update; DROP TRIGGER IF EXISTS workspace_record_version_no_delete;
+        DROP TRIGGER IF EXISTS historical_import_batch_no_update; DROP TRIGGER IF EXISTS historical_import_batch_no_delete;").map_err(|e|e.to_string())?;
     tx.execute("DELETE FROM task_review_note WHERE firm_id=?1",[FIRM_ID]).map_err(|e|e.to_string())?;
-    tx.execute_batch("CREATE TRIGGER task_review_note_no_delete BEFORE DELETE ON task_review_note BEGIN SELECT RAISE(ABORT, 'task review notes cannot be deleted'); END;").map_err(|e|e.to_string())?;
     tx.execute("DELETE FROM workspace_record WHERE firm_id=?1 AND record_type<>'staff'",[FIRM_ID]).map_err(|e|e.to_string())?;
     tx.execute("DELETE FROM local_note WHERE firm_id=?1",[FIRM_ID]).map_err(|e|e.to_string())?;
     tx.execute("DELETE FROM historical_import_batch WHERE firm_id=?1",[FIRM_ID]).map_err(|e|e.to_string())?;
     tx.execute("DELETE FROM client_change WHERE firm_id=?1",[FIRM_ID]).map_err(|e|e.to_string())?;
     tx.execute("DELETE FROM client WHERE firm_id=?1",[FIRM_ID]).map_err(|e|e.to_string())?;
+    tx.execute_batch("CREATE TRIGGER task_review_note_no_delete BEFORE DELETE ON task_review_note BEGIN SELECT RAISE(ABORT, 'task review notes cannot be deleted'); END;
+        CREATE TRIGGER client_change_no_update BEFORE UPDATE ON client_change BEGIN SELECT RAISE(ABORT, 'client change history is immutable'); END;
+        CREATE TRIGGER client_change_no_delete BEFORE DELETE ON client_change BEGIN SELECT RAISE(ABORT, 'client change history is immutable'); END;
+        CREATE TRIGGER workspace_record_version_no_update BEFORE UPDATE ON workspace_record_version BEGIN SELECT RAISE(ABORT, 'workspace record versions are immutable'); END;
+        CREATE TRIGGER workspace_record_version_no_delete BEFORE DELETE ON workspace_record_version BEGIN SELECT RAISE(ABORT, 'workspace record versions are immutable'); END;
+        CREATE TRIGGER historical_import_batch_no_update BEFORE UPDATE ON historical_import_batch BEGIN SELECT RAISE(ABORT, 'historical import batches are immutable'); END;
+        CREATE TRIGGER historical_import_batch_no_delete BEFORE DELETE ON historical_import_batch BEGIN SELECT RAISE(ABORT, 'historical import batches are immutable'); END;").map_err(|e|e.to_string())?;
     tx.execute("INSERT INTO client(id,firm_id,record_kind,legal_name,display_name,status,created_at,updated_at,created_by,updated_by) VALUES(?1,?2,'Company','Sample Trading PLC','Sample Trading','Active',?3,?3,?4,?4)",
         params!["00000000-0000-4000-8000-000000000101",FIRM_ID,now_utc(),actor_id]).map_err(|e|e.to_string())?;
     tx.execute("INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json) VALUES(?1,?2,?3,'demo_data_reset','demo_workspace',?2,?4,?5,'{}')",
