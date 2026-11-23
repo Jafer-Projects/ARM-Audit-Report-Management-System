@@ -124,7 +124,7 @@ fn actor_has_client_access(db: &Database, client_id: &str, actor_name: &str, per
         _ => return Ok(false),
     };
     let mut stmt = db.connection.prepare(
-        "SELECT payload_json FROM workspace_record WHERE firm_id=?1 AND client_id=?2 AND record_type='task'"
+        "SELECT payload_json FROM workspace_record WHERE firm_id=?1 AND client_id=?2 AND record_type='task' AND status<>'Draft'"
     ).map_err(|e|e.to_string())?;
     let rows = stmt.query_map(params![FIRM_ID,client_id], |r|r.get::<_,String>(0)).map_err(|e|e.to_string())?;
     for row in rows {
@@ -187,7 +187,7 @@ pub fn list_clients(state: State<'_, AppState>, include_archived: bool) -> Resul
     if persona == "auditor" || persona == "reviewer" {
         let field = if persona == "auditor" { "assignee" } else { "reviewer" };
         let mut task_stmt = db.connection.prepare(
-            "SELECT client_id,payload_json FROM workspace_record WHERE firm_id=?1 AND record_type='task' AND client_id IS NOT NULL"
+            "SELECT client_id,payload_json FROM workspace_record WHERE firm_id=?1 AND record_type='task' AND client_id IS NOT NULL AND status<>'Draft'"
         ).map_err(|e|e.to_string())?;
         let task_rows = task_stmt.query_map([FIRM_ID], |r| Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?))).map_err(|e|e.to_string())?;
         let mut assigned_clients = std::collections::HashSet::new();
@@ -875,12 +875,12 @@ pub fn list_records(record_type: String, client_id: Option<String>, state: State
     if record_type == "task" && persona == "auditor" {
         records.retain(|record| {
             let payload: serde_json::Value = serde_json::from_str(&record.payload_json).unwrap_or_else(|_|json!({}));
-            payload.get("assignee").and_then(|v|v.as_str()) == Some(actor_name.as_str())
+            payload.get("assignee").and_then(|v|v.as_str()) == Some(actor_name.as_str()) && record.status != "Draft"
         });
     } else if record_type == "task" && persona == "reviewer" {
         records.retain(|record| {
             let payload: serde_json::Value = serde_json::from_str(&record.payload_json).unwrap_or_else(|_|json!({}));
-            payload.get("reviewer").and_then(|v|v.as_str()) == Some(actor_name.as_str())
+            payload.get("reviewer").and_then(|v|v.as_str()) == Some(actor_name.as_str()) && record.status != "Draft"
         });
     }
     Ok(records)
