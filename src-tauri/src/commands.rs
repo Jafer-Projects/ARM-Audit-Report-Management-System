@@ -479,10 +479,10 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
     }
 
     let id = input.id.clone().unwrap_or_else(|| Uuid::new_v4().to_string());
-    let exists: Option<(i64,String,String,String)> = db.connection.query_row(
-        "SELECT row_version,record_type,status,payload_json FROM workspace_record WHERE id=?1 AND firm_id=?2",
+    let exists: Option<(i64,String,String,String,Option<String>)> = db.connection.query_row(
+        "SELECT row_version,record_type,status,payload_json,client_id FROM workspace_record WHERE id=?1 AND firm_id=?2",
         params![id,FIRM_ID],
-        |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))
+        |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?))
     ).optional().map_err(|e|e.to_string())?;
 
     if input.record_type == "task" {
@@ -502,7 +502,7 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
             if !active_staff { return Err("Assign the task to an active staff record in this demo firm.".into()); }
         }
         if persona == "auditor" {
-            let Some((_, existing_type, _, existing_payload)) = exists.as_ref() else {
+            let Some((_, existing_type, _, existing_payload, _)) = exists.as_ref() else {
                 return Err("Demo auditors can only work on tasks already assigned to them.".into());
             };
             let prior: serde_json::Value = serde_json::from_str(existing_payload).unwrap_or_else(|_|json!({}));
@@ -531,9 +531,12 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
         return Err("Add a source reference before marking historical data ready for review.".into());
     }
 
-    if let Some((version, existing_type, previous_status, _)) = exists.as_ref() {
+    if let Some((version, existing_type, previous_status, _, existing_client_id)) = exists.as_ref() {
         if existing_type != &input.record_type {
             return Err("A record cannot be changed into a different record type.".into());
+        }
+        if existing_client_id.as_deref() != input.client_id.as_deref() {
+            return Err("A record cannot be moved between client workspaces. Create a new record under the intended client instead.".into());
         }
         if input.row_version != Some(*version) {
             return Err("This record changed since it was opened. Reload before saving.".into());
@@ -559,7 +562,7 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
             params![id,FIRM_ID,input.client_id.as_deref(),input.record_type,input.title.trim(),input.status,input.reference.as_deref().unwrap_or(""),input.amount_text.as_deref().unwrap_or(""),input.notes.as_deref().unwrap_or(""),payload.to_string(),now,actor_id]
         ).map_err(|e|e.to_string())?;
     }
-    let new_version = exists.as_ref().map(|(version,_,_,_)| *version + 1).unwrap_or(1);
+    let new_version = exists.as_ref().map(|(version,_,_,_,_)| *version + 1).unwrap_or(1);
     let snapshot = json!({
         "client_id":input.client_id.as_deref(),"record_type":input.record_type,"title":input.title,
         "status":input.status,"reference":input.reference.as_deref().unwrap_or(""),
