@@ -16,13 +16,13 @@ const recordTypes: Record<Exclude<Section, "home" | "clients" | "activity">, { t
   catalogue: { type: "product", label: "Product / invoice record", statuses: ["Draft", "Submitted for review", "Reviewed", "Archived"], hint: "Create categories, products and invoice records. Amounts are stored as entered text; no tax or accounting calculation is performed." },
   history: { type: "historical_record", label: "Historical record / workpaper", statuses: ["Draft", "Needs source", "Ready for review", "Reviewed"], hint: "Capture historical records and source references. VAT calculations remain disabled until an approved tax rule pack and independent test fixtures exist." },
   work: { type: "task", label: "Staff task", statuses: ["Draft", "Assigned", "In progress", "Blocked", "Submitted", "Returned", "Completed"], hint: "Record staff and task workflow demonstrations. Demo personas are not production authorization." },
-  imports: { type: "import_case", label: "Import-cost case", statuses: ["Discovery", "Inputs captured", "Needs review", "Reviewed"], hint: "Capture import-cost assumptions and source references only. No customs valuation, landed-cost or selling-price calculation is enabled." },
+  imports: { type: "import_case", label: "Import-cost discovery", statuses: ["Discovery", "Inputs captured", "Needs review", "Reviewed"], hint: "Capture the practitioner discovery workshop and its evidence only. The import-cost case register and calculation workflow remain gated until Gate 5-A is approved." },
 };
 const subtypeOptions: Record<"catalogue" | "history" | "work" | "imports", { type: string; label: string }[]> = {
   catalogue: [{ type: "category", label: "Categories" }, { type: "product", label: "Products" }, { type: "invoice", label: "Invoices" }],
   history: [{ type: "period", label: "Periods" }, { type: "historical_record", label: "Historical records" }],
   work: [{ type: "staff", label: "Staff" }, { type: "task", label: "Tasks" }],
-  imports: [{ type: "import_case", label: "Import cases" }, { type: "import_cost_input", label: "Cost inputs" }],
+  imports: [{ type: "import_case", label: "Discovery workspace" }, { type: "import_cost_input", label: "Cost inputs" }],
 };
 const statusOptions: Record<string, string[]> = {
   category: ["Draft","Active","Archived"], product: ["Draft","Active","Archived"],
