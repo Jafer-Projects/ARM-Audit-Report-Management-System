@@ -194,3 +194,19 @@ At the collective gate, produce:
 - AWS, Guidance for Multi-Tenant Architectures: https://docs.aws.amazon.com/solutions/multi-tenant-architectures-on-aws/
 
 **Final instruction:** Proceed without asking the product owner about routine design or implementation choices. Preserve the prototype boundary, use synthetic data, close the Increments 0–5 gaps in the existing branch and PR, and defer formal verification and testing until Increment 5 implementation is complete.
+
+
+### 6.7 Established product workflow patterns
+
+Use the following established product documentation as practical UX and workflow references. Adopt the underlying patterns, not proprietary screens or code:
+
+- **Caseware Audit / Caseware Cloud:** engagement intake drives relevant work programs and documents; staff assignments and workload; client document requests and responses; review notes, preparer response, review completion, sign-off and engagement lock-down. ARM should keep engagement context, assigned work, source evidence, review issues and completion status connected. Caseware itself states that software aids do not replace professional judgment or applicable standards.
+  - Product/workflow overview: https://www.caseware.com/docs/en/cloud/global-audit/global-audit
+  - Engagement management and documentation/review topics: https://www.caseware.com/docs/en-us/cloud/caseware-cloud/engagement-management
+- **Xero:** transaction-level attachments and a dated, user-attributed history-and-notes report. ARM should preserve source files with the transaction and show who changed financial information and when.
+  - Transaction attachments: https://central.xero.com/s/article/View-download-and-delete-files-in-transactions
+  - History and notes: https://central.xero.com/s/article/View-a-history-and-notes-summary-for-transactions-and-user-activity
+- **Intuit Enterprise Suite landed-cost workflow:** separately record supplier charges, choose an allocation method, show the share assigned to each item and retain the allocation record; changes to underlying charges require a controlled reversal/reallocation rather than silent mutation. ARM's prototype uses immutable draft snapshots and exact minor-unit allocation, but does not post inventory valuation.
+  - Landed-cost allocation and review/void model: https://quickbooks.intuit.com/learn-support/en-us/help-article/item-receipts/allocate-landed-costs-intuit-enterprise-suite/L3NU542XT_US_en_US
+
+These are product-pattern references only. They do not establish Ethiopian legal treatment, IFRS policy, tax eligibility, or customs valuation.
