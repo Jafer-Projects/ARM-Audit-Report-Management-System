@@ -441,9 +441,12 @@ pub struct LocalNoteInput {
 #[tauri::command]
 pub fn list_notes(state: State<'_, AppState>) -> Result<Vec<LocalNote>, String> {
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
-    let mut stmt = db.connection.prepare("SELECT id,client_id,title,body,status,updated_at FROM local_note WHERE firm_id=?1 ORDER BY updated_at DESC").map_err(|e|e.to_string())?;
-    let rows = stmt.query_map([FIRM_ID], |r| Ok(LocalNote { id:r.get(0)?,client_id:r.get(1)?,title:r.get(2)?,body:r.get(3)?,status:r.get(4)?,updated_at:r.get(5)? })).map_err(|e|e.to_string())?;
-    rows.collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())
+    let (actor_id,actor_name,persona) = active_actor(&db)?;
+    let mut stmt = db.connection.prepare("SELECT id,client_id,title,body,status,updated_at FROM local_note WHERE firm_id=?1 AND actor_id=?2 ORDER BY updated_at DESC").map_err(|e|e.to_string())?;
+    let rows = stmt.query_map(params![FIRM_ID,actor_id], |r| Ok(LocalNote { id:r.get(0)?,client_id:r.get(1)?,title:r.get(2)?,body:r.get(3)?,status:r.get(4)?,updated_at:r.get(5)? })).map_err(|e|e.to_string())?;
+    let mut notes = rows.collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())?;
+    notes.retain(|note| note.client_id.as_deref().map_or(true, |client_id| actor_has_client_access(&db,client_id,&actor_name,&persona).unwrap_or(false)));
+    Ok(notes)
 }
 
 #[tauri::command]
