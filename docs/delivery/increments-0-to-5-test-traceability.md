@@ -11,12 +11,12 @@
 
 | ID | Normative scenario | Test / evidence | Status |
 |---|---|---|---|
-| I0-01 | First launch shows synthetic-data warning and opens demo workspace without network access | Windows first-launch/offline UI acceptance; no automated UI harness yet | PENDING |
-| I0-02 | Persona selector exposes exactly four demo personas and labels active persona | `commands.rs::set_demo_persona`; four-persona UI enumeration test still required | PARTIAL |
+| I0-01 | First launch shows synthetic-data warning and opens demo workspace without network access | `commands.rs::initialize_workspace_reports_demo_persona_and_disabled_sync`; actual first-launch notice and offline UI acceptance pending | PARTIAL |
+| I0-02 | Persona selector exposes exactly four demo personas and labels active persona | `commands.rs::initialize_workspace_reports_demo_persona_and_disabled_sync` verifies four actors/staff; selector UI test pending | PARTIAL |
 | I0-03 | Read-only reviewer cannot invoke create/update/archive commands | `commands.rs::read_only_reviewer_is_rejected_by_the_shared_mutation_guard`; extend to every mutating command | PARTIAL |
-| I0-04 | Local note survives application restart with identical content and association | `db.rs::local_notes_survive_database_reopen`; full UI restart/association evidence pending | PARTIAL |
+| I0-04 | Local note survives application restart with identical content and association | `commands.rs::save_note_command_persists_local_draft_after_database_reopen` plus database reopen test | AUTOMATED |
 | I0-05 | Activity view shows corresponding event and actor | `db.rs::local_event_actor_and_scope_are_retained_for_material_mutations`; activity UI assertion pending | PARTIAL |
-| I0-06 | Reset requires confirmation and restores only synthetic fixtures | Reset dialog + destructive-boundary integration test required | PENDING |
+| I0-06 | Reset requires confirmation and restores only synthetic fixtures | `commands.rs::reset_demo_data_is_admin_only_and_restores_only_synthetic_fixtures`; confirmation dialog UI test pending | PARTIAL |
 | I0-07 | No production login, live integrations or future-module dead ends | UI navigation/first-launch acceptance and static regression required | PENDING |
 
 ### Increment 1 — Client/company registration (10)
@@ -27,8 +27,8 @@
 | I1-02 | Optional TIN/contact/sector updates profile summary | Command update + summary UI integration test required | PENDING |
 | I1-03 | Invalid email is flagged without losing other entered values | `commands.rs::save_client_command_rejects_invalid_email_without_partial_write` and field validator tests; dirty-form retention UI test pending | PARTIAL |
 | I1-04 | Duplicate name/TIN warns and never silently merges/overwrites | `commands.rs::save_client_command_requires_duplicate_acknowledgement_and_never_merges`; TIN candidate comparison/UI advisory test pending | PARTIAL |
-| I1-05 | Search is firm-scoped; archived hidden by default and shown on request | Client query command integration tests required | PENDING |
-| I1-06 | Update history contains changed fields and before/after values | `db.rs::client_change_history_stores_before_and_after_snapshots`, `client_change_history_is_immutable`; command-generated update snapshot test pending | PARTIAL |
+| I1-05 | Search is firm-scoped; archived hidden by default and shown on request | `commands.rs::client_activation_archive_restore_and_archived_filter_are_consistent` covers archived filter; text search and multi-firm boundary tests pending | PARTIAL |
+| I1-06 | Update history contains changed fields and before/after values | Client lifecycle command test lists change history; database before/after snapshot and immutability tests exist | PARTIAL |
 | I1-07 | Reviewer can view but cannot mutate | `commands.rs::read_only_reviewer_is_rejected_by_the_shared_mutation_guard`; full command read/write permission matrix pending | PARTIAL |
 | I1-08 | Stale row_version conflicts without losing user's values | `commands.rs::save_client_command_rejects_stale_row_version_without_overwriting`; dirty-form retention UI test pending | PARTIAL |
 | I1-09 | Mutation and duplicate acknowledgment each have one audit event in the same transaction | Existing client-history/event database tests cover stored records only; command transaction atomicity test pending | PARTIAL |
@@ -107,13 +107,13 @@
 | X-07 | Role/permission matrix across every command | Reviewer, manager/auditor, task preparer/reviewer and review-note command tests exist; full command matrix pending | PARTIAL |
 | X-08 | Multi-client boundary across every read/write/attachment/history command | `commands.rs::save_record_command_rejects_moving_an_existing_record_between_two_clients`; attachment/history/read-command matrix pending | PARTIAL |
 | X-09 | UI keyboard, labels, help, loading/empty/error/conflict states | Browser-level test harness and Windows runtime evidence pending | PENDING |
-| X-10 | Offline launch, crash/restart and write-failure recovery | Local note restart and transaction rollback tests; UI/fault-injection suite pending | PARTIAL |
+| X-10 | Offline launch, crash/restart and write-failure recovery | Local note and source attachment command restart tests plus transaction rollback; crash/UI/fault-injection suite pending | PARTIAL |
 | X-11 | Windows 10/11 runtime compatibility | CI Windows build is compile evidence only; representative device runtime evidence pending | PENDING |
 
 ## 3. Newly added executable test groups
 
 The current commit adds:
-- Real Tauri-command tests using Tauri's mock runtime for client creation, draft state, audit/history creation, invalid email rejection, duplicate acknowledgment/no-merge, stale-version conflict, reviewer mutation rejection, invoice draft/duplicate/review behavior, cross-client record reassignment rejection, historical-import duplicate-row rejection and successful row reconciliation/provenance, source-document attachment validation across database reopen, import-cost discovery evidence gating, task assignment notifications, inactive-staff rejection, reassignment history, blocker/submission evidence, review-note actor separation and reviewer completion.
+- Real Tauri-command tests using Tauri's mock runtime for demo initialization/reset, local-note and source-document persistence across reopen, client activation/archive/restore/filtering, for client creation, draft state, audit/history creation, invalid email rejection, duplicate acknowledgment/no-merge, stale-version conflict, reviewer mutation rejection, invoice draft/duplicate/review behavior, cross-client record reassignment rejection, historical-import duplicate-row rejection and successful row reconciliation/provenance, source-document attachment validation across database reopen, import-cost discovery evidence gating, task assignment notifications, inactive-staff rejection, reassignment history, blocker/submission evidence, review-note actor separation and reviewer completion.
 - Shared helper tests for reviewed-period date boundaries, client field validation, duplicate acknowledgment, optimistic version guards, persona assignment, record allowlists/transitions and historical import row validation.
 - Import-cost tests for quantity, weight, volume and value allocation; deterministic largest-remainder rounding; fractional quantity/FX rounding; duplicate references; invalid quantities/prices/weights/currencies/provenance; unknown direct targets; unsupported allocation/treatment; negative components; and arithmetic overflow.
 - Database tests for dropped-transaction rollback, foreign-key enforcement and actor/firm/target event scope.
