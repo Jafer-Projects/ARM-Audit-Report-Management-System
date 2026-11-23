@@ -1531,10 +1531,10 @@ mod tests {
     #[test]
     fn invoice_and_tax_workflows_cannot_skip_review_or_claim_approval() {
         assert!(valid_record_transition("invoice", None, "Draft"));
-        assert!(valid_record_transition("invoice", Some("Draft"), "Submitted for review"));
+        assert!(valid_record_transition("invoice", Some("Draft"), "Ready for review"));
         assert!(!valid_record_transition("invoice", None, "Reviewed"));
         assert!(!valid_record_transition("invoice", Some("Draft"), "Reviewed"));
-        assert!(!valid_record_transition("historical_record", Some("Ready for review"), "Reviewed"));
+        assert!(valid_record_transition("historical_record", Some("Ready for review"), "Reviewed"));
     }
 
     #[test]
@@ -1553,8 +1553,10 @@ mod tests {
     #[test]
     fn import_cost_calculation_input_cannot_bypass_discovery_gate() {
         assert!(valid_record_transition("import_case", None, "Discovery"));
-        assert!(valid_record_transition("import_case", Some("Discovery"), "Ready for workshop"));
-        assert!(!valid_record_transition("import_cost_input", None, "Discovery"));
+        assert!(valid_record_transition("import_case", Some("Discovery"), "Inputs captured"));
+        assert!(valid_record_transition("import_cost_input", None, "Draft"));
+        assert!(!valid_record_transition("import_cost_input", None, "Ready for review"));
+        assert!(valid_record_transition("import_cost_input", Some("Draft"), "Ready for review"));
     }
 
     #[test]
