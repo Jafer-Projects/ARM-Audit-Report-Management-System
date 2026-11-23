@@ -434,7 +434,9 @@ export default function App() {
     try {
       setBusy(true); setError("");
       const result = await desktop.readSourceDocument(document.id);
-      const blob = new Blob([new Uint8Array(result.content)], { type: result.metadata.media_type });
+      const bytes = new Uint8Array(result.content);
+      const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+      const blob = new Blob([buffer], { type: result.metadata.media_type });
       const url = URL.createObjectURL(blob);
       const anchor = window.document.createElement("a");
       anchor.href = url; anchor.download = result.metadata.file_name; anchor.target = "_blank";
