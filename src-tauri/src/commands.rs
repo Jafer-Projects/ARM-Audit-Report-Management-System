@@ -1109,7 +1109,7 @@ pub fn reset_demo_data(state: State<'_, AppState>) -> Result<(), String> {
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
     let (actor_id,_,_) = ensure_can_mutate(&db)?;
     let tx = db.connection.unchecked_transaction().map_err(|e|e.to_string())?;
-    tx.execute_batch("DROP TRIGGER IF EXISTS task_review_note_no_delete;
+    tx.execute_batch("DROP TRIGGER IF EXISTS task_review_note_no_delete; DROP TRIGGER IF EXISTS task_review_note_content_immutable; DROP TRIGGER IF EXISTS task_review_note_status_transition;
         DROP TRIGGER IF EXISTS client_change_no_update; DROP TRIGGER IF EXISTS client_change_no_delete;
         DROP TRIGGER IF EXISTS workspace_record_version_no_update; DROP TRIGGER IF EXISTS workspace_record_version_no_delete;
         DROP TRIGGER IF EXISTS historical_import_batch_no_update; DROP TRIGGER IF EXISTS historical_import_batch_no_delete;").map_err(|e|e.to_string())?;
@@ -1120,6 +1120,14 @@ pub fn reset_demo_data(state: State<'_, AppState>) -> Result<(), String> {
     tx.execute("DELETE FROM client_change WHERE firm_id=?1",[FIRM_ID]).map_err(|e|e.to_string())?;
     tx.execute("DELETE FROM client WHERE firm_id=?1",[FIRM_ID]).map_err(|e|e.to_string())?;
     tx.execute_batch("CREATE TRIGGER task_review_note_no_delete BEFORE DELETE ON task_review_note BEGIN SELECT RAISE(ABORT, 'task review notes cannot be deleted'); END;
+        CREATE TRIGGER task_review_note_content_immutable BEFORE UPDATE ON task_review_note
+        WHEN NEW.firm_id<>OLD.firm_id OR NEW.task_id<>OLD.task_id OR NEW.reviewer_actor_id<>OLD.reviewer_actor_id
+          OR NEW.category<>OLD.category OR NEW.description<>OLD.description OR NEW.affected_record_reference<>OLD.affected_record_reference
+          OR NEW.required_response<>OLD.required_response OR NEW.created_at<>OLD.created_at OR NEW.correlation_id<>OLD.correlation_id
+        BEGIN SELECT RAISE(ABORT, 'task review note content is immutable'); END;
+        CREATE TRIGGER task_review_note_status_transition BEFORE UPDATE OF status ON task_review_note
+        WHEN NOT ((OLD.status IN ('Open','Reopened') AND NEW.status='Responded') OR (OLD.status='Responded' AND NEW.status IN ('Cleared','Reopened')))
+        BEGIN SELECT RAISE(ABORT, 'invalid task review note transition'); END;
         CREATE TRIGGER client_change_no_update BEFORE UPDATE ON client_change BEGIN SELECT RAISE(ABORT, 'client change history is immutable'); END;
         CREATE TRIGGER client_change_no_delete BEFORE DELETE ON client_change BEGIN SELECT RAISE(ABORT, 'client change history is immutable'); END;
         CREATE TRIGGER workspace_record_version_no_update BEFORE UPDATE ON workspace_record_version BEGIN SELECT RAISE(ABORT, 'workspace record versions are immutable'); END;
