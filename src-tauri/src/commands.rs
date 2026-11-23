@@ -1477,6 +1477,159 @@ pub fn list_workspace_record_versions(record_id: String, state: State<'_, AppSta
     rows.collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())
 }
 
+
+#[derive(Serialize, Clone)]
+pub struct SourceDocumentMeta {
+    id: String,
+    record_id: String,
+    file_name: String,
+    media_type: String,
+    size_bytes: i64,
+    sha256: String,
+    actor_name: String,
+    created_at: String,
+}
+
+#[derive(Serialize)]
+pub struct SourceDocumentContent {
+    metadata: SourceDocumentMeta,
+    content: Vec<u8>,
+}
+
+fn document_record_context(db: &Database, record_id: &str) -> Result<(String, String, String, String), String> {
+    db.connection.query_row(
+        "SELECT r.client_id,r.record_type,c.status,r.title
+         FROM workspace_record r JOIN client c ON c.id=r.client_id
+         WHERE r.id=?1 AND r.firm_id=?2 AND c.firm_id=?2",
+        params![record_id,FIRM_ID],
+        |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))
+    ).map_err(|_| "The source document must be attached to an existing client invoice or historical record.".to_string())
+}
+
+fn detected_document_type(content: &[u8]) -> Option<&'static str> {
+    if content.starts_with(b"%PDF-") { Some("application/pdf") }
+    else if content.starts_with(&[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]) { Some("image/png") }
+    else if content.len() >= 3 && content[0..3] == [0xFF, 0xD8, 0xFF] { Some("image/jpeg") }
+    else { None }
+}
+
+#[tauri::command]
+pub fn attach_source_document(
+    client_id: String,
+    record_id: String,
+    file_name: String,
+    media_type: String,
+    content: Vec<u8>,
+    state: State<'_, AppState>,
+) -> Result<SourceDocumentMeta, String> {
+    let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
+    let (actor_id, actor_name, persona) = ensure_can_mutate(&db)?;
+    if content.is_empty() || content.len() > 5 * 1024 * 1024 {
+        return Err("Choose a non-empty PDF, JPEG or PNG file no larger than 5 MB.".into());
+    }
+    let name = file_name.trim();
+    if name.is_empty() || name.chars().count() > 180 || name.contains('/') || name.contains('\\') || name.chars().any(char::is_control) {
+        return Err("The filename is invalid; paths and control characters are not accepted.".into());
+    }
+    let detected = detected_document_type(&content).ok_or_else(|| "The file content is not a supported PDF, JPEG or PNG document.".to_string())?;
+    let supplied = media_type.trim().to_ascii_lowercase();
+    if !supplied.is_empty() && supplied != detected {
+        return Err("The file's declared type does not match its actual content.".into());
+    }
+    let extension = name.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
+    let expected_extension = match detected { "application/pdf" => "pdf", "image/jpeg" => "jpg", "image/png" => "png", _ => "" };
+    if extension != expected_extension && !(detected == "image/jpeg" && extension == "jpeg") {
+        return Err("The filename extension must match the detected file content.".into());
+    }
+    let (record_client_id, record_type, client_status, _) = document_record_context(&db, &record_id)?;
+    if record_client_id != client_id || client_status != "Active" {
+        return Err("The record must belong to the selected active client workspace.".into());
+    }
+    if !["invoice", "historical_record"].contains(&record_type.as_str()) {
+        return Err("Source documents can be attached only to invoice or historical-record evidence in this prototype.".into());
+    }
+    if !actor_has_client_access(&db, &client_id, &actor_name, &persona)? {
+        return Err("This demo persona does not have access to the selected client evidence.".into());
+    }
+    let mut hasher = Sha256::new();
+    hasher.update(&content);
+    let checksum = format!("{:x}", hasher.finalize());
+    let duplicate: bool = db.connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM source_document WHERE firm_id=?1 AND record_id=?2 AND sha256=?3)",
+        params![FIRM_ID,record_id,checksum], |r| r.get(0)
+    ).map_err(|e| e.to_string())?;
+    if duplicate { return Err("This exact document is already attached to the selected record.".into()); }
+
+    let id = Uuid::new_v4().to_string();
+    let now = now_utc();
+    let correlation_id = Uuid::new_v4().to_string();
+    let tx = db.connection.unchecked_transaction().map_err(|e| e.to_string())?;
+    tx.execute(
+        "INSERT INTO source_document(id,firm_id,client_id,record_id,actor_id,file_name,media_type,size_bytes,sha256,content,created_at,correlation_id)
+         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
+        params![id,FIRM_ID,client_id,record_id,actor_id,name,detected,content.len() as i64,checksum,content,now,correlation_id]
+    ).map_err(|e| e.to_string())?;
+    tx.execute(
+        "INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json)
+         VALUES(?1,?2,?3,'source_document_attached','source_document',?4,?5,?6,?7)",
+        params![Uuid::new_v4().to_string(),FIRM_ID,actor_id,id,now,correlation_id,json!({"client_id":client_id,"record_id":record_id,"file_name":name,"media_type":detected,"size_bytes":content.len(),"sha256":checksum}).to_string()]
+    ).map_err(|e| e.to_string())?;
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(SourceDocumentMeta { id, record_id, file_name:name.to_string(), media_type:detected.to_string(), size_bytes:content.len() as i64, sha256:checksum, actor_name, created_at:now })
+}
+
+#[tauri::command]
+pub fn list_source_documents(record_id: String, state: State<'_, AppState>) -> Result<Vec<SourceDocumentMeta>, String> {
+    let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
+    let (client_id, record_type, client_status, _) = document_record_context(&db, &record_id)?;
+    if client_status != "Active" || !["invoice","historical_record"].contains(&record_type.as_str()) {
+        return Err("Source evidence is unavailable for this record.".into());
+    }
+    let (_, actor_name, persona) = active_actor(&db)?;
+    if !actor_has_client_access(&db, &client_id, &actor_name, &persona)? {
+        return Err("This demo persona does not have access to the selected client evidence.".into());
+    }
+    let mut stmt = db.connection.prepare(
+        "SELECT d.id,d.record_id,d.file_name,d.media_type,d.size_bytes,d.sha256,a.display_name,d.created_at
+         FROM source_document d JOIN demo_actor a ON a.id=d.actor_id
+         WHERE d.firm_id=?1 AND d.record_id=?2 ORDER BY d.created_at DESC"
+    ).map_err(|e| e.to_string())?;
+    let rows = stmt.query_map(params![FIRM_ID,record_id], |r| Ok(SourceDocumentMeta {
+        id:r.get(0)?,record_id:r.get(1)?,file_name:r.get(2)?,media_type:r.get(3)?,size_bytes:r.get(4)?,sha256:r.get(5)?,actor_name:r.get(6)?,created_at:r.get(7)?
+    })).map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>,_>>().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn read_source_document(id: String, state: State<'_, AppState>) -> Result<SourceDocumentContent, String> {
+    let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
+    let (client_id, record_type, client_status, _) = db.connection.query_row(
+        "SELECT d.client_id,r.record_type,c.status,r.title
+         FROM source_document d JOIN workspace_record r ON r.id=d.record_id
+         JOIN client c ON c.id=d.client_id
+         WHERE d.id=?1 AND d.firm_id=?2 AND r.firm_id=?2 AND c.firm_id=?2",
+        params![id,FIRM_ID], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))
+    ).map_err(|_| "Source document not found in this demonstration firm.".to_string())?;
+    if client_status != "Active" || !["invoice","historical_record"].contains(&record_type.as_str()) {
+        return Err("Source evidence is unavailable for this record.".into());
+    }
+    let (_, actor_name, persona) = active_actor(&db)?;
+    if !actor_has_client_access(&db, &client_id, &actor_name, &persona)? {
+        return Err("This demo persona does not have access to the selected client evidence.".into());
+    }
+    let (meta, content) = db.connection.query_row(
+        "SELECT d.id,d.record_id,d.file_name,d.media_type,d.size_bytes,d.sha256,a.display_name,d.created_at,d.content
+         FROM source_document d JOIN demo_actor a ON a.id=d.actor_id
+         WHERE d.id=?1 AND d.firm_id=?2",
+        params![id,FIRM_ID],
+        |r| Ok((
+            SourceDocumentMeta { id:r.get(0)?,record_id:r.get(1)?,file_name:r.get(2)?,media_type:r.get(3)?,size_bytes:r.get(4)?,sha256:r.get(5)?,actor_name:r.get(6)?,created_at:r.get(7)? },
+            r.get::<_,Vec<u8>>(8)?
+        ))
+    ).map_err(|e| e.to_string())?;
+    Ok(SourceDocumentContent { metadata:meta, content })
+}
+
 #[tauri::command]
 pub fn list_events(state: State<'_, AppState>) -> Result<Vec<EventItem>, String> {
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
