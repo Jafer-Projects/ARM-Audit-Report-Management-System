@@ -13,3 +13,5 @@
 .client-context{display:flex;align-items:center;gap:10px;margin:0 0 16px;font-size:9px;font-weight:700;letter-spacing:.1em;color:#7e8d99}.client-context select{min-width:260px;border:1px solid #dfe5e9;border-radius:6px;padding:8px 10px;background:#fff;color:#40596e;font-size:10px;letter-spacing:normal}
 
 .evidence-prototype-note{font-size:10px;line-height:1.5;color:#7a6330;background:#fff8e8;border:1px solid #eee0b8;padding:9px 11px;border-radius:5px;margin:0}
+
+.queue-filter{display:flex;align-items:center;gap:12px;margin:-8px 0 14px}.queue-filter span{font-size:9px;color:#8795a0}
