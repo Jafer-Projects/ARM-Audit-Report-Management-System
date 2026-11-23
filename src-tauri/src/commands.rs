@@ -496,6 +496,171 @@ pub struct HistoricalImportBatch {
     imported_at: String,
 }
 
+#[derive(Serialize)]
+pub struct TaskReviewNote {
+    id: String,
+    task_id: String,
+    category: String,
+    description: String,
+    affected_record_reference: String,
+    required_response: String,
+    status: String,
+    preparer_response: String,
+    reviewer_name: String,
+    response_actor_name: String,
+    disposition: String,
+    disposition_actor_name: String,
+    created_at: String,
+    updated_at: String,
+}
+
+#[tauri::command]
+pub fn list_task_review_notes(task_id: String, state: State<'_, AppState>) -> Result<Vec<TaskReviewNote>, String> {
+    let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
+    let (_, actor_name, persona) = active_actor(&db)?;
+    let raw: String = db.connection.query_row(
+        "SELECT payload_json FROM workspace_record WHERE id=?1 AND firm_id=?2 AND record_type='task'",
+        params![task_id,FIRM_ID], |r|r.get(0)
+    ).map_err(|_|"Task not found in this demonstration firm.".to_string())?;
+    let payload: serde_json::Value = serde_json::from_str(&raw).unwrap_or_else(|_|json!({}));
+    let assignee = payload.get("assignee").and_then(|v|v.as_str()).unwrap_or("");
+    let reviewer = payload.get("reviewer").and_then(|v|v.as_str()).unwrap_or("");
+    if (persona == "auditor" && assignee != actor_name.as_str())
+        || (persona == "reviewer" && reviewer != actor_name.as_str()) {
+        return Err("This task is not assigned to your demo persona.".into());
+    }
+    let mut stmt = db.connection.prepare(
+        "SELECT n.id,n.task_id,n.category,n.description,n.affected_record_reference,n.required_response,n.status,n.preparer_response,
+                reviewer.display_name,COALESCE(response_actor.display_name,''),n.disposition,COALESCE(disposition_actor.display_name,''),
+                n.created_at,n.updated_at
+         FROM task_review_note n
+         JOIN demo_actor reviewer ON reviewer.id=n.reviewer_actor_id
+         LEFT JOIN demo_actor response_actor ON response_actor.id=n.response_actor_id
+         LEFT JOIN demo_actor disposition_actor ON disposition_actor.id=n.disposition_actor_id
+         WHERE n.firm_id=?1 AND n.task_id=?2 ORDER BY n.created_at"
+    ).map_err(|e|e.to_string())?;
+    let rows = stmt.query_map(params![FIRM_ID,task_id], |r| Ok(TaskReviewNote {
+        id:r.get(0)?,task_id:r.get(1)?,category:r.get(2)?,description:r.get(3)?,
+        affected_record_reference:r.get(4)?,required_response:r.get(5)?,status:r.get(6)?,
+        preparer_response:r.get(7)?,reviewer_name:r.get(8)?,response_actor_name:r.get(9)?,
+        disposition:r.get(10)?,disposition_actor_name:r.get(11)?,created_at:r.get(12)?,updated_at:r.get(13)?
+    })).map_err(|e|e.to_string())?;
+    rows.collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())
+}
+
+#[tauri::command]
+pub fn add_task_review_note(task_id: String, category: String, description: String, affected_record_reference: String, required_response: String, state: State<'_, AppState>) -> Result<TaskReviewNote, String> {
+    let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
+    let (actor_id, actor_name, persona) = ensure_can_mutate(&db)?;
+    if !["administrator","manager"].contains(&persona.as_str()) {
+        return Err("Only the separately assigned demo reviewer can create a review note.".into());
+    }
+    if !["Missing evidence","Incorrect data","Unclear explanation","Calculation query","Other"].contains(&category.as_str()) {
+        return Err("Choose a supported review-note category.".into());
+    }
+    if description.trim().chars().count() < 5 || description.chars().count() > 2000
+        || required_response.trim().chars().count() < 5 || required_response.chars().count() > 1000 {
+        return Err("Review description and required response must be completed within the stated limits.".into());
+    }
+    let (status, updated_by, raw): (String,String,String) = db.connection.query_row(
+        "SELECT status,updated_by,payload_json FROM workspace_record WHERE id=?1 AND firm_id=?2 AND record_type='task'",
+        params![task_id,FIRM_ID], |r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))
+    ).map_err(|_|"Task not found in this demonstration firm.".to_string())?;
+    if status != "Submitted" { return Err("Review notes can only be opened on a task submitted for review.".into()); }
+    if updated_by == actor_id { return Err("The preparer cannot review their own task.".into()); }
+    let payload: serde_json::Value = serde_json::from_str(&raw).unwrap_or_else(|_|json!({}));
+    if payload.get("reviewer").and_then(|v|v.as_str()) != Some(actor_name.as_str()) {
+        return Err("You are not the reviewer explicitly assigned to this task.".into());
+    }
+    let id = Uuid::new_v4().to_string();
+    let now = now_utc();
+    let correlation_id = Uuid::new_v4().to_string();
+    let tx = db.connection.unchecked_transaction().map_err(|e|e.to_string())?;
+    tx.execute(
+        "INSERT INTO task_review_note(id,firm_id,task_id,reviewer_actor_id,category,description,affected_record_reference,required_response,status,created_at,updated_at,correlation_id)
+         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,'Open',?9,?9,?10)",
+        params![id,FIRM_ID,task_id,actor_id,category,description.trim(),affected_record_reference.trim(),required_response.trim(),now,correlation_id]
+    ).map_err(|e|e.to_string())?;
+    tx.execute(
+        "INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json)
+         VALUES(?1,?2,?3,'task_review_note_opened','task_review_note',?4,?5,?6,?7)",
+        params![Uuid::new_v4().to_string(),FIRM_ID,actor_id,id,now,correlation_id,json!({"task_id":task_id,"category":category}).to_string()]
+    ).map_err(|e|e.to_string())?;
+    tx.commit().map_err(|e|e.to_string())?;
+    let mut stmt = db.connection.prepare(
+        "SELECT n.id,n.task_id,n.category,n.description,n.affected_record_reference,n.required_response,n.status,n.preparer_response,
+                reviewer.display_name,COALESCE(response_actor.display_name,''),n.disposition,COALESCE(disposition_actor.display_name,''),
+                n.created_at,n.updated_at
+         FROM task_review_note n JOIN demo_actor reviewer ON reviewer.id=n.reviewer_actor_id
+         LEFT JOIN demo_actor response_actor ON response_actor.id=n.response_actor_id
+         LEFT JOIN demo_actor disposition_actor ON disposition_actor.id=n.disposition_actor_id WHERE n.id=?1"
+    ).map_err(|e|e.to_string())?;
+    stmt.query_row([id], |r| Ok(TaskReviewNote {
+        id:r.get(0)?,task_id:r.get(1)?,category:r.get(2)?,description:r.get(3)?,
+        affected_record_reference:r.get(4)?,required_response:r.get(5)?,status:r.get(6)?,
+        preparer_response:r.get(7)?,reviewer_name:r.get(8)?,response_actor_name:r.get(9)?,
+        disposition:r.get(10)?,disposition_actor_name:r.get(11)?,created_at:r.get(12)?,updated_at:r.get(13)?
+    })).map_err(|e|e.to_string())
+}
+
+#[tauri::command]
+pub fn respond_task_review_note(note_id: String, response: String, state: State<'_, AppState>) -> Result<(), String> {
+    let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
+    let (actor_id, actor_name, persona) = ensure_can_mutate(&db)?;
+    if persona != "auditor" { return Err("Only the assigned preparer responds to a review note.".into()); }
+    if response.trim().chars().count() < 3 || response.chars().count() > 2000 {
+        return Err("A response of 3–2,000 characters is required.".into());
+    }
+    let (task_id,status,raw): (String,String,String) = db.connection.query_row(
+        "SELECT n.task_id,n.status,t.payload_json FROM task_review_note n JOIN workspace_record t ON t.id=n.task_id
+         WHERE n.id=?1 AND n.firm_id=?2 AND t.firm_id=?2 AND t.record_type='task'",
+        params![note_id,FIRM_ID], |r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))
+    ).map_err(|_|"Review note not found.".to_string())?;
+    if !["Open","Reopened"].contains(&status.as_str()) { return Err("Only an open or reopened review note can receive a response.".into()); }
+    let payload: serde_json::Value = serde_json::from_str(&raw).unwrap_or_else(|_|json!({}));
+    if payload.get("assignee").and_then(|v|v.as_str()) != Some(actor_name.as_str()) {
+        return Err("Only the assigned preparer can respond to this review note.".into());
+    }
+    let now = now_utc();
+    let correlation_id = Uuid::new_v4().to_string();
+    let tx = db.connection.unchecked_transaction().map_err(|e|e.to_string())?;
+    tx.execute("UPDATE task_review_note SET status='Responded',preparer_response=?1,response_actor_id=?2,responded_at=?3,updated_at=?3 WHERE id=?4 AND firm_id=?5",
+        params![response.trim(),actor_id,now,note_id,FIRM_ID]).map_err(|e|e.to_string())?;
+    tx.execute("INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json) VALUES(?1,?2,?3,'task_review_note_responded','task_review_note',?4,?5,?6,?7)",
+        params![Uuid::new_v4().to_string(),FIRM_ID,actor_id,note_id,now,correlation_id,json!({"task_id":task_id}).to_string()]).map_err(|e|e.to_string())?;
+    tx.commit().map_err(|e|e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn disposition_task_review_note(note_id: String, decision: String, reason: String, state: State<'_, AppState>) -> Result<(), String> {
+    let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
+    let (actor_id, actor_name, persona) = ensure_can_mutate(&db)?;
+    if !["administrator","manager"].contains(&persona.as_str()) { return Err("Only the assigned demo reviewer can dispose of a review note.".into()); }
+    if !["Cleared","Reopened"].contains(&decision.as_str()) || reason.trim().chars().count() < 3 || reason.chars().count() > 1000 {
+        return Err("Choose Clear or Reopen and record a 3–1,000 character reason.".into());
+    }
+    let (task_id,status,raw): (String,String,String) = db.connection.query_row(
+        "SELECT n.task_id,n.status,t.payload_json FROM task_review_note n JOIN workspace_record t ON t.id=n.task_id
+         WHERE n.id=?1 AND n.firm_id=?2 AND t.firm_id=?2 AND t.record_type='task'",
+        params![note_id,FIRM_ID], |r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))
+    ).map_err(|_|"Review note not found.".to_string())?;
+    if status != "Responded" { return Err("A review note must have a preparer response before it can be cleared or reopened.".into()); }
+    let payload: serde_json::Value = serde_json::from_str(&raw).unwrap_or_else(|_|json!({}));
+    if payload.get("reviewer").and_then(|v|v.as_str()) != Some(actor_name.as_str()) {
+        return Err("You are not the reviewer assigned to this task.".into());
+    }
+    let now = now_utc();
+    let correlation_id = Uuid::new_v4().to_string();
+    let tx = db.connection.unchecked_transaction().map_err(|e|e.to_string())?;
+    tx.execute("UPDATE task_review_note SET status=?1,disposition=?2,disposition_actor_id=?3,disposition_at=?4,updated_at=?4 WHERE id=?5 AND firm_id=?6",
+        params![decision,reason.trim(),actor_id,now,note_id,FIRM_ID]).map_err(|e|e.to_string())?;
+    tx.execute("INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json) VALUES(?1,?2,?3,?4,'task_review_note',?5,?6,?7,?8)",
+        params![Uuid::new_v4().to_string(),FIRM_ID,actor_id,if decision=="Cleared"{"task_review_note_cleared"}else{"task_review_note_reopened"},note_id,now,correlation_id,json!({"task_id":task_id,"reason":reason.trim()}).to_string()]).map_err(|e|e.to_string())?;
+    tx.commit().map_err(|e|e.to_string())?;
+    Ok(())
+}
+
 #[tauri::command]
 pub fn import_historical_batch(input: HistoricalImportInput, state: State<'_, AppState>) -> Result<HistoricalImportResult, String> {
     if input.source_content.len() > 5 * 1024 * 1024 {
