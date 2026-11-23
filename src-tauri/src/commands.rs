@@ -263,6 +263,30 @@ pub fn save_client(input: ClientInput, state: State<'_, AppState>) -> Result<Cli
     })).map_err(|e| e.to_string())
 }
 
+#[derive(Serialize)]
+pub struct ClientChange {
+    id: String, action: String, changed_at: String, actor_name: String, before_json: String, after_json: String,
+}
+
+#[tauri::command]
+pub fn list_client_changes(client_id: String, state: State<'_, AppState>) -> Result<Vec<ClientChange>, String> {
+    let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
+    let client_exists: bool = db.connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM client WHERE id=?1 AND firm_id=?2)",
+        params![client_id,FIRM_ID], |r| r.get(0)
+    ).map_err(|e|e.to_string())?;
+    if !client_exists { return Err("Client not found in this demonstration firm.".into()); }
+    let mut stmt = db.connection.prepare(
+        "SELECT c.id,c.action,c.changed_at,a.display_name,c.before_json,c.after_json
+         FROM client_change c JOIN demo_actor a ON a.id=c.actor_id
+         WHERE c.firm_id=?1 AND c.client_id=?2 ORDER BY c.changed_at DESC"
+    ).map_err(|e|e.to_string())?;
+    let rows = stmt.query_map(params![FIRM_ID,client_id], |r| Ok(ClientChange {
+        id:r.get(0)?,action:r.get(1)?,changed_at:r.get(2)?,actor_name:r.get(3)?,before_json:r.get(4)?,after_json:r.get(5)?
+    })).map_err(|e|e.to_string())?;
+    rows.collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())
+}
+
 #[tauri::command]
 pub fn archive_client(id: String, state: State<'_, AppState>) -> Result<(), String> {
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
