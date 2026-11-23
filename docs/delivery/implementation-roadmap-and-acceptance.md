@@ -21,7 +21,7 @@ The first increments are defined in [Phase 1 incremental development and feedbac
 5. Staff tasks and review workflow.
 6. Import-cost worksheet discovery and prototype only after required cost-input brief is obtained.
 
-Demonstrate each vertical slice for feedback and run its relevant tests continuously, but do not accept or pass increments individually. All Increments 0–5 must be implemented on branch `implementation/increments-0-to-5` and PR #2. The single collective acceptance decision occurs only after Increment 5, when the integrated system is tested against every Increments 0–5 requirement and cross-increment workflow. A failure in any criterion blocks the collective gate. Separate legal, security, professional and production-release gates remain in force.
+Demonstrate vertical slices for product-owner feedback and prepare their test plans/fixtures during implementation. Do not execute the formal Increments 0–5 verification/test program until Increment 5 implementation is complete. Do not accept or pass increments individually. All Increments 0–5 must be implemented on branch `implementation/increments-0-to-5` and PR #2. The single collective acceptance decision occurs only after Increment 5, when the integrated system is tested against every Increments 0–5 requirement and cross-increment workflow. A failure in any criterion blocks the collective gate. Separate legal, security, professional and production-release gates remain in force.
 
 ## 4. Broader product phases
 
