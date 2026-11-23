@@ -1311,4 +1311,23 @@ mod tests {
         assert!(valid_record_transition("import_case", Some("Discovery"), "Ready for workshop"));
         assert!(!valid_record_transition("import_cost_input", None, "Discovery"));
     }
+
+    #[test]
+    fn client_workspace_access_requires_a_non_draft_task_assignment() {
+        use crate::db::Database;
+        let db = Database::memory().expect("in-memory database");
+        let client_id = "00000000-0000-4000-8000-000000000101";
+        assert!(!actor_has_client_access(&db,client_id,"Demo Auditor","auditor").expect("access check"));
+        db.connection.execute(
+            "INSERT INTO workspace_record(id,firm_id,client_id,record_type,title,status,payload_json,created_at,updated_at,created_by,updated_by)
+             VALUES('access-task',?1,?2,'task','Assigned work','Draft','{\"assignee\":\"Demo Auditor\",\"reviewer\":\"Demo Engagement Manager\"}','now','now','00000000-0000-4000-8000-000000000012','00000000-0000-4000-8000-000000000012')",
+            rusqlite::params![FIRM_ID,client_id],
+        ).expect("insert draft task");
+        assert!(!actor_has_client_access(&db,client_id,"Demo Auditor","auditor").expect("draft is not assigned"));
+        db.connection.execute("UPDATE workspace_record SET status='Assigned' WHERE id='access-task'", []).expect("assign task");
+        assert!(actor_has_client_access(&db,client_id,"Demo Auditor","auditor").expect("preparer access"));
+        assert!(actor_has_client_access(&db,client_id,"Demo Engagement Manager","reviewer").expect("reviewer access"));
+        assert!(!actor_has_client_access(&db,client_id,"Other Persona","auditor").expect("other persona denied"));
+    }
+
 }
