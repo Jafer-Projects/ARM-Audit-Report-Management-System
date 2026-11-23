@@ -284,7 +284,7 @@ These do not block the local synthetic prototype unless stated:
 
 ## 13. Definition of ready for the next increment
 
-Increment 2 may begin detailed design only after Increment 1 is demonstrated and accepted by at least one practitioner, field definitions and exception cases are recorded, all critical acceptance tests pass, and the product owner confirms the next workflow. This does not require closing unrelated tax, licensing or production gates.
+Increment 2 detailed design may proceed after the Increment 1 workflow has been demonstrated and practitioner feedback, field definitions and exception cases have been recorded. This is a sequencing and learning checkpoint only; it is not Increment 1 acceptance, does not create an increment-level pass status, and does not change the single collective acceptance gate after Increment 5. Unrelated tax, licensing and production gates remain separate.
 
 
 ---
@@ -428,7 +428,7 @@ Clients → Add client → Enter identity → Save draft → Review completeness
 - History must survive application restart.
 - Reset of synthetic demo data must be explicitly identified as a demo reset, not routine deletion.
 
-## 2.2 Increment 1 acceptance walkthrough by user
+## 2.2 Increment 1 verification walkthrough by user
 
 | User | Scenario | Expected result |
 |---|---|---|
