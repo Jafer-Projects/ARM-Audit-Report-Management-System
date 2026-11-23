@@ -9,14 +9,18 @@ This log records engineering evidence while the integrated system is being built
 ## Current implementation baseline
 
 - [x] Tauri 2 desktop shell and React/TypeScript application scaffold added.
-- [x] Local SQLite database and initial schema migration added.
+- [x] Local SQLite database with five forward-only migrations, checksum validation, WAL/full-sync settings and restart recovery added.
+- [x] Immutable workspace-record version snapshots and client before/after profile history added.
 - [x] Synthetic demo firm and four demo personas seeded.
-- [x] Client register with draft save, basic validation, optimistic concurrency, activation, archive and restore commands added.
+- [x] Client register with draft save, field validation, duplicate comparison/acknowledgement, optimistic concurrency, activation, archive and restore commands added.
+- [x] Client profile history window displays before/after snapshots, actor and timestamp.
 - [x] Increment 0 local draft notes with client association and persistence migration added.
 - [x] Shared workspace records added for catalogue/invoices, historical data, tasks and import-cost discovery.
 - [x] Append-only local activity event table and activity view added.
 - [x] Offline/local-only status presented honestly.
 - [x] Windows x64 CI workflow added for typecheck, domain tests, frontend build and Rust build.
+- [x] Three Node domain contract tests executed locally: 3 passed.
+- [ ] Rust tests, TypeScript typecheck, frontend build and Tauri Windows build remain unverified because no application workflow jobs have run; the available repository Actions runs report startup failure with zero jobs.
 
 These checkmarks mean source code has been added, not that the feature has passed acceptance or been verified by CI.
 
