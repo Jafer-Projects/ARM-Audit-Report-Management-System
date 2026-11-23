@@ -1031,6 +1031,10 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
             if input.status == "Ready for review" && source_reference.is_empty() {
                 return Err("Add a source document/reference before submitting an import-cost input for review.".into());
             }
+            if input.status == "Ready for review"
+                && payload.get("source_date").and_then(|v| v.as_str()).unwrap_or("").trim().is_empty() {
+                return Err("Record the source document date before submitting an import-cost input for review.".into());
+            }
             let read_integer = |key: &str| -> Result<i64, String> {
                 let raw = payload.get(key).and_then(|v| v.as_str()).unwrap_or("").trim();
                 raw.parse::<i64>().map_err(|_| format!("Import-cost field {key} must be a whole-number value."))
