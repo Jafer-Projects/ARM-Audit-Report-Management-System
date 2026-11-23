@@ -26,6 +26,7 @@ pub fn run() {
             commands::initialize_workspace,
             commands::list_clients,
             commands::save_client,
+            commands::find_client_duplicates,
             commands::archive_client,
             commands::activate_client,
             commands::restore_client,
