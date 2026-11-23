@@ -21,3 +21,5 @@ export type RecordInput = {
   id?: string; row_version?: number; client_id?: string | null; record_type: string;
   title: string; status: string; reference?: string; amount_text?: string; notes?: string;
 };
+
+export type LocalNote = { id: string; client_id: string | null; title: string; body: string; status: string; updated_at: string };
