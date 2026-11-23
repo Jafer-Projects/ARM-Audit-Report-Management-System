@@ -129,6 +129,7 @@ export default function App() {
   const [workspace, setWorkspace] = useState<WorkspaceInfo | null>(null);
   const [section, setSection] = useState<Section>("home");
   const [clients, setClients] = useState<Client[]>([]);
+  const [selectedClientId, setSelectedClientId] = useState("");
   const [records, setRecords] = useState<WorkspaceRecord[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [notes, setNotes] = useState<LocalNote[]>([]);
@@ -151,7 +152,7 @@ export default function App() {
       setNotes(await desktop.notes());
       if (nextSection === "clients") setClients(await desktop.clients(includeArchived));
       if (nextSection === "activity") setEvents(await desktop.events());
-      if (["catalogue", "history", "work", "imports"].includes(nextSection)) setRecords(await desktop.records(recordType));
+      if (["catalogue", "history", "work", "imports"].includes(nextSection)) setRecords(await desktop.records(recordType, recordType === "staff" ? undefined : selectedClientId || undefined));
     } catch (e) { setError(String(e)); }
   }
   useEffect(() => { void refresh("home"); }, []);
@@ -162,10 +163,12 @@ export default function App() {
   }, [section]);
   useEffect(() => {
     if (["catalogue", "history", "work", "imports"].includes(section)) {
-      void desktop.records(recordType).then(setRecords).catch((e) => setError(String(e)));
-      void desktop.clients(false).then(setClients).catch((e) => setError(String(e)));
+      void desktop.clients(false).then(items => { setClients(items); setSelectedClientId(current => current || items[0]?.id || ""); }).catch((e) => setError(String(e)));
+      if (recordType === "staff" || selectedClientId) {
+        void desktop.records(recordType, recordType === "staff" ? undefined : selectedClientId).then(setRecords).catch((e) => setError(String(e)));
+      } else { setRecords([]); }
     }
-  }, [recordType, section]);
+  }, [recordType, section, selectedClientId]);
 
   const recordPayload = useMemo<Record<string, string>>(() => {
     if (!recordEditor?.payload_json) return {};
@@ -237,7 +240,7 @@ export default function App() {
         status: v.status || (statusOptions[recordType] ?? config.statuses)[0], reference: v.reference || "",
         amount_text: v.amount_text || "", notes: v.notes || "", payload_json: JSON.stringify(Object.fromEntries((recordFields[recordType] ?? []).map(field => [field.key, v[field.key] ?? ""]))),
       });
-      setRecordEditor(null); setRecords(await desktop.records(recordType));
+      setRecordEditor(null); setRecords(await desktop.records(recordType, recordType === "staff" ? undefined : selectedClientId || undefined));
     } catch (e) { setError(String(e)); } finally { setBusy(false); }
   }
   async function saveNote(event: FormEvent<HTMLFormElement>) {
@@ -296,8 +299,9 @@ export default function App() {
         const config = recordTypes[section as keyof typeof recordTypes];
         if (!config) return null;
         return <section className="content-panel">
-          <div className="section-head"><div><span className="overline">{config.label.toUpperCase()}</span><h2>{nav.find(n => n.id === section)?.label}</h2><p>{config.hint}</p></div><button className="primary" disabled={!canMutate} onClick={() => setRecordEditor({ id:"",client_id:null,record_type:recordType,title:"",status:(statusOptions[recordType] ?? config.statuses)[0],reference:"",amount_text:"",notes:"",payload_json:"{}",row_version:0,updated_at:"" })}>+ Add record</button></div>
+          <div className="section-head"><div><span className="overline">{config.label.toUpperCase()}</span><h2>{nav.find(n => n.id === section)?.label}</h2><p>{config.hint}</p></div><button className="primary" disabled={!canMutate || (recordType !== "staff" && !selectedClientId)} onClick={() => setRecordEditor({ id:"",client_id:recordType === "staff" ? null : selectedClientId,record_type:recordType,title:"",status:(statusOptions[recordType] ?? config.statuses)[0],reference:"",amount_text:"",notes:"",payload_json:"{}",row_version:0,updated_at:"" })}>+ Add record</button></div>
           <div className="subtype-tabs" role="group" aria-label="Record type">{subtypeOptions[section as keyof typeof subtypeOptions].map(option => <button key={option.type} className={recordType === option.type ? "subtype-tab active" : "subtype-tab"} disabled={option.type === "import_cost_input"} onClick={() => setRecordType(option.type)}>{option.type === "import_cost_input" ? "Cost inputs · gated" : option.label}</button>)}</div>
+          {recordType !== "staff" && <label className="client-context">CLIENT WORKSPACE<select value={selectedClientId} onChange={e => setSelectedClientId(e.target.value)}><option value="">Select a client…</option>{clients.map(c => <option key={c.id} value={c.id}>{c.display_name || c.legal_name}</option>)}</select></label>}
           {section === "imports" && <p className="gate-note">Cost-input capture and calculation stay locked until the Gate 5-A practitioner discovery brief, approved input dictionary and independent worked example are recorded. Use the Discovery workspace to document questions; no customs or landed-cost assumptions are applied.</p>}
           <div className="record-grid">{records.map(r => <article className="record-card" key={r.id}><div className="record-card-top"><span className="status">{r.status}</span><small>{new Date(r.updated_at).toLocaleDateString()}</small></div><h3>{r.title}</h3><p>{r.notes || "No additional notes"}</p><div className="record-meta"><span>{r.reference || "No source reference"}</span>{r.amount_text && <strong>{r.amount_text}</strong>}</div><button className="text-button" onClick={() => setRecordEditor(r)}>Open record →</button></article>)}
           {records.length === 0 && <div className="empty-card"><strong>No records yet</strong><p>Create a record to start this workflow. Data is stored locally in the demo database.</p></div>}</div>
