@@ -44,7 +44,7 @@
 | I2-04 | Invalid values do not erase other entered values | Form state retention/UI validation test required | PENDING |
 | I2-05 | Duplicate invoice candidate is advisory; no automatic overwrite/merge | Invoice duplicate command + no-merge integration test required | PENDING |
 | I2-06 | Source attachment metadata and association survive restart | Attachment command/reopen/read-back test required | PENDING |
-| I2-07 | Unsupported or unsafe file type is rejected clearly | `commands.rs::source_document_type_uses_file_signature_not_declared_extension`; command-level MIME/extension/size/path checks still pending | PARTIAL |
+| I2-07 | Unsupported or unsafe file type is rejected clearly | `commands.rs::source_document_validation_checks_content_name_mime_extension_and_size` and `source_document_type_uses_file_signature_not_declared_extension` | AUTOMATED |
 | I2-08 | Preparer cannot mark own work reviewed | Assigned preparer/reviewer command integration test required | PENDING |
 | I2-09 | Reviewer decision and preparer correction are distinct events | Review/correction event-separation integration test required | PENDING |
 | I2-10 | Offline capture and restart preserve records | Invoice/product/attachment restart integration test required | PENDING |
