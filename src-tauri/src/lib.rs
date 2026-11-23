@@ -40,6 +40,7 @@ pub fn run() {
             commands::import_historical_batch,
             commands::list_historical_import_batches,
             commands::list_task_review_notes,
+            commands::list_workspace_record_versions,
             commands::list_records,
             commands::save_record,
             commands::list_events,
