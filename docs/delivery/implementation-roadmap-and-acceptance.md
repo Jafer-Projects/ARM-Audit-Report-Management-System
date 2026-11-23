@@ -2,30 +2,28 @@
 
 ## 1. Delivery strategy
 
-Deliver a coherent, tested professional workflow in increments. The schedule below is indicative for a moderate-budget team and must be recalibrated after team composition, regulatory discovery and technical spikes are known. Do not treat calendar estimates as a promise.
+Deliver complete, usable workflows in small increments. Detailed requirements are progressively elaborated through practitioner demonstrations and feedback; auditors are not expected to author technical specifications. Each increment must preserve evidence, authorization, financial integrity and offline durability. Calendar estimates are hypotheses and must be recalibrated after team capacity and pilot scope are known.
 
-## 2. Phases
+## 2. Phase 0 — Approved for controlled initial development
 
-### Phase 0 — Discovery and specification
-- Confirm workflows with Ethiopian auditors, accountants, tax professionals and client businesses.
-- Validate standards, tax obligations, retention and professional requirements.
-- Define data classification, firm/client contractual model and threat model.
-- Create domain glossary, process maps, data dictionary and API contracts.
-- Prototype SQLite encryption, Tauri native bridge and sync conflict handling.
+The product owner approved Phase 0 for controlled initial development on 2026-11-23. This authorizes synthetic-data implementation and scoped technical spikes. It does not close the legal, security, accounting, tax or operations evidence gates, and does not authorize real client data or production.
 
-Exit: approved SRS, domain model, threat model, architecture decisions and acceptance tests.
+See `docs/governance/phase-0-gate-record.md` for permitted/prohibited activities and gate status.
 
-### Phase 1 — Offline desktop and platform foundation
-- Repository/toolchain, CI, coding standards and dependency policy.
-- Tauri Windows shell and signed installer pipeline.
-- React/TypeScript design system and role-aware navigation.
-- Identity, firm membership, device registration and offline lease.
-- SQLite migrations, encryption/key protection and local vault.
-- Cloud API, PostgreSQL tenancy model and sync inbox/outbox.
-- Basic client/engagement workspace and document metadata.
-- Network interruption, restart and conflict tests.
+## 3. Incremental initial development
 
-Exit: a user can open an assigned workspace, create local drafts and documents offline, reconnect, synchronize, inspect status and resolve a controlled conflict without data loss.
+The first increments are defined in [Phase 1 incremental development and feedback](phase-1-incremental-development-and-feedback.md). The initial sequence is:
+
+1. Working shell and safe local workspace.
+2. Client/company registration.
+3. Product/category register and invoice capture.
+4. Historical data and draft VAT workpaper.
+5. Staff tasks and review workflow.
+6. Import-cost worksheet discovery and prototype only after required cost-input brief is obtained.
+
+A vertical slice should be demonstrated to practitioners at the end of each increment. Their corrections update the PRD, workflow specification, acceptance examples and backlog.
+
+## 4. Broader product phases
 
 ### Phase 2 — Accounting foundation
 - Chart of accounts and periods.
@@ -36,7 +34,7 @@ Exit: a user can open an assigned workspace, create local drafts and documents o
 - Financial statement mapping.
 - Independent expected-result fixtures and reconciliation tests.
 
-Exit: complete representative accounting cycle reconciles to independently verified results; all posted journals balance and are immutable.
+Exit: representative accounting cycle reconciles to independently verified results; posted journals balance and are immutable.
 
 ### Phase 3 — Audit management
 - Acceptance, continuance and independence.
@@ -48,7 +46,7 @@ Exit: complete representative accounting cycle reconciles to independently verif
 - Findings, adjustments and review notes.
 - Partner authorization and report issuance.
 
-Exit: representative financial audit can be executed with complete evidence-to-conclusion traceability and review sign-offs.
+Exit: representative engagement has complete evidence-to-conclusion traceability and qualified review sign-offs.
 
 ### Phase 4 — Client collaboration and tax preparation
 - Client invitation and scoped access.
@@ -68,7 +66,7 @@ Exit: client submits requested source records and professional prepares/reviews 
 - Subscription billing and entitlement lifecycle.
 - Enhanced reporting and management analytics.
 
-Exit: integration certification/authorization completed where required; external receipts and uncertain submission states handled safely.
+Exit: integration authorization/certification completed where required; external receipts and uncertain submission states handled safely.
 
 ### Phase 6 — Production hardening and scale
 - Independent security assessment and remediation.
@@ -78,13 +76,9 @@ Exit: integration certification/authorization completed where required; external
 - Monitoring, alerting, incident response and support playbooks.
 - Pilot feedback and release governance.
 
-Exit: all release gates pass, operational owners assigned, backup restore demonstrated and pilot acceptance approved.
+Exit: release gates pass, operational owners assigned, backup restore demonstrated and pilot acceptance approved.
 
-## 3. Indicative timeline
-
-A 12–18 month programme is a planning hypothesis, not a guarantee. A smaller team may need longer. The first pilot should be limited to a small group of professionals and client businesses and should not depend on live government API access.
-
-## 4. Mandatory release gates
+## 5. Mandatory release gates
 
 ### Offline and sync
 - Extended offline operation.
@@ -128,19 +122,21 @@ A 12–18 month programme is a planning hypothesis, not a guarantee. A smaller t
 - Privileged support access audit.
 - Backup access and restore security.
 
-## 5. Pilot plan
+## 6. Pilot and real-data boundary
 
-Start with approximately 5–10 professionals and a small number of consenting client businesses. Select representative workflows: client onboarding, offline bookkeeping, bank reconciliation, audit evidence collection, review, tax preparation and report generation. Compare outputs against independently prepared records. Use appropriately authorized data and a documented incident/feedback process.
+Start with a small, controlled practitioner cohort and representative clients only after the applicable real-data gates are approved. Select workflows such as client onboarding, invoice capture, VAT workpaper review, offline bookkeeping, bank reconciliation, audit evidence collection and report generation. Compare outputs against independently prepared records. Maintain a feedback and incident process.
 
-## 6. Definition of done
+Synthetic data is required for development and ordinary demos. Real client data requires approved privacy/legal roles and contracts, security assessment, retention, access controls, backups and firm authorization. Government filing requires its own verified authorization and official process.
+
+## 7. Definition of done
 
 A feature is complete only when:
 - Requirements and role boundaries are documented.
 - Server and local validation exist where applicable.
 - Data migrations and rollback/compatibility strategy are tested.
 - Automated tests cover normal, negative, offline and authorization paths.
-- Audit events are emitted for material actions.
-- UI exposes errors and pending states honestly.
-- Accessibility and usability are reviewed.
-- Documentation and operational runbooks are updated.
+- Material actions emit audit events.
+- UI exposes errors, draft/review/approval states and pending sync honestly.
+- Accessibility and usability are reviewed with practitioners.
+- Documentation, acceptance evidence and operational notes are updated.
 - CI passes and acceptance evidence is attached to the work item.
