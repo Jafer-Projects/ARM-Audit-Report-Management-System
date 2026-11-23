@@ -2421,13 +2421,14 @@ mod tests {
             duplicate_acknowledged:None,duplicate_acknowledgement_reason:None,
         },app.state::<AppState>()).expect("draft may be saved before all fields are complete");
         assert_eq!(first.status,"Draft");
-        let mut duplicate = RecordInput {
+        let make_duplicate = || RecordInput {
             id:None,row_version:None,client_id:Some(client_id.clone()),record_type:"invoice".into(),
             title:"Second synthetic invoice draft".into(),status:"Draft".into(),reference:Some("INV-SYN-01".into()),
             amount_text:None,notes:None,payload_json:Some(json!({"invoice_number":"INV-SYN-01"}).to_string()),
             duplicate_acknowledged:None,duplicate_acknowledgement_reason:None,
         };
-        assert!(save_record(duplicate.clone(),app.state::<AppState>()).is_err());
+        assert!(save_record(make_duplicate(),app.state::<AppState>()).is_err());
+        let mut duplicate = make_duplicate();
         duplicate.duplicate_acknowledged = Some(true);
         duplicate.duplicate_acknowledgement_reason = Some("Separate source document confirmed".into());
         let second = save_record(duplicate,app.state::<AppState>()).expect("acknowledged duplicate remains separate");
