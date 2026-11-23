@@ -188,8 +188,6 @@ pub fn list_clients(state: State<'_, AppState>, include_archived: bool) -> Resul
 #[tauri::command]
 pub fn find_client_duplicates(legal_name: String, tin_raw: String, exclude_id: Option<String>, state: State<'_, AppState>) -> Result<Vec<DuplicateCandidate>, String> {
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
-    let (_,_,persona) = active_actor(&db)?;
-    if !["administrator","manager"].contains(&persona.as_str()) { return Err("Client duplicate search is restricted to the demo administrator and manager.".into()); }
     let mut stmt = db.connection.prepare(
         "SELECT id,record_kind,legal_name,tin_raw,status FROM client
          WHERE firm_id=?1 AND id<>?2
@@ -205,8 +203,7 @@ pub fn find_client_duplicates(legal_name: String, tin_raw: String, exclude_id: O
 #[tauri::command]
 pub fn save_client(input: ClientInput, state: State<'_, AppState>) -> Result<Client, String> {
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
-    let (actor_id, _, persona) = ensure_can_mutate(&db)?;
-    if !["administrator","manager"].contains(&persona.as_str()) { return Err("Only the demo administrator or manager can create or edit client profiles.".into()); }
+    let (actor_id, _, _) = ensure_can_mutate(&db)?;
     let legal_name = input.legal_name.trim();
     if legal_name.chars().count() < 2 || legal_name.chars().count() > 200 {
         return Err("Legal or full name must contain 2–200 characters.".into());
