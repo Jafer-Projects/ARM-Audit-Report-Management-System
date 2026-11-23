@@ -8,7 +8,7 @@ This document defines the product direction, initial scope and evolving requirem
 
 This document is a living baseline. Requirements must retain status (proposed, accepted for increment, implemented, verified, deferred or rejected), owner, evidence and change history. It is not legal advice, an audit methodology certification or confirmation that a government integration interface is available.
 
-## 2. Product vision
+For the screen-level, field-level and testable implementation contract for the first two increments, see [Developer Implementation Specification — Increments 0 and 1](../delivery/developer-implementation-specification-increments-0-and-1.md).\n\n## 2. Product vision
 
 Provide professional firms and independent practitioners with one dependable environment to manage client accounting, audit engagements, tax preparation, evidence, approvals and reporting. The Windows desktop client must support substantive work during unreliable or absent connectivity. Cloud services provide centralized control, collaboration, synchronization, client access and authorized integrations.
 
@@ -82,7 +82,7 @@ Government officers are not an initial user group. Any regulator-facing access r
 
 ### 5.5 Auditor pain-point workflows (source proposal, 9 January 2025)
 
-The supplied *Audit Report Management Software (ARMS) — Proposal for the development of the ARMS* identifies practical auditor hassles. These are included as initial requirements, not silently treated as fully specified features. Detailed traceability and unresolved questions are in [Auditor pain points and initial workflow requirements](auditor-pain-points-and-workflow-requirements.md).
+The supplied *Audit Report Management Software (ARMS) — Proposal for the development of the ARMS* identifies practical auditor hassles. These are included as initial requirements, not silently treated as fully specified features. Detailed traceability and unresolved questions are in [Auditor pain points and initial workflow requirements](auditor-pain-points-and-initial-workflow-requirements.md).
 
 Initial capabilities:
 - **Product management:** client-scoped product categories and product register, with the ability to add products as needed.
