@@ -101,7 +101,10 @@ const recordFields: Record<string, RecordField[]> = {
   ],
   task: [
     { key: "description", label: "Description / expected output", kind: "textarea", wide: true },
-    { key: "assignee", label: "Assignee (active staff name)" },
+    { key: "assignee", label: "Preparer / assignee (active staff name)" },
+    { key: "reviewer", label: "Assigned reviewer (active staff name)" },
+    { key: "reassignment_reason", label: "Reason for reassignment (required when changed)", kind: "textarea", wide: true },
+    { key: "blocker_explanation", label: "Blocker explanation (required when blocked)", kind: "textarea", wide: true },
     { key: "due_date", label: "Due date", kind: "date" },
     { key: "priority", label: "Priority", kind: "select", options: ["Not set","Low","Normal","High","Urgent"] },
     { key: "task_type", label: "Task type", kind: "select", options: ["Data capture","Review","Follow-up","Other"] },
