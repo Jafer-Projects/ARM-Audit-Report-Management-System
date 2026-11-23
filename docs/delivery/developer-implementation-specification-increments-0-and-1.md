@@ -17,7 +17,7 @@ The developer must be able to implement these increments without inventing busin
 - **Gate outcomes:** record one overall result only: `NOT READY`, `READY FOR PRACTITIONER ACCEPTANCE`, or `ACCEPTED FOR CONTROLLED SYNTHETIC-DATA USE`. A failed criterion keeps the collective gate at `NOT READY`; fix it and rerun the affected tests plus full regression.
 - **Practitioner-dependent rules:** unresolved professional decisions remain visibly disabled, draft-only or discovery-only. The collective gate may accept the software workflow while explicitly listing capabilities that remain gated; it must not imply unapproved tax, accounting, audit or import-cost outputs are authoritative.
 - **Separate production gates remain in force:** collective acceptance of Increments 0–5 does not authorize real client data, regulated services, live accounting posting, tax filing, public desktop distribution or production deployment. Those require their own legal, security, professional, data-governance and operational approvals.
-- **Traceability:** maintain one consolidated requirement-to-screen-to-service-to-schema-to-test matrix and one collective acceptance evidence report in PR #1.
+- **Traceability:** maintain the consolidated [Increments 0–5 Test Traceability Matrix](increments-0-to-5-test-traceability.md) and one collective acceptance evidence report in PR #1.
 - **Change control:** only an explicit product-owner decision recorded in the repository may change the one-branch, one-PR or collective-acceptance arrangement. A demonstration, intermediate test run, commit, milestone or practitioner comment does not change it.
 
 Use synthetic records and fictional identities. Do not load actual client, taxpayer, staff or engagement data.
