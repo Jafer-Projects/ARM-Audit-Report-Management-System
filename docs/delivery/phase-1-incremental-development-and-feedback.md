@@ -6,7 +6,7 @@
 
 Build software to help practitioners do familiar work. Do not wait for auditors to write complete software specifications. Observe the work, build a small workflow, demonstrate it, collect corrections, and update the requirements. Keep unresolved assumptions explicit.
 
-Each increment should produce a demonstrable vertical slice for practitioner feedback, not only an internal technical layer. Foundational technical work may precede the UI where necessary, but each slice should connect user action to stored data, validation, evidence and an observable outcome. Demonstration and continuous testing are progress checkpoints only: no increment is independently accepted or passed. All six increments are delivered on one branch and one PR (#2), and acceptance is decided collectively only after Increment 5 and full-system regression.
+Each increment should produce a demonstrable vertical slice for practitioner feedback, not only an internal technical layer. Foundational technical work may precede the UI where necessary, but each slice should connect user action to stored data, validation, evidence and an observable outcome. Demonstration and preparation of test cases are progress checkpoints only; formal test execution is deferred until Increment 5 is implemented. No increment is independently accepted or passed. All six increments are delivered on one branch and one PR (#2), and acceptance is decided collectively only after Increment 5 and full-system regression.
 
 ## 2. Initial increments
 
