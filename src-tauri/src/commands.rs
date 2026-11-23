@@ -713,30 +713,69 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
     if input.record_type == "task" {
         let description = payload.get("description").and_then(|v|v.as_str()).unwrap_or("").trim();
         let assignee = payload.get("assignee").and_then(|v|v.as_str()).unwrap_or("").trim();
+        let reviewer = payload.get("reviewer").and_then(|v|v.as_str()).unwrap_or("").trim();
         if description.is_empty() || assignee.is_empty() {
             return Err("A task needs a description/expected output and an assignee.".into());
         }
         if input.status == "Submitted" && payload.get("completion_summary").and_then(|v|v.as_str()).unwrap_or("").trim().is_empty() {
             return Err("Add a completion summary before submitting the task for review.".into());
         }
-        if input.status == "Assigned" {
-            let active_staff: bool = db.connection.query_row(
-                "SELECT EXISTS(SELECT 1 FROM workspace_record WHERE firm_id=?1 AND record_type='staff' AND status='Active' AND title=?2)",
-                params![FIRM_ID,assignee], |r| r.get(0)
-            ).map_err(|e|e.to_string())?;
-            if !active_staff { return Err("Assign the task to an active staff record in this demo firm.".into()); }
+        if input.status == "Blocked" && payload.get("blocker_explanation").and_then(|v|v.as_str()).unwrap_or("").trim().is_empty() {
+            return Err("Explain the blocker before moving the task to Blocked.".into());
         }
-        if persona == "auditor" {
-            let Some((_, existing_type, _, existing_payload, _)) = exists.as_ref() else {
-                return Err("Demo auditors can only work on tasks already assigned to them.".into());
-            };
+        if input.status == "Assigned" {
+            if reviewer.is_empty() || reviewer == assignee {
+                return Err("Assign a separate active reviewer; the preparer cannot review their own task.".into());
+            }
+            for staff_name in [assignee, reviewer] {
+                let active_staff: bool = db.connection.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM workspace_record WHERE firm_id=?1 AND record_type='staff' AND status='Active' AND title=?2)",
+                    params![FIRM_ID,staff_name], |r| r.get(0)
+                ).map_err(|e|e.to_string())?;
+                if !active_staff { return Err("Both preparer and reviewer must be active staff in this demo firm.".into()); }
+            }
+        }
+        if let Some((_, existing_type, _, existing_payload, _)) = exists.as_ref() {
             let prior: serde_json::Value = serde_json::from_str(existing_payload).unwrap_or_else(|_|json!({}));
             let prior_assignee = prior.get("assignee").and_then(|v|v.as_str()).unwrap_or("");
-            if existing_type != "task" || prior_assignee != actor_name.as_str() || assignee != actor_name.as_str() {
-                return Err("You can only update a task assigned to your demo persona.".into());
+            let prior_reviewer = prior.get("reviewer").and_then(|v|v.as_str()).unwrap_or("");
+            if existing_type != "task" { return Err("Task record type mismatch.".into()); }
+            if prior_assignee != assignee {
+                if !["administrator","manager"].contains(&persona.as_str()) {
+                    return Err("Only a manager can reassign a task.".into());
+                }
+                if payload.get("reassignment_reason").and_then(|v|v.as_str()).unwrap_or("").trim().chars().count() < 3 {
+                    return Err("Record a reason of at least 3 characters when reassigning a task.".into());
+                }
             }
-            if !["In progress","Blocked","Submitted"].contains(&input.status.as_str()) {
-                return Err("The demo auditor may start, block or submit their assigned task; managers control assignment and cancellation.".into());
+            if persona == "auditor" {
+                if prior_assignee != actor_name.as_str() || assignee != actor_name.as_str() || prior_reviewer != reviewer {
+                    return Err("You can only update your own assigned task; assignment and reviewer are controlled by the manager.".into());
+                }
+                if !["In progress","Blocked","Submitted"].contains(&input.status.as_str()) {
+                    return Err("The preparer may start, block or submit their assigned task; managers/reviewers control review outcomes.".into());
+                }
+            }
+        } else if persona == "auditor" {
+            return Err("Demo auditors can only work on tasks already assigned to them.".into());
+        }
+        if input.status == "Completed" || input.status == "Returned" {
+            if !["administrator","manager"].contains(&persona.as_str()) || reviewer != actor_name.as_str() {
+                return Err("Only the separately assigned demo reviewer can return or clear this task.".into());
+            }
+            if input.status == "Returned" {
+                let open_notes: i64 = db.connection.query_row(
+                    "SELECT COUNT(*) FROM task_review_note WHERE task_id=?1 AND status IN ('Open','Responded','Reopened')",
+                    params![id], |r|r.get(0)
+                ).map_err(|e|e.to_string())?;
+                if open_notes == 0 { return Err("Add a specific review note before returning the task.".into()); }
+            }
+            if input.status == "Completed" {
+                let open_notes: i64 = db.connection.query_row(
+                    "SELECT COUNT(*) FROM task_review_note WHERE task_id=?1 AND status IN ('Open','Responded','Reopened')",
+                    params![id], |r|r.get(0)
+                ).map_err(|e|e.to_string())?;
+                if open_notes > 0 { return Err("Clear or reopen every review note before accepting task completion.".into()); }
             }
         }
     }
