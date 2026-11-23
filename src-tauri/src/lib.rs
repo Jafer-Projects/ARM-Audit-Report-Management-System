@@ -34,6 +34,7 @@ pub fn run() {
             commands::list_notes,
             commands::save_note,
             commands::set_demo_persona,
+            commands::find_invoice_duplicates,
             commands::list_records,
             commands::save_record,
             commands::list_events,
