@@ -2,8 +2,8 @@
 
 **Review date:** 2026-11-23  
 **Source:** Initial stakeholder interview answers supplied by the product owner.  
-**Overall status:** Findings incorporated; evidence validation and independent approvals remain outstanding.  
-**Phase 0 status:** **NOT APPROVED**. This register does not authorize production use, real client data, regulated services, live tax filing, or deployment.
+**Development decision:** Phase 0 is approved for controlled initial development; see `docs/governance/phase-0-gate-record.md`.  
+**Evidence status:** Legal, technical, tax, operational and independent-review evidence remains outstanding. Unanswered items are not confirmed.
 
 ## How to interpret this register
 
