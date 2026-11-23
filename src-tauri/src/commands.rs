@@ -469,3 +469,35 @@ pub fn reset_demo_data(state: State<'_, AppState>) -> Result<(), String> {
         params![Uuid::new_v4().to_string(),FIRM_ID,actor_id,now_utc(),Uuid::new_v4().to_string()]).map_err(|e|e.to_string())?;
     tx.commit().map_err(|e|e.to_string())
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::valid_record_transition;
+
+    #[test]
+    fn invoice_and_tax_workflows_cannot_skip_review_or_claim_approval() {
+        assert!(valid_record_transition("invoice", None, "Draft"));
+        assert!(valid_record_transition("invoice", Some("Draft"), "Submitted for review"));
+        assert!(!valid_record_transition("invoice", None, "Reviewed"));
+        assert!(!valid_record_transition("invoice", Some("Draft"), "Reviewed"));
+        assert!(!valid_record_transition("historical_record", Some("Ready for review"), "Reviewed"));
+    }
+
+    #[test]
+    fn task_lifecycle_requires_submission_before_completion() {
+        assert!(valid_record_transition("task", None, "Draft"));
+        assert!(valid_record_transition("task", Some("Assigned"), "In progress"));
+        assert!(valid_record_transition("task", Some("In progress"), "Submitted"));
+        assert!(valid_record_transition("task", Some("Submitted"), "Completed"));
+        assert!(!valid_record_transition("task", Some("In progress"), "Completed"));
+        assert!(!valid_record_transition("task", Some("Completed"), "In progress"));
+    }
+
+    #[test]
+    fn import_cost_calculation_input_cannot_bypass_discovery_gate() {
+        assert!(valid_record_transition("import_case", None, "Discovery"));
+        assert!(valid_record_transition("import_case", Some("Discovery"), "Ready for workshop"));
+        assert!(!valid_record_transition("import_cost_input", None, "Discovery"));
+    }
+}
