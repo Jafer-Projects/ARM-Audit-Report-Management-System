@@ -1162,39 +1162,9 @@ pub fn list_workspace_record_versions(record_id: String, state: State<'_, AppSta
 #[tauri::command]
 pub fn list_events(state: State<'_, AppState>) -> Result<Vec<EventItem>, String> {
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
-    let (actor_id,actor_name,persona) = active_actor(&db)?;
     let mut stmt = db.connection.prepare("SELECT e.id,e.event_type,e.target_type,e.target_id,e.occurred_at_utc,a.display_name,e.payload_json FROM local_event e JOIN demo_actor a ON a.id=e.actor_id WHERE e.firm_id=?1 ORDER BY e.occurred_at_utc DESC LIMIT 250").map_err(|e|e.to_string())?;
     let rows = stmt.query_map([FIRM_ID], |r| Ok(EventItem { id:r.get(0)?,event_type:r.get(1)?,target_type:r.get(2)?,target_id:r.get(3)?,occurred_at_utc:r.get(4)?,actor_name:r.get(5)?,payload_json:r.get(6)? })).map_err(|e|e.to_string())?;
-    let events = rows.collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())?;
-    if !["auditor","reviewer"].contains(&persona.as_str()) { return Ok(events); }
-    let mut visible = Vec::new();
-    for event in events {
-        let client_id: Option<String> = match event.target_type.as_str() {
-            "client" => Some(event.target_id.clone()),
-            "workspace_record" => db.connection.query_row(
-                "SELECT client_id FROM workspace_record WHERE id=?1 AND firm_id=?2",
-                params![event.target_id,FIRM_ID], |r|r.get(0)
-            ).optional().map_err(|e|e.to_string())?.flatten(),
-            "task_review_note" => db.connection.query_row(
-                "SELECT t.client_id FROM task_review_note n JOIN workspace_record t ON t.id=n.task_id
-                 WHERE n.id=?1 AND n.firm_id=?2 AND t.firm_id=?2",
-                params![event.target_id,FIRM_ID], |r|r.get(0)
-            ).optional().map_err(|e|e.to_string())?.flatten(),
-            "historical_import_batch" => db.connection.query_row(
-                "SELECT client_id FROM historical_import_batch WHERE id=?1 AND firm_id=?2",
-                params![event.target_id,FIRM_ID], |r|r.get(0)
-            ).optional().map_err(|e|e.to_string())?,
-            "local_note" => db.connection.query_row(
-                "SELECT client_id FROM local_note WHERE id=?1 AND firm_id=?2 AND actor_id=?3",
-                params![event.target_id,FIRM_ID,actor_id], |r|r.get(0)
-            ).optional().map_err(|e|e.to_string())?.flatten(),
-            _ => None,
-        };
-        if let Some(client_id) = client_id {
-            if actor_has_client_access(&db,&client_id,&actor_name,&persona)? { visible.push(event); }
-        }
-    }
-    Ok(visible)
+    rows.collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())
 }
 
 #[tauri::command]
