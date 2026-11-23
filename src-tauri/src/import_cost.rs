@@ -340,7 +340,7 @@ mod tests {
         let lines = vec![goods("A", 1000, 1_000_000, 1_000_000)];
         let components = vec![CostComponentInput {
             component_reference: "VAT-1".into(), category: "VAT".into(), amount_minor: 150,
-            currency_code: "ETB".into(), fx_numerator: 1, fx_denominator: 1,
+            currency_code: "ETB".into(), source_reference: "synthetic-source".into(), fx_rate_source: "base-currency 1:1".into(), fx_rate_date: "2026-01-01".into(), fx_authorized_by: "synthetic fixture".into(), fx_numerator: 1, fx_denominator: 1,
             allocation_basis: "Direct".into(), direct_item_reference: "A".into(), treatment: "Recoverable tax".into(),
         }];
         let result = calculate_import_cost("ETB", &lines, &components).unwrap();
@@ -354,7 +354,7 @@ mod tests {
         let lines = vec![goods("A", 1000, 1_000_000, 1), goods("B", 2000, 1_000_000, 1)];
         let components = vec![CostComponentInput {
             component_reference: "HANDLING-A".into(), category: "Handling".into(), amount_minor: 25,
-            currency_code: "ETB".into(), fx_numerator: 1, fx_denominator: 1,
+            currency_code: "ETB".into(), source_reference: "synthetic-source".into(), fx_rate_source: "base-currency 1:1".into(), fx_rate_date: "2026-01-01".into(), fx_authorized_by: "synthetic fixture".into(), fx_numerator: 1, fx_denominator: 1,
             allocation_basis: "Direct".into(), direct_item_reference: "A".into(), treatment: "Capitalize".into(),
         }];
         let result = calculate_import_cost("ETB", &lines, &components).unwrap();
@@ -367,7 +367,7 @@ mod tests {
         let lines = vec![goods("A", 1000, 1_000_000, 0)];
         let components = vec![CostComponentInput {
             component_reference: "FREIGHT".into(), category: "Freight".into(), amount_minor: 10,
-            currency_code: "USD".into(), fx_numerator: 0, fx_denominator: 1,
+            currency_code: "USD".into(), source_reference: "synthetic-source".into(), fx_rate_source: "synthetic test".into(), fx_rate_date: "2026-01-01".into(), fx_authorized_by: "synthetic fixture".into(), fx_numerator: 0, fx_denominator: 1,
             allocation_basis: "Weight".into(), direct_item_reference: "".into(), treatment: "Capitalize".into(),
         }];
         assert!(calculate_import_cost("ETB", &lines, &components).is_err());
@@ -377,8 +377,8 @@ mod tests {
     fn customs_value_only_and_pending_items_are_not_mixed_into_landed_cost() {
         let lines = vec![goods("A", 1000, 1_000_000, 1)];
         let components = vec![
-            CostComponentInput { component_reference:"CV".into(),category:"Customs base reference".into(),amount_minor:800,currency_code:"ETB".into(),fx_numerator:1,fx_denominator:1,allocation_basis:"Direct".into(),direct_item_reference:"A".into(),treatment:"Customs-value-only".into() },
-            CostComponentInput { component_reference:"PENDING".into(),category:"Unknown levy".into(),amount_minor:50,currency_code:"ETB".into(),fx_numerator:1,fx_denominator:1,allocation_basis:"Direct".into(),direct_item_reference:"A".into(),treatment:"Needs review".into() },
+            CostComponentInput { component_reference:"CV".into(),category:"Customs base reference".into(),amount_minor:800,currency_code:"ETB".into(),source_reference:"synthetic-source".into(),fx_rate_source:"base-currency 1:1".into(),fx_rate_date:"2026-01-01".into(),fx_authorized_by:"synthetic fixture".into(),fx_numerator:1,fx_denominator:1,allocation_basis:"Direct".into(),direct_item_reference:"A".into(),treatment:"Customs-value-only".into() },
+            CostComponentInput { component_reference:"PENDING".into(),category:"Unknown levy".into(),amount_minor:50,currency_code:"ETB".into(),source_reference:"synthetic-source".into(),fx_rate_source:"base-currency 1:1".into(),fx_rate_date:"2026-01-01".into(),fx_authorized_by:"synthetic fixture".into(),fx_numerator:1,fx_denominator:1,allocation_basis:"Direct".into(),direct_item_reference:"A".into(),treatment:"Needs review".into() },
         ];
         let result = calculate_import_cost("ETB", &lines, &components).unwrap();
         assert_eq!(result.total_landed_cost_minor, 1000);
