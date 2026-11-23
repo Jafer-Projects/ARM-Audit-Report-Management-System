@@ -116,6 +116,25 @@ fn ensure_can_mutate(db: &Database) -> Result<(String, String, String), String> 
     Ok(actor)
 }
 
+fn actor_has_client_access(db: &Database, client_id: &str, actor_name: &str, persona: &str) -> Result<bool, String> {
+    if ["administrator","manager"].contains(&persona) { return Ok(true); }
+    let field = match persona {
+        "auditor" => "assignee",
+        "reviewer" => "reviewer",
+        _ => return Ok(false),
+    };
+    let mut stmt = db.connection.prepare(
+        "SELECT payload_json FROM workspace_record WHERE firm_id=?1 AND client_id=?2 AND record_type='task'"
+    ).map_err(|e|e.to_string())?;
+    let rows = stmt.query_map(params![FIRM_ID,client_id], |r|r.get::<_,String>(0)).map_err(|e|e.to_string())?;
+    for row in rows {
+        let raw = row.map_err(|e|e.to_string())?;
+        let payload: serde_json::Value = serde_json::from_str(&raw).unwrap_or_else(|_|json!({}));
+        if payload.get(field).and_then(|v|v.as_str()) == Some(actor_name) { return Ok(true); }
+    }
+    Ok(false)
+}
+
 #[tauri::command]
 pub fn initialize_workspace(state: State<'_, AppState>) -> Result<WorkspaceInfo, String> {
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
