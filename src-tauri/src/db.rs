@@ -454,4 +454,37 @@ mod tests {
         assert!(second.contains("Invoice B"));
     }
 
+
+    #[test]
+    fn task_review_notes_cannot_be_deleted() {
+        let db = Database::memory().expect("in-memory db");
+        let firm = "00000000-0000-4000-8000-000000000001";
+        let actor = "00000000-0000-4000-8000-000000000012";
+        let client = "00000000-0000-4000-8000-000000000101";
+        db.connection.execute(
+            "INSERT INTO workspace_record(id,firm_id,client_id,record_type,title,status,created_at,updated_at,created_by,updated_by)
+             VALUES('task-review-test',?1,?2,'task','Test task','Submitted','now','now',?3,?3)",
+            rusqlite::params![firm,client,actor],
+        ).expect("create task");
+        db.connection.execute(
+            "INSERT INTO task_review_note(id,firm_id,task_id,reviewer_actor_id,category,description,required_response,status,created_at,updated_at,correlation_id)
+             VALUES('note-test',?1,'task-review-test',?2,'Missing evidence','Evidence is missing','Provide the source reference','Open','now','now','corr')",
+            rusqlite::params![firm,actor],
+        ).expect("create review note");
+        assert!(db.connection.execute("DELETE FROM task_review_note WHERE id='note-test'", []).is_err());
+    }
+
+    #[test]
+    fn historical_import_batch_retains_source_content_and_mapping() {
+        let db = Database::memory().expect("in-memory db");
+        let source = "Date,Description,Amount\n2026-01-01,Sample purchase,100.00";
+        db.connection.execute(
+            "INSERT INTO historical_import_batch(id,firm_id,client_id,actor_id,source_filename,source_checksum_sha256,source_content,mapping_json,source_row_count,imported_row_count,imported_at,correlation_id)
+             VALUES('batch-test','00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000101','00000000-0000-4000-8000-000000000011','sample.csv',?1,?2,'{\"description\":\"Description\",\"amount_text\":\"Amount\"}',1,1,'now','corr')",
+            rusqlite::params!["a".repeat(64),source],
+        ).expect("create import batch");
+        let stored: String = db.connection.query_row("SELECT source_content FROM historical_import_batch WHERE id='batch-test'", [], |r|r.get(0)).unwrap();
+        assert_eq!(stored, source);
+    }
+
 }
