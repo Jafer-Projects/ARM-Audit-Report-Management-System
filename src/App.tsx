@@ -94,7 +94,7 @@ export default function App() {
     try {
       setBusy(true); setError("");
       await desktop.saveRecord({
-        id: recordEditor?.id, row_version: recordEditor?.row_version,
+        id: recordEditor?.id || undefined, row_version: recordEditor?.id ? recordEditor.row_version : undefined,
         client_id: v.client_id || null, record_type: recordType, title: v.title,
         status: v.status || config.statuses[0], reference: v.reference || "",
         amount_text: v.amount_text || "", notes: v.notes || "",
