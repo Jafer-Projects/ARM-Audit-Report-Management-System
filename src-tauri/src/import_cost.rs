@@ -385,4 +385,152 @@ mod tests {
         assert_eq!(result.total_landed_cost_minor, 1000);
         assert_eq!(result.excluded_or_pending_minor, 850);
     }
+
+    fn component(reference: &str, amount: i64, basis: &str, treatment: &str, direct: &str) -> CostComponentInput {
+        CostComponentInput {
+            component_reference: reference.into(), category: "Synthetic cost".into(), amount_minor: amount,
+            currency_code: "ETB".into(), source_reference: "synthetic-source".into(),
+            fx_rate_source: "documented base-currency 1:1".into(), fx_rate_date: "2026-01-01".into(),
+            fx_authorized_by: "synthetic fixture".into(), fx_numerator: 1, fx_denominator: 1,
+            allocation_basis: basis.into(), direct_item_reference: direct.into(), treatment: treatment.into(),
+        }
+    }
+
+    fn weighted_goods() -> Vec<GoodsLineInput> {
+        let mut a = goods("A", 100, 1_000_000, 1_000_000);
+        let mut b = goods("B", 300, 3_000_000, 3_000_000);
+        a.volume_micros = 1_000_000;
+        b.volume_micros = 3_000_000;
+        vec![a, b]
+    }
+
+    #[test]
+    fn quantity_allocation_is_proportional_and_reconciles_exactly() {
+        let result = calculate_import_cost("ETB", &weighted_goods(), &[component("Q", 101, "Quantity", "Capitalize", "")]).unwrap();
+        assert_eq!(result.components[0].allocations.iter().map(|a| a.amount_minor).collect::<Vec<_>>(), vec![25, 76]);
+        assert_eq!(result.total_capitalized_cost_minor, 101);
+        assert_eq!(result.lines.iter().map(|line| line.allocated_cost_minor).sum::<i64>(), 101);
+    }
+
+    #[test]
+    fn weight_allocation_is_proportional_and_reconciles_exactly() {
+        let result = calculate_import_cost("ETB", &weighted_goods(), &[component("W", 101, "Weight", "Capitalize", "")]).unwrap();
+        assert_eq!(result.components[0].allocations.iter().map(|a| a.amount_minor).collect::<Vec<_>>(), vec![25, 76]);
+    }
+
+    #[test]
+    fn volume_allocation_is_proportional_and_reconciles_exactly() {
+        let result = calculate_import_cost("ETB", &weighted_goods(), &[component("V", 101, "Volume", "Capitalize", "")]).unwrap();
+        assert_eq!(result.components[0].allocations.iter().map(|a| a.amount_minor).collect::<Vec<_>>(), vec![25, 76]);
+    }
+
+    #[test]
+    fn value_allocation_uses_converted_goods_values() {
+        let goods = vec![goods("A", 100, 1_000_000, 1), goods("B", 300, 1_000_000, 1)];
+        let result = calculate_import_cost("ETB", &goods, &[component("VALUE", 100, "Value", "Capitalize", "")]).unwrap();
+        assert_eq!(result.components[0].allocations.iter().map(|a| a.amount_minor).collect::<Vec<_>>(), vec![25, 75]);
+    }
+
+    #[test]
+    fn equal_remainders_are_resolved_deterministically_by_input_order() {
+        let goods = vec![goods("A", 100, 1_000_000, 1), goods("B", 100, 1_000_000, 1)];
+        let result = calculate_import_cost("ETB", &goods, &[component("TIE", 101, "Quantity", "Capitalize", "")]).unwrap();
+        assert_eq!(result.components[0].allocations.iter().map(|a| a.amount_minor).collect::<Vec<_>>(), vec![51, 50]);
+    }
+
+    #[test]
+    fn fractional_quantity_and_fx_round_half_up_to_minor_units() {
+        let mut line = goods("A", 1, 500_000, 1);
+        line.fx_numerator = 1;
+        line.fx_denominator = 2;
+        let result = calculate_import_cost("ETB", &[line], &[]).unwrap();
+        assert_eq!(result.total_goods_value_minor, 1);
+    }
+
+    #[test]
+    fn rejects_duplicate_goods_references() {
+        let lines = vec![goods("DUP", 100, 1_000_000, 1), goods("DUP", 200, 1_000_000, 1)];
+        assert!(calculate_import_cost("ETB", &lines, &[]).is_err());
+    }
+
+    #[test]
+    fn rejects_duplicate_component_references() {
+        let lines = vec![goods("A", 100, 1_000_000, 1)];
+        let components = vec![component("DUP", 10, "Direct", "Capitalize", "A"), component("DUP", 20, "Direct", "Capitalize", "A")];
+        assert!(calculate_import_cost("ETB", &lines, &components).is_err());
+    }
+
+    #[test]
+    fn rejects_zero_or_negative_goods_quantity_and_negative_unit_price() {
+        assert!(calculate_import_cost("ETB", &[goods("A", 100, 0, 1)], &[]).is_err());
+        assert!(calculate_import_cost("ETB", &[goods("A", 100, -1, 1)], &[]).is_err());
+        assert!(calculate_import_cost("ETB", &[goods("A", -1, 1_000_000, 1)], &[]).is_err());
+    }
+
+    #[test]
+    fn rejects_negative_allocation_weights_and_missing_weight_or_volume() {
+        let mut negative = goods("A", 100, 1_000_000, 1);
+        negative.weight_micros = -1;
+        assert!(calculate_import_cost("ETB", &[negative], &[]).is_err());
+        let no_weight = goods("A", 100, 1_000_000, 0);
+        assert!(calculate_import_cost("ETB", &[no_weight.clone()], &[component("W", 10, "Weight", "Capitalize", "")]).is_err());
+        assert!(calculate_import_cost("ETB", &[no_weight], &[component("V", 10, "Volume", "Capitalize", "")]).is_err());
+    }
+
+    #[test]
+    fn rejects_invalid_currency_codes_and_missing_source_or_fx_provenance() {
+        let mut invalid_currency = goods("A", 100, 1_000_000, 1);
+        invalid_currency.currency_code = "ETB1".into();
+        assert!(calculate_import_cost("ETB", &[invalid_currency], &[]).is_err());
+        let mut missing_source = goods("A", 100, 1_000_000, 1);
+        missing_source.source_reference.clear();
+        assert!(calculate_import_cost("ETB", &[missing_source], &[]).is_err());
+        let mut missing_authorizer = goods("A", 100, 1_000_000, 1);
+        missing_authorizer.fx_authorized_by.clear();
+        assert!(calculate_import_cost("ETB", &[missing_authorizer], &[]).is_err());
+    }
+
+    #[test]
+    fn rejects_unknown_direct_item_and_unsupported_allocation_basis() {
+        let lines = vec![goods("A", 100, 1_000_000, 1)];
+        assert!(calculate_import_cost("ETB", &lines, &[component("D", 10, "Direct", "Capitalize", "UNKNOWN")]).is_err());
+        assert!(calculate_import_cost("ETB", &lines, &[component("X", 10, "Percentage", "Capitalize", "")]).is_err());
+    }
+
+    #[test]
+    fn rejects_negative_cost_component_and_invalid_fx_ratio() {
+        let lines = vec![goods("A", 100, 1_000_000, 1)];
+        assert!(calculate_import_cost("ETB", &lines, &[component("NEG", -1, "Direct", "Capitalize", "A")]).is_err());
+        let mut invalid_fx = component("FX", 10, "Direct", "Capitalize", "A");
+        invalid_fx.fx_denominator = 0;
+        assert!(calculate_import_cost("ETB", &lines, &[invalid_fx]).is_err());
+    }
+
+    #[test]
+    fn rejects_unknown_treatment_and_non_alphabetic_base_currency() {
+        let lines = vec![goods("A", 100, 1_000_000, 1)];
+        assert!(calculate_import_cost("ETB", &lines, &[component("T", 10, "Direct", "Guess", "A")]).is_err());
+        assert!(calculate_import_cost("ET1", &lines, &[]).is_err());
+    }
+
+    #[test]
+    fn rejects_goods_value_overflow_instead_of_wrapping() {
+        let line = goods("A", i64::MAX, i64::MAX, 1);
+        assert!(calculate_import_cost("ETB", &[line], &[]).is_err());
+    }
+
+    #[test]
+    fn rejects_fx_conversion_overflow_instead_of_wrapping() {
+        let mut line = goods("A", 1, 1_000_000, 1);
+        line.fx_numerator = i64::MAX;
+        assert!(calculate_import_cost("ETB", &[line], &[]).is_err());
+    }
+
+    #[test]
+    fn base_currency_is_normalized_and_results_retain_limitation_notices() {
+        let result = calculate_import_cost(" etb ", &[goods("A", 100, 1_000_000, 1)], &[]).unwrap();
+        assert_eq!(result.base_currency, "ETB");
+        assert!(result.limitations.iter().any(|notice| notice.contains("not a customs valuation")));
+    }
+
 }

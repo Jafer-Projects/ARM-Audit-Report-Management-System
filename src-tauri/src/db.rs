@@ -624,4 +624,43 @@ mod tests {
         assert!(db.connection.execute("DELETE FROM client_change WHERE id='change-test'", []).is_err());
     }
 
+
+    #[test]
+    fn uncommitted_workspace_write_rolls_back_when_transaction_is_dropped() {
+        let db = Database::memory().expect("in-memory db");
+        {
+            let tx = db.connection.unchecked_transaction().expect("begin transaction");
+            tx.execute(
+                "INSERT INTO local_note(id,firm_id,client_id,actor_id,title,body,status,created_at,updated_at)
+                 VALUES('rollback-note','00000000-0000-4000-8000-000000000001',NULL,'00000000-0000-4000-8000-000000000011','Rollback','Must not persist','Local draft','now','now')",
+                [],
+            ).expect("write inside transaction");
+        }
+        let count: i64 = db.connection.query_row("SELECT COUNT(*) FROM local_note WHERE id='rollback-note'", [], |row|row.get(0)).unwrap();
+        assert_eq!(count,0);
+    }
+
+    #[test]
+    fn foreign_key_constraints_reject_orphaned_workspace_history() {
+        let db = Database::memory().expect("in-memory db");
+        let result = db.connection.execute(
+            "INSERT INTO workspace_record_version(id,firm_id,record_id,row_version,actor_id,changed_at,snapshot_json,correlation_id)
+             VALUES('orphan-version','00000000-0000-4000-8000-000000000001','missing-record',1,'00000000-0000-4000-8000-000000000011','now','{}','corr')",
+            [],
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn local_event_actor_and_scope_are_retained_for_material_mutations() {
+        let db = Database::memory().expect("in-memory db");
+        let (actor,firm,target): (String,String,String) = db.connection.query_row(
+            "SELECT actor_id,firm_id,target_type FROM local_event WHERE event_type='demo_workspace_initialized' LIMIT 1",
+            [], |row|Ok((row.get(0)?,row.get(1)?,row.get(2)?))
+        ).expect("seed event");
+        assert!(!actor.is_empty());
+        assert!(!firm.is_empty());
+        assert_eq!(target,"workspace");
+    }
+
 }

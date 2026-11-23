@@ -1,7 +1,7 @@
-# PR #2 Binding Decision — Prototype Completion Contract for Increments 0–5
+# PR #1 Binding Decision — Prototype Completion Contract for Increments 0–5
 
 **Status:** Binding product-owner instruction  
-**Applies to:** The existing `implementation/increments-0-to-5` branch and PR #2 only  
+**Applies to:** The existing `implementation/increments-0-to-5` branch and PR #1 only  
 **Product stage:** Controlled prototype build using synthetic data  
 **Acceptance:** One collective verification and test event after Increment 5 implementation is complete
 
@@ -14,10 +14,10 @@ This is not authorization for production operation, real client data, live accou
 ## 2. Branch and PR binding
 
 - All work remains on branch `implementation/increments-0-to-5`.
-- All commits remain in PR #2, targeting `main`.
+- All commits remain in PR #1, targeting `main`.
 - Do not create another implementation branch or another PR for this work.
-- Keep PR #2 open and draft while implementation is in progress.
-- Do not merge or close PR #2 as part of this work.
+- Keep PR #1 open and draft while implementation is in progress.
+- Do not merge or close PR #1 as part of this work.
 - Preserve existing working behavior and history. Use additive, forward-only migrations and backward-conscious changes where possible.
 - Before every write, confirm the current branch head and use the current file/blob SHA. Never force-push or rewrite history.
 
