@@ -21,7 +21,7 @@ The first increments are defined in [Phase 1 incremental development and feedbac
 5. Staff tasks and review workflow.
 6. Import-cost worksheet discovery and prototype only after required cost-input brief is obtained.
 
-A vertical slice should be demonstrated to practitioners at the end of each increment. Their corrections update the PRD, workflow specification, acceptance examples and backlog.
+Demonstrate each vertical slice for feedback and run its relevant tests continuously, but do not accept or pass increments individually. All Increments 0–5 must be implemented on branch `implementation/increments-0-to-5` and PR #2. The single collective acceptance decision occurs only after Increment 5, when the integrated system is tested against every Increments 0–5 requirement and cross-increment workflow. A failure in any criterion blocks the collective gate. Separate legal, security, professional and production-release gates remain in force.
 
 ## 4. Broader product phases
 
@@ -129,6 +129,8 @@ Start with a small, controlled practitioner cohort and representative clients on
 Synthetic data is required for development and ordinary demos. Real client data requires approved privacy/legal roles and contracts, security assessment, retention, access controls, backups and firm authorization. Government filing requires its own verified authorization and official process.
 
 ## 7. Definition of done
+
+For the initial Increments 0–5 programme, the criteria below are evaluated as one integrated acceptance decision after Increment 5. They are not increment-by-increment release gates.
 
 A feature is complete only when:
 - Requirements and role boundaries are documented.
