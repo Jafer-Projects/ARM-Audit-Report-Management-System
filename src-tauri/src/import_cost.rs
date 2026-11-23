@@ -18,6 +18,10 @@ pub struct GoodsLineInput {
     /// Unit price in source-currency minor units.
     pub unit_price_minor: i64,
     pub currency_code: String,
+    pub source_reference: String,
+    pub fx_rate_source: String,
+    pub fx_rate_date: String,
+    pub fx_authorized_by: String,
     /// Base-currency minor units per source-currency minor unit, as a ratio.
     pub fx_numerator: i64,
     pub fx_denominator: i64,
@@ -33,6 +37,10 @@ pub struct CostComponentInput {
     /// Amount in source-currency minor units.
     pub amount_minor: i64,
     pub currency_code: String,
+    pub source_reference: String,
+    pub fx_rate_source: String,
+    pub fx_rate_date: String,
+    pub fx_authorized_by: String,
     pub fx_numerator: i64,
     pub fx_denominator: i64,
     /// Direct, Quantity, Weight, Volume, or Value.
@@ -47,6 +55,10 @@ pub struct CostComponentInput {
 pub struct LineResult {
     pub item_reference: String,
     pub description: String,
+    pub source_reference: String,
+    pub fx_rate_source: String,
+    pub fx_rate_date: String,
+    pub fx_authorized_by: String,
     pub quantity_micros: i64,
     pub goods_value_minor: i64,
     pub allocated_cost_minor: i64,
@@ -57,6 +69,10 @@ pub struct LineResult {
 pub struct ComponentResult {
     pub component_reference: String,
     pub category: String,
+    pub source_reference: String,
+    pub fx_rate_source: String,
+    pub fx_rate_date: String,
+    pub fx_authorized_by: String,
     pub source_currency: String,
     pub source_amount_minor: i64,
     pub base_amount_minor: i64,
@@ -165,6 +181,9 @@ pub fn calculate_import_cost(
         if line.quantity_micros <= 0 || line.unit_price_minor < 0 {
             return Err(format!("Goods line {reference} needs a positive quantity and non-negative unit price."));
         }
+        if line.source_reference.trim().is_empty() || line.fx_rate_source.trim().is_empty() || line.fx_rate_date.trim().is_empty() || line.fx_authorized_by.trim().is_empty() {
+            return Err(format!("Goods line {reference} needs source evidence and an explicit FX source/date/authorization (use a documented 1:1 basis for the base currency)."));
+        }
         if line.currency_code.trim().len() != 3 || !line.currency_code.trim().chars().all(|ch| ch.is_ascii_alphabetic()) {
             return Err(format!("Goods line {reference} needs a three-letter alphabetic source currency."));
         }
@@ -179,6 +198,10 @@ pub fn calculate_import_cost(
         lines.push(LineResult {
             item_reference: reference.to_string(),
             description: line.description.trim().to_string(),
+            source_reference: line.source_reference.trim().to_string(),
+            fx_rate_source: line.fx_rate_source.trim().to_string(),
+            fx_rate_date: line.fx_rate_date.trim().to_string(),
+            fx_authorized_by: line.fx_authorized_by.trim().to_string(),
             quantity_micros: line.quantity_micros,
             goods_value_minor: goods_value,
             allocated_cost_minor: 0,
@@ -194,6 +217,9 @@ pub fn calculate_import_cost(
         let reference = component.component_reference.trim();
         if reference.is_empty() || component.category.trim().is_empty() {
             return Err("Every cost component needs a reference and category.".into());
+        }
+        if component.source_reference.trim().is_empty() || component.fx_rate_source.trim().is_empty() || component.fx_rate_date.trim().is_empty() || component.fx_authorized_by.trim().is_empty() {
+            return Err(format!("Cost component {reference} needs source evidence and an explicit FX source/date/authorization (use a documented 1:1 basis for the base currency)."));
         }
         if component.currency_code.trim().len() != 3 || !component.currency_code.trim().chars().all(|ch| ch.is_ascii_alphabetic()) {
             return Err(format!("Cost component {reference} needs a three-letter alphabetic source currency."));
@@ -247,6 +273,10 @@ pub fn calculate_import_cost(
         component_results.push(ComponentResult {
             component_reference: reference.to_string(),
             category: component.category.trim().to_string(),
+            source_reference: component.source_reference.trim().to_string(),
+            fx_rate_source: component.fx_rate_source.trim().to_string(),
+            fx_rate_date: component.fx_rate_date.trim().to_string(),
+            fx_authorized_by: component.fx_authorized_by.trim().to_string(),
             source_currency: component.currency_code.trim().to_ascii_uppercase(),
             source_amount_minor: component.amount_minor,
             base_amount_minor: base_amount,
@@ -286,6 +316,7 @@ mod tests {
         GoodsLineInput {
             item_reference: reference.into(), description: reference.into(),
             quantity_micros: quantity, unit_price_minor: value, currency_code: "ETB".into(),
+            source_reference: "synthetic-source".into(), fx_rate_source: "base-currency 1:1".into(), fx_rate_date: "2026-01-01".into(), fx_authorized_by: "synthetic fixture".into(),
             fx_numerator: 1, fx_denominator: 1, weight_micros: weight, volume_micros: weight,
         }
     }
@@ -295,7 +326,7 @@ mod tests {
         let lines = vec![goods("A", 1000, 1_000_000, 1_000_000), goods("B", 1000, 1_000_000, 2_000_000), goods("C", 1000, 1_000_000, 3_000_000)];
         let components = vec![CostComponentInput {
             component_reference: "FREIGHT-1".into(), category: "Freight".into(), amount_minor: 101,
-            currency_code: "ETB".into(), fx_numerator: 1, fx_denominator: 1,
+            currency_code: "ETB".into(), source_reference: "synthetic-source".into(), fx_rate_source: "base-currency 1:1".into(), fx_rate_date: "2026-01-01".into(), fx_authorized_by: "synthetic fixture".into(), fx_numerator: 1, fx_denominator: 1,
             allocation_basis: "Weight".into(), direct_item_reference: "".into(), treatment: "Capitalize".into(),
         }];
         let result = calculate_import_cost("ETB", &lines, &components).unwrap();
