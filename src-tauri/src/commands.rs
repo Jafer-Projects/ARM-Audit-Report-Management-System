@@ -2289,6 +2289,46 @@ mod tests {
     }
 
     #[test]
+    fn import_historical_batch_command_reconciles_all_rows_and_retains_row_provenance() {
+        use tauri::Manager;
+        let app = test_app();
+        let client_id = command_active_client_id(&app);
+        let source_content = "Date,Description,Amount\\n2026-01-01,First purchase,10.00\\n2026-01-02,Second purchase,20.00";
+        let make_row = |source_row, description: &str, amount: &str| HistoricalImportRow {
+            source_row,transaction_date:"2026-01-01".into(),description:description.into(),
+            amount_text:amount.into(),currency:"ETB".into(),supplier:"Synthetic supplier".into(),
+            supplier_tin:"".into(),vat_amount:"".into(),invoice_reference:String::new(),
+        };
+        let result = import_historical_batch(HistoricalImportInput {
+            client_id:client_id.clone(),source_filename:"history.csv".into(),source_content:source_content.into(),
+            mapping_json:"{\\\"description\\\":\\\"Description\\\",\\\"amount_text\\\":\\\"Amount\\\"}".into(),
+            rows:vec![make_row(2,"First purchase","10.00"),make_row(3,"Second purchase","20.00")],
+        },app.state::<AppState>()).expect("import synthetic history");
+        assert_eq!(result.source_row_count,2);
+        assert_eq!(result.imported_row_count,2);
+        assert_eq!(result.source_checksum_sha256.len(),64);
+        let state = app.state::<AppState>();
+        let db = state.database.lock().unwrap();
+        let (source_rows,imported_rows,filename,stored_source):(i64,i64,String,String) = db.connection.query_row(
+            "SELECT source_row_count,imported_row_count,source_filename,source_content FROM historical_import_batch WHERE id=?1",
+            [&result.batch_id],|row|Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?))
+        ).unwrap();
+        assert_eq!((source_rows,imported_rows),(2,2));
+        assert_eq!(filename,"history.csv");
+        assert_eq!(stored_source,source_content);
+        let imported: i64 = db.connection.query_row(
+            "SELECT COUNT(*) FROM workspace_record WHERE client_id=?1 AND record_type='historical_record' AND json_extract(payload_json,'$.import_batch_id')=?2",
+            params![client_id,result.batch_id],|row|row.get(0)
+        ).unwrap();
+        assert_eq!(imported,2);
+        let provenance: (i64,i64) = db.connection.query_row(
+            "SELECT json_extract(payload_json,'$.source_row'),json_extract(payload_json,'$.mapping_version') FROM workspace_record WHERE client_id=?1 AND title='Second purchase'",
+            [&client_id],|row|Ok((row.get(0)?,row.get(1)?))
+        ).unwrap();
+        assert_eq!(provenance,(3,1));
+    }
+
+    #[test]
     fn attach_source_document_command_persists_validated_evidence_and_rejects_spoofing() {
         use tauri::Manager;
         let app = test_app();
