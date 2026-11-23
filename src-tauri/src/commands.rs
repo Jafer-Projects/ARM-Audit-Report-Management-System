@@ -1057,6 +1057,13 @@ fn validate_period_assignment(
     Ok(())
 }
 
+fn ensure_separate_reviewer(preparer_actor_id: &str, reviewer_actor_id: &str) -> Result<(), String> {
+    if preparer_actor_id == reviewer_actor_id {
+        return Err("A different demo actor must perform the review; preparers cannot review their own work.".into());
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<WorkspaceRecord, String> {
     if !allowed_record_type(&input.record_type) {
@@ -1331,6 +1338,14 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
         }
     }
     if input.record_type == "invoice" {
+        if ["Needs correction","Reviewed"].contains(&input.status.as_str())
+            && exists.as_ref().map(|row|row.2.as_str()) == Some("Ready for review") {
+            let preparer_actor_id: String = db.connection.query_row(
+                "SELECT updated_by FROM workspace_record WHERE id=?1 AND firm_id=?2",
+                params![id,FIRM_ID], |row| row.get(0)
+            ).map_err(|e|e.to_string())?;
+            ensure_separate_reviewer(&preparer_actor_id,&actor_id)?;
+        }
         let prior_reviewer_note = exists.as_ref().map(|row| serde_json::from_str::<serde_json::Value>(&row.3).unwrap_or_else(|_|json!({})))
             .and_then(|value|value.get("reviewer_note").and_then(|v|v.as_str()).map(str::to_string)).unwrap_or_default();
         let next_reviewer_note = payload.get("reviewer_note").and_then(|v|v.as_str()).unwrap_or("").to_string();
@@ -2455,6 +2470,72 @@ mod tests {
             [&client_id],|row|row.get(0)
         ).unwrap();
         assert_eq!(count,2);
+    }
+
+    #[test]
+    fn invoice_review_requires_a_different_actor_from_the_preparer() {
+        let app = test_app();
+        let client_id = command_active_client_id(&app);
+        set_demo_persona("manager".into(),app.state::<AppState>()).unwrap();
+        let period_payload = json!({
+            "start_date":"2026-01-01",
+            "end_date":"2026-12-31",
+            "period_source_reference":"Synthetic engagement calendar",
+            "calendar_policy_reference":"Synthetic period policy"
+        });
+        let period = save_record(RecordInput {
+            id:None,row_version:None,client_id:Some(client_id.clone()),record_type:"period".into(),
+            title:"Synthetic FY 2026".into(),status:"Draft".into(),reference:Some("FY26-SYN".into()),
+            amount_text:None,notes:None,payload_json:Some(period_payload.to_string()),
+            duplicate_acknowledged:None,duplicate_acknowledgement_reason:None,
+        },app.state::<AppState>()).unwrap();
+        let ready_period = save_record(RecordInput {
+            id:Some(period.id.clone()),row_version:Some(period.row_version),client_id:Some(client_id.clone()),
+            record_type:"period".into(),title:"Synthetic FY 2026".into(),status:"Ready for review".into(),
+            reference:Some("FY26-SYN".into()),amount_text:None,notes:None,payload_json:Some(period_payload.to_string()),
+            duplicate_acknowledged:None,duplicate_acknowledgement_reason:None,
+        },app.state::<AppState>()).unwrap();
+        let reviewed_period = save_record(RecordInput {
+            id:Some(ready_period.id.clone()),row_version:Some(ready_period.row_version),client_id:Some(client_id.clone()),
+            record_type:"period".into(),title:"Synthetic FY 2026".into(),status:"Reviewed".into(),
+            reference:Some("FY26-SYN".into()),amount_text:None,notes:None,payload_json:Some(period_payload.to_string()),
+            duplicate_acknowledged:None,duplicate_acknowledgement_reason:None,
+        },app.state::<AppState>()).unwrap();
+        assert_eq!(reviewed_period.status,"Reviewed");
+
+        let invoice_payload = json!({
+            "invoice_number":"INV-REVIEW-01",
+            "invoice_date":"2026-01-15",
+            "financial_period_reference":"FY26-SYN",
+            "source_reference":"Synthetic original invoice source",
+            "invoice_lines_json":"[{\"description\":\"Synthetic service\",\"line_amount_text\":\"100.00\"}]"
+        });
+        let draft = save_record(RecordInput {
+            id:None,row_version:None,client_id:Some(client_id.clone()),record_type:"invoice".into(),
+            title:"Synthetic invoice review".into(),status:"Draft".into(),reference:Some("INV-REVIEW-01".into()),
+            amount_text:None,notes:None,payload_json:Some(invoice_payload.to_string()),
+            duplicate_acknowledged:None,duplicate_acknowledgement_reason:None,
+        },app.state::<AppState>()).unwrap();
+        let ready = save_record(RecordInput {
+            id:Some(draft.id.clone()),row_version:Some(draft.row_version),client_id:Some(client_id.clone()),
+            record_type:"invoice".into(),title:"Synthetic invoice review".into(),status:"Ready for review".into(),
+            reference:Some("INV-REVIEW-01".into()),amount_text:None,notes:None,payload_json:Some(invoice_payload.to_string()),
+            duplicate_acknowledged:None,duplicate_acknowledgement_reason:None,
+        },app.state::<AppState>()).expect("submit complete invoice for review");
+        assert!(save_record(RecordInput {
+            id:Some(ready.id.clone()),row_version:Some(ready.row_version),client_id:Some(client_id.clone()),
+            record_type:"invoice".into(),title:"Synthetic invoice review".into(),status:"Reviewed".into(),
+            reference:Some("INV-REVIEW-01".into()),amount_text:None,notes:None,payload_json:Some(invoice_payload.to_string()),
+            duplicate_acknowledged:None,duplicate_acknowledgement_reason:None,
+        },app.state::<AppState>()).is_err());
+        set_demo_persona("administrator".into(),app.state::<AppState>()).unwrap();
+        let reviewed = save_record(RecordInput {
+            id:Some(ready.id.clone()),row_version:Some(ready.row_version),client_id:Some(client_id),
+            record_type:"invoice".into(),title:"Synthetic invoice review".into(),status:"Reviewed".into(),
+            reference:Some("INV-REVIEW-01".into()),amount_text:None,notes:None,payload_json:Some(invoice_payload.to_string()),
+            duplicate_acknowledged:None,duplicate_acknowledgement_reason:None,
+        },app.state::<AppState>()).expect("independent administrator review");
+        assert_eq!(reviewed.status,"Reviewed");
     }
 
     #[test]
