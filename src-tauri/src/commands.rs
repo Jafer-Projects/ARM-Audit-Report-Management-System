@@ -50,7 +50,11 @@ pub struct ClientInput {
     address_text: Option<String>,
     internal_reference: Option<String>,
     notes: Option<String>,
+    duplicate_acknowledged: Option<bool>,
 }
+
+#[derive(Serialize)]
+pub struct DuplicateCandidate { id: String, record_kind: String, legal_name: String, tin_raw: String, status: String }
 
 #[derive(Serialize)]
 pub struct WorkspaceRecord {
@@ -163,6 +167,21 @@ pub fn list_clients(state: State<'_, AppState>, include_archived: bool) -> Resul
 }
 
 #[tauri::command]
+pub fn find_client_duplicates(legal_name: String, tin_raw: String, exclude_id: Option<String>, state: State<'_, AppState>) -> Result<Vec<DuplicateCandidate>, String> {
+    let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
+    let mut stmt = db.connection.prepare(
+        "SELECT id,record_kind,legal_name,tin_raw,status FROM client
+         WHERE firm_id=?1 AND id<>?2
+           AND (lower(trim(legal_name))=lower(trim(?3)) OR (?4<>'' AND trim(tin_raw)=trim(?4)))
+         ORDER BY updated_at DESC LIMIT 5"
+    ).map_err(|e|e.to_string())?;
+    let rows = stmt.query_map(params![FIRM_ID,exclude_id.unwrap_or_default(),legal_name.trim(),tin_raw.trim()], |r| Ok(DuplicateCandidate {
+        id:r.get(0)?,record_kind:r.get(1)?,legal_name:r.get(2)?,tin_raw:r.get(3)?,status:r.get(4)?
+    })).map_err(|e|e.to_string())?;
+    rows.collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())
+}
+
+#[tauri::command]
 pub fn save_client(input: ClientInput, state: State<'_, AppState>) -> Result<Client, String> {
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
     let (actor_id, _, _) = ensure_can_mutate(&db)?;
@@ -180,6 +199,16 @@ pub fn save_client(input: ClientInput, state: State<'_, AppState>) -> Result<Cli
         }
     }
     let id = input.id.unwrap_or_else(|| Uuid::new_v4().to_string());
+    let mut duplicate_stmt = db.connection.prepare(
+        "SELECT id,legal_name FROM client WHERE firm_id=?1 AND id<>?2
+         AND (lower(trim(legal_name))=lower(trim(?3)) OR (?4<>'' AND trim(tin_raw)=trim(?4))) LIMIT 5"
+    ).map_err(|e|e.to_string())?;
+    let duplicate_rows = duplicate_stmt.query_map(params![FIRM_ID,id,legal_name,input.tin_raw.as_deref().unwrap_or("").trim()], |r| Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?))).map_err(|e|e.to_string())?;
+    let duplicates = duplicate_rows.collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())?;
+    drop(duplicate_stmt);
+    if !duplicates.is_empty() && input.duplicate_acknowledged != Some(true) {
+        return Err("Possible duplicate client found. Compare the candidate and explicitly acknowledge before saving.".into());
+    }
     let now = now_utc();
     let exists: Option<i64> = db.connection.query_row("SELECT row_version FROM client WHERE id=?1 AND firm_id=?2", params![id,FIRM_ID], |r| r.get(0)).optional().map_err(|e| e.to_string())?;
     let tx = db.connection.unchecked_transaction().map_err(|e| e.to_string())?;
@@ -199,6 +228,11 @@ pub fn save_client(input: ClientInput, state: State<'_, AppState>) -> Result<Cli
         ).map_err(|e| e.to_string())?;
         tx.execute("INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json) VALUES(?1,?2,?3,'client_created','client',?4,?5,?6,'{}')",
             params![Uuid::new_v4().to_string(),FIRM_ID,actor_id,id,now,Uuid::new_v4().to_string()]).map_err(|e| e.to_string())?;
+    }
+    for (candidate_id, candidate_name) in duplicates {
+        tx.execute("INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json) VALUES(?1,?2,?3,'possible_duplicate_acknowledged','client',?4,?5,?6,?7)",
+            params![Uuid::new_v4().to_string(),FIRM_ID,actor_id,id,now,Uuid::new_v4().to_string(),json!({"candidate_id":candidate_id,"candidate_name":candidate_name}).to_string()]
+        ).map_err(|e|e.to_string())?;
     }
     tx.commit().map_err(|e| e.to_string())?;
     let mut stmt = db.connection.prepare("SELECT id,record_kind,legal_name,display_name,tin_raw,sector,contact_name,contact_email,contact_phone,address_text,internal_reference,notes,status,row_version,updated_at FROM client WHERE id=?1").map_err(|e| e.to_string())?;
