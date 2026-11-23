@@ -2,13 +2,30 @@
 
 **Status:** Approved for controlled implementation with synthetic data only  
 **Applies to:** Increment 0 (working shell and local workspace), Increment 1 (client/company registration), Increment 2 (product/category register and invoice capture), Increment 3 (historical data and VAT workpaper), Increment 4 (staff tasks and review workflow), and Increment 5 (import-cost worksheet discovery and controlled prototype).  
-**Authority:** This document operationalizes the Phase 0 approval and the Phase 1 delivery plan. If a broad baseline document is less specific, this specification governs the increments described here. The original Increment 0/1 implementation contract remains normative; later increment workflows are subject to the decision gates stated in this document. It does not authorize production, real client data, live posting, tax filing or regulated report issuance.
+**Authority:** This document operationalizes the Phase 0 approval and the Phase 1 delivery plan. If a broad baseline document is less specific, this specification governs the increments described here. The original Increment 0/1 implementation contract remains normative; later increment workflows are subject to the decision gates stated in this document. All Increments 0–5 are one coordinated delivery contract on a single implementation branch and a single pull request (#2). No increment may be declared accepted, passed, complete for release, or independently signed off against its criteria. Criteria may be executed continuously as engineering verification and defects must be fixed, but acceptance is assessed once, collectively, only after Increment 5 is implemented and the complete 0–5 system has passed the final integrated acceptance gate. This collective product-acceptance rule does not waive separate legal, security, professional, data-governance, operational or production-release gates. This specification does not authorize production, real client data, live posting, tax filing or regulated report issuance.
 
 ## 1. Purpose and implementation rule
 
 The developer must be able to implement these increments without inventing business rules. Build the smallest complete vertical slice, not a collection of disconnected screens. Every user-visible state must correspond to persisted application state. All unknown or professionally governed behavior must be visibly marked as not verified, deferred or requiring review.
 
 Use synthetic records and fictional identities. Do not load actual client, taxpayer, staff or engagement data.
+
+
+## 1.1 Binding delivery and collective acceptance contract
+
+This section is a binding product-owner delivery decision, effective 2026-11-23, for all work under PR #2.
+
+- **One branch:** implement Increments 0, 1, 2, 3, 4 and 5 on the single branch `implementation/increments-0-to-5`. Do not create increment-specific implementation branches or split the implementation into separate increment PRs.
+- **One pull request:** all implementation commits and supporting contract updates remain in PR #2, targeting `main`. Keep the PR open while the six increments are being implemented. Do not merge it until the collective acceptance decision is recorded and the required checks are satisfied.
+- **No individual increment acceptance:** headings and checklists labelled as increment criteria describe verification requirements only. An increment can be demonstrated, code-reviewed, tested and marked internally as implemented/in progress, but must never be marked accepted/passed/released independently.
+- **Continuous verification is still mandatory:** run relevant tests as each capability is added, fix regressions promptly, and record results. A passing subset of tests is evidence of component health, not acceptance of that increment or of the overall product.
+- **Single collective acceptance gate:** after Increment 5 implementation is complete, run the full cross-increment acceptance suite against the integrated application. The gate evaluates all requirements and workflows for Increments 0–5 together, including migrations from clean and prior schemas, end-to-end role journeys, persistence/restart, offline behavior, audit-event integrity, failure recovery, Windows compatibility, regression, usability and documented practitioner decisions.
+- **Gate outcomes:** record exactly one overall result: `NOT READY`, `READY FOR PRACTITIONER ACCEPTANCE`, or `ACCEPTED FOR CONTROLLED SYNTHETIC-DATA USE`. Do not use per-increment pass/fail statuses as release decisions. A failed criterion keeps the collective gate at NOT READY; fix and rerun the affected tests plus the full regression suite.
+- **Practitioner-dependent rules:** unresolved professional decisions remain visibly disabled or draft-only. The final collective gate may accept the software workflow while explicitly listing capabilities that remain gated; it must not imply unapproved tax/accounting outputs are authoritative.
+- **Production gates remain separate:** collective acceptance of Increments 0–5 does not authorize real client data, regulated services, live accounting posting, tax filing, desktop public distribution or production deployment. Those still require their own documented approvals.
+- **Traceability:** maintain one consolidated requirement-to-screen-to-service-to-schema-to-test matrix and one collective acceptance evidence report in this PR. Update both as implementation proceeds.
+
+The sole authority for changing this branch/PR/acceptance arrangement is an explicit product-owner decision recorded in the repository. Do not reinterpret a demonstration, intermediate test run, commit, milestone or practitioner comment as permission to split the branch or accept an increment individually.
 
 ## 2. Scope boundary
 
@@ -206,7 +223,9 @@ For Increments 0–1 the application is intentionally local-only:
 - Simulate process termination after save in automated tests.
 - Do not create an outbox until the actual sync contract is implemented; do not imply sync exists.
 
-## 9. Screen-level acceptance criteria
+## 9. Increment-level verification criteria (not individual acceptance gates)
+
+The following criteria are required test assertions for the final collective acceptance of the integrated Increments 0–5 system. They are not individual increment completion or acceptance gates. Run relevant tests continuously, but record acceptance only under Section 1.1 after Increment 5.
 
 ### Increment 0
 - First launch shows synthetic-data warning and opens the demo workspace without network access.
@@ -240,7 +259,7 @@ For Increments 0–1 the application is intentionally local-only:
 
 ## 11. Required developer deliverables
 
-Before declaring either increment complete, provide:
+Collect and maintain the following evidence during implementation. Do not declare either increment individually accepted or passed; assess this evidence only at the collective Increments 0–5 gate:
 1. Running Windows desktop prototype and reproducible developer setup instructions.
 2. Schema diagram or migration definitions and migration test report.
 3. Screen-flow evidence (screenshots or short recording) using synthetic data.
@@ -418,7 +437,7 @@ Clients → Add client → Enter identity → Save draft → Review completeness
 | Demo Auditor | Searches for a client by TIN text and acknowledges a possible duplicate | Search is firm-scoped; no automatic merge; acknowledgment event recorded |
 | Demo Read-only Reviewer | Opens profile and activity | Can inspect; all mutation routes are unavailable and command-guarded |
 
-**Increment 1 exit:** all existing normative acceptance criteria pass, including offline restart durability, validation preservation, duplicate handling, event atomicity and stale-row conflict behavior.
+**Increment 1 verification checkpoint (not acceptance):** continuously verify offline restart durability, validation preservation, duplicate handling, event atomicity and stale-row conflict behavior. These results contribute to the single collective Increments 0–5 acceptance gate; they do not constitute Increment 1 acceptance.
 
 ---
 
@@ -1384,7 +1403,7 @@ Before implementing a window, the developer and product owner must confirm:
 - [ ] Automated tests cover normal, negative, persistence and authorization paths.
 - [ ] Practitioner feedback and unresolved decisions are linked.
 
-## 10.1 Required artifacts at increment exit
+## 10.1 Required evidence artifacts (collected during implementation; assessed collectively)
 
 1. Working Windows desktop build using synthetic data.
 2. Screenshots or recording of every listed primary window and role journey.
@@ -1401,7 +1420,7 @@ Before implementing a window, the developer and product owner must confirm:
 
 # 11. Decisions that must be resolved at the right time
 
-Do not ask the product owner to decide every future detail before Increment 1. Ask only when the next increment reaches the relevant workflow demonstration.
+Do not ask the product owner to decide every future detail before Increment 1. Resolve questions through the workflow discovery process when the relevant increment is being built. This does not alter the single collective acceptance gate.
 
 | Decision | Needed before | Who should inform/approve |
 |---|---|---|
