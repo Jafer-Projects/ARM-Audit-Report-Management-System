@@ -997,6 +997,18 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
                 if payload.get("reassignment_reason").and_then(|v|v.as_str()).unwrap_or("").trim().chars().count() < 3 {
                     return Err("Record a reason of at least 3 characters when changing the assignee or reviewer.".into());
                 }
+                if reviewer.is_empty() || reviewer == assignee {
+                    return Err("The new reviewer must be a different active staff member from the preparer.".into());
+                }
+                let reviewer_active: bool = db.connection.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM workspace_record WHERE firm_id=?1 AND record_type='staff' AND status='Active' AND title=?2)",
+                    params![FIRM_ID,reviewer], |r|r.get(0)
+                ).map_err(|e|e.to_string())?;
+                if !reviewer_active { return Err("The new reviewer must be an active staff member.".into()); }
+            } else if prior_reviewer == reviewer {
+                let prior_reason = prior.get("reassignment_reason").and_then(|v|v.as_str()).unwrap_or("");
+                let next_reason = payload.get("reassignment_reason").and_then(|v|v.as_str()).unwrap_or("");
+                if prior_reason != next_reason { return Err("A reassignment reason can only change when the assignee or reviewer changes.".into()); }
             }
             if persona == "auditor" {
                 if prior_assignee != actor_name.as_str() || assignee != actor_name.as_str() || prior_reviewer != reviewer {
@@ -1049,9 +1061,13 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
                 let previous: serde_json::Value = serde_json::from_str(previous_payload).unwrap_or_else(|_|json!({}));
                 let mut previous_compare = previous.clone();
                 let mut payload_compare = payload.clone();
-                if previous_status == "Submitted" && input.status == "Cancelled" {
-                    if let Some(object) = previous_compare.as_object_mut() { object.remove("cancellation_reason"); }
-                    if let Some(object) = payload_compare.as_object_mut() { object.remove("cancellation_reason"); }
+                if previous_status == "Submitted" {
+                    if let Some(object) = previous_compare.as_object_mut() { object.remove("reviewer"); object.remove("reassignment_reason"); }
+                    if let Some(object) = payload_compare.as_object_mut() { object.remove("reviewer"); object.remove("reassignment_reason"); }
+                    if input.status == "Cancelled" {
+                        if let Some(object) = previous_compare.as_object_mut() { object.remove("cancellation_reason"); }
+                        if let Some(object) = payload_compare.as_object_mut() { object.remove("cancellation_reason"); }
+                    }
                 }
                 let old_values: (String,String,String,String) = db.connection.query_row(
                     "SELECT title,reference,amount_text,notes FROM workspace_record WHERE id=?1 AND firm_id=?2",
