@@ -1992,6 +1992,7 @@ pub fn reset_demo_data(state: State<'_, AppState>) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tauri::Manager;
 
 
 
@@ -2147,7 +2148,6 @@ mod tests {
 
     #[test]
     fn save_client_command_persists_draft_history_and_audit_event() {
-        use tauri::Manager;
         let app = test_app();
         let client = save_client(command_client_input("Command Test Company",None),app.state::<AppState>()).expect("create client");
         assert_eq!(client.status,"Draft");
@@ -2163,7 +2163,6 @@ mod tests {
 
     #[test]
     fn save_client_command_rejects_invalid_email_without_partial_write() {
-        use tauri::Manager;
         let app = test_app();
         assert!(save_client(command_client_input("Invalid Email Company",Some("not-an-email")),app.state::<AppState>()).is_err());
         let state = app.state::<AppState>();
@@ -2174,7 +2173,6 @@ mod tests {
 
     #[test]
     fn save_client_command_requires_duplicate_acknowledgement_and_never_merges() {
-        use tauri::Manager;
         let app = test_app();
         let existing_id = command_active_client_id(&app);
         let existing_name: String = {
@@ -2197,7 +2195,6 @@ mod tests {
 
     #[test]
     fn save_client_command_rejects_stale_row_version_without_overwriting() {
-        use tauri::Manager;
         let app = test_app();
         let created = save_client(command_client_input("Versioned Command Client",None),app.state::<AppState>()).unwrap();
         let mut stale = command_client_input("Attempted overwrite",None);
@@ -2212,7 +2209,6 @@ mod tests {
 
     #[test]
     fn reviewer_cannot_mutate_through_save_client_command() {
-        use tauri::Manager;
         let app = test_app();
         set_demo_persona("reviewer".into(),app.state::<AppState>()).expect("select reviewer");
         assert!(save_client(command_client_input("Reviewer Must Not Create",None),app.state::<AppState>()).is_err());
@@ -2220,7 +2216,6 @@ mod tests {
 
     #[test]
     fn save_record_command_rejects_moving_an_existing_record_between_two_clients() {
-        use tauri::Manager;
         let app = test_app();
         let first_client = command_active_client_id(&app);
         let second_client = "00000000-0000-4000-8000-000000000202";
@@ -2254,7 +2249,6 @@ mod tests {
 
     #[test]
     fn save_record_command_rejects_invoice_review_without_lines_source_and_period() {
-        use tauri::Manager;
         let app = test_app();
         let client_id = command_active_client_id(&app);
         let input = RecordInput {
@@ -2268,7 +2262,6 @@ mod tests {
 
     #[test]
     fn import_historical_batch_command_rejects_duplicate_source_rows_atomically() {
-        use tauri::Manager;
         let app = test_app();
         let client_id = command_active_client_id(&app);
         let make_row = || HistoricalImportRow {
@@ -2290,7 +2283,6 @@ mod tests {
 
     #[test]
     fn import_historical_batch_command_reconciles_all_rows_and_retains_row_provenance() {
-        use tauri::Manager;
         let app = test_app();
         let client_id = command_active_client_id(&app);
         let source_content = "Date,Description,Amount\\n2026-01-01,First purchase,10.00\\n2026-01-02,Second purchase,20.00";
@@ -2330,7 +2322,6 @@ mod tests {
 
     #[test]
     fn attach_source_document_command_persists_validated_evidence_and_rejects_spoofing() {
-        use tauri::Manager;
         let app = test_app();
         let client_id = command_active_client_id(&app);
         let draft = save_record(RecordInput {
@@ -2350,7 +2341,6 @@ mod tests {
 
     #[test]
     fn import_cost_preview_command_requires_reviewed_discovery_evidence() {
-        use tauri::Manager;
         let app = test_app();
         let client_id = command_active_client_id(&app);
         {
