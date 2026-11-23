@@ -165,8 +165,8 @@ pub fn calculate_import_cost(
         if line.quantity_micros <= 0 || line.unit_price_minor < 0 {
             return Err(format!("Goods line {reference} needs a positive quantity and non-negative unit price."));
         }
-        if line.currency_code.trim().len() != 3 {
-            return Err(format!("Goods line {reference} needs a three-letter source currency."));
+        if line.currency_code.trim().len() != 3 || !line.currency_code.trim().chars().all(|ch| ch.is_ascii_alphabetic()) {
+            return Err(format!("Goods line {reference} needs a three-letter alphabetic source currency."));
         }
         if line.weight_micros < 0 || line.volume_micros < 0 {
             return Err(format!("Goods line {reference} cannot have negative weight or volume."));
@@ -194,6 +194,9 @@ pub fn calculate_import_cost(
         let reference = component.component_reference.trim();
         if reference.is_empty() || component.category.trim().is_empty() {
             return Err("Every cost component needs a reference and category.".into());
+        }
+        if component.currency_code.trim().len() != 3 || !component.currency_code.trim().chars().all(|ch| ch.is_ascii_alphabetic()) {
+            return Err(format!("Cost component {reference} needs a three-letter alphabetic source currency."));
         }
         let base_amount = convert_to_base(component.amount_minor, component.fx_numerator, component.fx_denominator, "Cost component FX")?;
         let treatment = component.treatment.trim();
