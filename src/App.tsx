@@ -26,13 +26,13 @@ const subtypeOptions: Record<"catalogue" | "history" | "work" | "imports", { typ
 };
 const statusOptions: Record<string, string[]> = {
   category: ["Draft","Active","Archived"], product: ["Draft","Active","Archived"],
-  invoice: ["Draft","Submitted for review","Reviewed","Returned","Archived"],
-  period: ["Draft","Needs source","Ready for review","Reviewed","Locked"],
-  historical_record: ["Draft","Needs source","Ready for review","Reviewed"],
+  invoice: ["Draft","Submitted for review","Returned","Archived"],
+  period: ["Draft","Needs source","Ready for review"],
+  historical_record: ["Draft","Needs source","Ready for review"],
   staff: ["Draft","Active","Inactive"],
   task: ["Draft","Assigned","In progress","Blocked","Submitted","Returned","Completed","Cancelled"],
-  import_case: ["Discovery","Inputs captured","Needs review","Reviewed","Returned"],
-  import_cost_input: ["Discovery","Inputs captured","Needs review","Reviewed","Returned"],
+  import_case: ["Discovery","Needs practitioner input","Ready for workshop","Deferred"],
+  import_cost_input: ["Discovery","Needs practitioner input","Ready for workshop","Deferred"],
 };
 type RecordField = { key: string; label: string; kind?: "text" | "date" | "select" | "textarea"; options?: string[]; placeholder?: string; wide?: boolean };
 const recordFields: Record<string, RecordField[]> = {
