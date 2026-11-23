@@ -1075,7 +1075,7 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
     if input.title.trim().is_empty() || input.title.chars().count() > 200 {
         return Err("A title of 1–200 characters is required.".into());
     }
-    let payload: serde_json::Value = match input.payload_json.as_deref() {
+    let mut payload: serde_json::Value = match input.payload_json.as_deref() {
         Some(raw) if raw.len() <= 16_384 => serde_json::from_str(raw).map_err(|_| "Record metadata must be valid JSON.".to_string())?,
         Some(_) => return Err("Record metadata must be under 16 KB.".into()),
         None => json!({}),
@@ -1328,6 +1328,26 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
         |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?))
     ).optional().map_err(|e|e.to_string())?;
 
+    if input.record_type == "invoice" {
+        let previous_status = exists.as_ref().map(|row| row.2.as_str());
+        if previous_status == Some("Ready for review") {
+            if let Some((_, existing_type, _, previous_raw, _)) = exists.as_ref() {
+                if existing_type == "invoice" {
+                    let previous_payload: serde_json::Value = serde_json::from_str(previous_raw).unwrap_or_else(|_|json!({}));
+                    if let Some(submitted_by) = previous_payload.get("submitted_by_actor_id").and_then(|value|value.as_str()) {
+                        if let Some(object) = payload.as_object_mut() {
+                            object.insert("submitted_by_actor_id".into(),json!(submitted_by));
+                        }
+                    }
+                }
+            }
+        } else if input.status == "Ready for review" {
+            if let Some(object) = payload.as_object_mut() {
+                object.insert("submitted_by_actor_id".into(),json!(actor_id));
+            }
+        }
+    }
+
     if input.record_type == "import_cost_input" {
         if let Some((_, existing_type, _, existing_payload, _)) = exists.as_ref() {
             if existing_type != "import_cost_input" { return Err("Import-cost record type mismatch.".into()); }
@@ -1340,11 +1360,14 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
     if input.record_type == "invoice" {
         if ["Needs correction","Reviewed"].contains(&input.status.as_str())
             && exists.as_ref().map(|row|row.2.as_str()) == Some("Ready for review") {
-            let preparer_actor_id: String = db.connection.query_row(
-                "SELECT updated_by FROM workspace_record WHERE id=?1 AND firm_id=?2",
-                params![id,FIRM_ID], |row| row.get(0)
-            ).map_err(|e|e.to_string())?;
-            ensure_separate_reviewer(&preparer_actor_id,&actor_id)?;
+            let previous_payload: serde_json::Value = exists.as_ref()
+                .map(|row|serde_json::from_str(&row.3).unwrap_or_else(|_|json!({})))
+                .unwrap_or_else(||json!({}));
+            let preparer_actor_id = previous_payload.get("submitted_by_actor_id").and_then(|value|value.as_str()).unwrap_or("");
+            if preparer_actor_id.is_empty() {
+                return Err("The invoice review submission is missing its preparer identity; return it for correction before review.".into());
+            }
+            ensure_separate_reviewer(preparer_actor_id,&actor_id)?;
         }
         let prior_reviewer_note = exists.as_ref().map(|row| serde_json::from_str::<serde_json::Value>(&row.3).unwrap_or_else(|_|json!({})))
             .and_then(|value|value.get("reviewer_note").and_then(|v|v.as_str()).map(str::to_string)).unwrap_or_default();
