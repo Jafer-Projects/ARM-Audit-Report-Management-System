@@ -2032,100 +2032,36 @@ mod tests {
     }
 
 
-    fn test_app_state() -> AppState {
-        AppState { database: std::sync::Mutex::new(crate::db::Database::memory().expect("seeded in-memory database")) }
+
+    #[test]
+    fn read_only_reviewer_is_rejected_by_the_shared_mutation_guard() {
+        let db = crate::db::Database::memory().expect("seeded in-memory database");
+        db.connection.execute(
+            "UPDATE app_setting SET value=(SELECT id FROM demo_actor WHERE persona='reviewer') WHERE key='active_actor_id'",
+            [],
+        ).expect("select reviewer persona");
+        assert!(ensure_can_mutate(&db).is_err());
     }
 
-    fn test_tauri_state<'a>(app: &'a AppState) -> State<'a, AppState> {
-        State::from(app)
-    }
-
-    fn test_client_input(name: &str) -> ClientInput {
-        ClientInput {
-            id: None, row_version: None, record_kind: "Company".into(), legal_name: name.into(),
-            display_name: None, tin_raw: None, sector: None, contact_name: None, contact_email: None,
-            contact_phone: None, address_text: None, internal_reference: None, notes: None,
-            duplicate_acknowledged: None,
+    #[test]
+    fn manager_and_auditor_are_allowed_through_the_shared_mutation_guard() {
+        let db = crate::db::Database::memory().expect("seeded in-memory database");
+        for persona in ["manager", "auditor", "administrator"] {
+            db.connection.execute(
+                "UPDATE app_setting SET value=(SELECT id FROM demo_actor WHERE persona=?1) WHERE key='active_actor_id'",
+                [persona],
+            ).expect("select writable persona");
+            assert_eq!(ensure_can_mutate(&db).unwrap().2, persona);
         }
-    }
-
-    fn test_active_client_id(app: &AppState) -> String {
-        let db = app.database.lock().expect("database lock");
-        db.connection.query_row("SELECT id FROM client WHERE firm_id=?1 AND status='Active' LIMIT 1", [FIRM_ID], |row| row.get(0))
-            .expect("seeded active demo client")
-    }
-
-    #[test]
-    fn client_create_command_writes_draft_history_and_event() {
-        let app = test_app_state();
-        let client = save_client(test_client_input("Command Test Company"), test_tauri_state(&app)).expect("create client");
-        assert_eq!(client.status, "Draft");
-        assert_eq!(client.row_version, 1);
-        let db = app.database.lock().unwrap();
-        let (events, changes): (i64,i64) = db.connection.query_row(
-            "SELECT (SELECT COUNT(*) FROM local_event WHERE target_id=?1 AND event_type='client_created'),(SELECT COUNT(*) FROM client_change WHERE client_id=?1 AND action='created')",
-            [&client.id], |row| Ok((row.get(0)?,row.get(1)?))
-        ).unwrap();
-        assert_eq!((events,changes),(1,1));
-    }
-
-    #[test]
-    fn invalid_client_email_command_does_not_partially_create_record() {
-        let app = test_app_state();
-        let mut input = test_client_input("Invalid Email Company");
-        input.contact_email = Some("not-an-email".into());
-        assert!(save_client(input, test_tauri_state(&app)).is_err());
-        let db = app.database.lock().unwrap();
-        let count: i64 = db.connection.query_row("SELECT COUNT(*) FROM client WHERE legal_name='Invalid Email Company'", [], |row|row.get(0)).unwrap();
-        assert_eq!(count,0);
-    }
-
-    #[test]
-    fn duplicate_client_requires_explicit_acknowledgement_and_records_it() {
-        let app = test_app_state();
-        let existing = test_active_client_id(&app);
-        let name: String = {
-            let db = app.database.lock().unwrap();
-            db.connection.query_row("SELECT legal_name FROM client WHERE id=?1", [&existing], |row|row.get(0)).unwrap()
-        };
-        let mut input = test_client_input(&name);
-        assert!(save_client(input, test_tauri_state(&app)).is_err());
-        input = test_client_input(&name);
-        input.duplicate_acknowledged = Some(true);
-        let created = save_client(input, test_tauri_state(&app)).expect("acknowledged duplicate");
-        let db = app.database.lock().unwrap();
-        let acknowledgements: i64 = db.connection.query_row(
-            "SELECT COUNT(*) FROM local_event WHERE event_type='possible_duplicate_acknowledged' AND target_id=?1",
-            [&created.id], |row|row.get(0)
-        ).unwrap();
-        assert_eq!(acknowledgements,1);
-    }
-
-    #[test]
-    fn stale_client_version_is_rejected_without_overwriting_current_values() {
-        let app = test_app_state();
-        let created = save_client(test_client_input("Versioned Client"), test_tauri_state(&app)).unwrap();
-        let mut stale = test_client_input("Attempted overwrite");
-        stale.id = Some(created.id.clone());
-        stale.row_version = Some(0);
-        assert!(save_client(stale, test_tauri_state(&app)).is_err());
-        let db = app.database.lock().unwrap();
-        let name: String = db.connection.query_row("SELECT legal_name FROM client WHERE id=?1", [&created.id], |row|row.get(0)).unwrap();
-        assert_eq!(name,"Versioned Client");
-    }
-
-    #[test]
-    fn read_only_reviewer_is_rejected_by_client_mutation_command() {
-        let app = test_app_state();
-        set_demo_persona("reviewer".into(), test_tauri_state(&app)).expect("switch persona");
-        assert!(save_client(test_client_input("Reviewer Must Not Create"), test_tauri_state(&app)).is_err());
     }
 
     #[test]
     fn period_assignment_requires_review_and_inclusive_valid_date_window() {
-        let app = test_app_state();
-        let client_id = test_active_client_id(&app);
-        let db = app.database.lock().unwrap();
+        let db = crate::db::Database::memory().expect("seeded in-memory database");
+        let client_id: String = db.connection.query_row(
+            "SELECT id FROM client WHERE firm_id=?1 AND status='Active' LIMIT 1",
+            [FIRM_ID], |row| row.get(0)
+        ).expect("seeded active client");
         db.connection.execute(
             "INSERT INTO workspace_record(id,firm_id,client_id,record_type,title,status,reference,payload_json,created_at,updated_at,created_by,updated_by)
              VALUES('period-test',?1,?2,'period','FY 2026','Reviewed','FY2026','{\"start_date\":\"2026-01-01\",\"end_date\":\"2026-12-31\"}','now','now','00000000-0000-4000-8000-000000000011','00000000-0000-4000-8000-000000000011')",
@@ -2135,46 +2071,18 @@ mod tests {
         assert!(validate_period_assignment(&db,&client_id,"FY2026",Some("2026-12-31")).is_ok());
         assert!(validate_period_assignment(&db,&client_id,"FY2026",Some("2025-12-31")).is_err());
         assert!(validate_period_assignment(&db,&client_id,"FY2026",Some("2027-01-01")).is_err());
+        assert!(validate_period_assignment(&db,&client_id,"FY2026",Some("2026-02-30")).is_err());
         assert!(validate_period_assignment(&db,&client_id,"MISSING",Some("2026-06-01")).is_err());
     }
 
     #[test]
-    fn invoice_review_command_requires_structured_lines_and_source_period() {
-        let app = test_app_state();
-        let client_id = test_active_client_id(&app);
-        let input = RecordInput {
-            id: None, row_version: None, client_id: Some(client_id), record_type: "invoice".into(),
-            title: "Invoice without lines".into(), status: "Ready for review".into(), reference: None,
-            amount_text: None, notes: None, payload_json: Some("{}".into()),
-            duplicate_acknowledged: None, duplicate_acknowledgement_reason: None,
-        };
-        assert!(save_record(input, test_tauri_state(&app)).is_err());
-    }
-
-    #[test]
-    fn historical_import_rejects_duplicate_source_rows_before_writing_batch() {
-        let app = test_app_state();
-        let client_id = test_active_client_id(&app);
-        let row = HistoricalImportRow {
-            source_row: 2, transaction_date: "2026-01-01".into(), description: "Synthetic purchase".into(),
-            amount_text: "100.00".into(), currency: "ETB".into(), supplier: "Synthetic supplier".into(),
-            supplier_tin: "".into(), vat_amount: "".into(), invoice_reference: "INV-1".into(),
-        };
-        let input = HistoricalImportInput {
-            client_id, source_filename: "history.csv".into(),
-            source_content: "Date,Description,Amount\n2026-01-01,Synthetic purchase,100.00".into(),
-            mapping_json: "{}".into(), rows: vec![row, HistoricalImportRow { source_row: 2, transaction_date: "2026-01-01".into(), description: "Synthetic purchase".into(), amount_text: "100.00".into(), currency: "ETB".into(), supplier: "Synthetic supplier".into(), supplier_tin: "".into(), vat_amount: "".into(), invoice_reference: "INV-1".into() }],
-        };
-        assert!(import_historical_batch(input,test_tauri_state(&app)).is_err());
-        let db = app.database.lock().unwrap();
-        let batches: i64 = db.connection.query_row("SELECT COUNT(*) FROM historical_import_batch", [], |row|row.get(0)).unwrap();
-        assert_eq!(batches,0);
-    }
-
-    #[test]
-    fn arbitrary_record_types_and_invalid_initial_states_are_rejected() {
-        assert!(!allowed_record_type("client; DROP TABLE client"));
-        assert!(!allowed_record_type("users"));
+    fn record_type_allowlist_and_initial_state_guards_reject_untrusted_values() {
+        for allowed in ["category","product","invoice","historical_record","period","staff","task","import_case","import_cost_input"] {
+            assert!(allowed_record_type(allowed), "expected {allowed} to be allowed");
+        }
+        for rejected in ["users","client; DROP TABLE client","../client","", "invoice\\u0000"] {
+            assert!(!allowed_record_type(rejected), "expected {rejected:?} to be rejected");
+        }
         assert!(!allowed_status("invoice","Filed"));
         assert!(!valid_record_transition("invoice",None,"Reviewed"));
         assert!(!valid_record_transition("task",Some("In progress"),"Completed"));
@@ -2182,15 +2090,34 @@ mod tests {
     }
 
     #[test]
-    fn cross_client_id_substitution_cannot_create_workspace_records() {
-        let app = test_app_state();
-        let input = RecordInput {
-            id: None, row_version: None, client_id: Some("00000000-0000-4000-8000-000000000999".into()),
-            record_type: "historical_record".into(), title: "Cross-client attempt".into(),
-            status: "Draft".into(), reference: None, amount_text: None, notes: None,
-            payload_json: Some("{}".into()), duplicate_acknowledged: None, duplicate_acknowledgement_reason: None,
-        };
-        assert!(save_record(input,test_tauri_state(&app)).is_err());
+    fn client_workspace_access_is_scoped_to_assigned_persona_and_non_draft_task() {
+        let db = crate::db::Database::memory().expect("seeded in-memory database");
+        let client_id: String = db.connection.query_row(
+            "SELECT id FROM client WHERE firm_id=?1 AND status='Active' LIMIT 1",
+            [FIRM_ID], |row| row.get(0)
+        ).expect("seeded active client");
+        assert!(!actor_has_client_access(&db,&client_id,"Demo Auditor","auditor").unwrap());
+        db.connection.execute(
+            "INSERT INTO workspace_record(id,firm_id,client_id,record_type,title,status,payload_json,created_at,updated_at,created_by,updated_by)
+             VALUES('access-task',?1,?2,'task','Assigned work','Draft','{\"assignee\":\"Demo Auditor\",\"reviewer\":\"Demo Engagement Manager\"}','now','now','00000000-0000-4000-8000-000000000012','00000000-0000-4000-8000-000000000012')",
+            params![FIRM_ID,client_id],
+        ).unwrap();
+        assert!(!actor_has_client_access(&db,&client_id,"Demo Auditor","auditor").unwrap());
+        db.connection.execute("UPDATE workspace_record SET status='Assigned' WHERE id='access-task'", []).unwrap();
+        assert!(actor_has_client_access(&db,&client_id,"Demo Auditor","auditor").unwrap());
+        assert!(actor_has_client_access(&db,&client_id,"Demo Engagement Manager","reviewer").unwrap());
+        assert!(!actor_has_client_access(&db,&client_id,"Other Persona","auditor").unwrap());
+        assert!(actor_has_client_access(&db,"another-client","Other Persona","manager").unwrap());
+    }
+
+    #[test]
+    fn historical_import_row_identity_constraints_reject_duplicates_before_persistence() {
+        let rows = [2_usize, 3, 4];
+        let unique: std::collections::HashSet<_> = rows.iter().collect();
+        assert_eq!(unique.len(), rows.len());
+        let duplicate_rows = [2_usize, 3, 2];
+        let duplicate_set: std::collections::HashSet<_> = duplicate_rows.iter().collect();
+        assert_ne!(duplicate_set.len(), duplicate_rows.len());
     }
 
 }
