@@ -21,8 +21,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22.16.0"
-          cache: npm
-      - name: Install exact declared dependencies
+      - name: Install pinned direct dependencies
         run: npm install --no-audit --no-fund
       - name: Typecheck
         run: npm run typecheck
@@ -42,7 +41,7 @@ jobs:
           toolchain: "1.90.0"
           targets: x86_64-pc-windows-msvc
       - name: Rust tests
-        run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+        run: cargo test --manifest-path src-tauri/Cargo.toml
       - name: Tauri Windows build (no installer)
         run: |
           npm install --no-audit --no-fund
