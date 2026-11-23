@@ -2555,7 +2555,8 @@ mod tests {
             amount_text:None,notes:None,payload_json:Some(json!({"base_currency":"ETB"}).to_string()),
             duplicate_acknowledged:None,duplicate_acknowledgement_reason:None,
         },app.state::<AppState>()).expect("create import case");
-        let first_payload = json!({"entry_kind":"calculation_result","result_json":"{\\\"base_currency\\\":\\\"ETB\\\",\\\"total\\\":100}"});
+        let first_result = json!({"base_currency":"ETB","total":100}).to_string();
+        let first_payload = json!({"entry_kind":"calculation_result","result_json":first_result});
         let first = save_record(RecordInput {
             id:None,row_version:None,client_id:Some(client_id.clone()),record_type:"import_cost_input".into(),
             title:"Calculation version 1".into(),status:"Draft".into(),reference:Some("CASE-COST-IMM".into()),
@@ -2563,7 +2564,7 @@ mod tests {
             duplicate_acknowledged:None,duplicate_acknowledgement_reason:None,
         },app.state::<AppState>()).expect("save first calculation snapshot");
         let mut changed_payload = first_payload.clone();
-        changed_payload["result_json"] = json!("{\\\"base_currency\\\":\\\"ETB\\\",\\\"total\\\":999}");
+        changed_payload["result_json"] = json!({"base_currency":"ETB","total":999}).to_string().into();
         assert!(save_record(RecordInput {
             id:Some(first.id.clone()),row_version:Some(first.row_version),client_id:Some(client_id.clone()),
             record_type:"import_cost_input".into(),title:"Calculation version 1 changed".into(),status:"Draft".into(),
@@ -2580,7 +2581,9 @@ mod tests {
         let state = app.state::<AppState>();
         let db = state.database.lock().unwrap();
         let first_json: String = db.connection.query_row("SELECT payload_json FROM workspace_record WHERE id=?1",[&first.id],|row|row.get(0)).unwrap();
-        assert!(first_json.contains("\\\\"total\\\\\":100"));
+        let outer: serde_json::Value = serde_json::from_str(&first_json).unwrap();
+        let stored_result: serde_json::Value = serde_json::from_str(outer["result_json"].as_str().unwrap()).unwrap();
+        assert_eq!(stored_result["total"],100);
     }
 
     #[test]
