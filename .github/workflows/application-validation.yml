@@ -1,0 +1,49 @@
+name: ARM application validation
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - "implementation/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  web-validation:
+    name: Typecheck, domain tests and frontend build
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.16.0"
+          cache: npm
+      - name: Install exact declared dependencies
+        run: npm install --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Domain contract tests
+        run: npm test
+      - name: Build frontend
+        run: npm run build
+
+  rust-validation:
+    name: Rust tests and Windows desktop build
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.90.0"
+          targets: x86_64-pc-windows-msvc
+      - name: Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+      - name: Tauri Windows build (no installer)
+        run: |
+          npm install --no-audit --no-fund
+          npm run tauri -- build --no-bundle
