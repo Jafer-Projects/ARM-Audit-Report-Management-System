@@ -30,7 +30,7 @@ Use synthetic records and fictional identities. Do not load actual client, taxpa
 - TIN validation against government systems.
 - Accounting journals, VAT calculations, tax returns, audit opinions, report signing or filing.
 - Staff/task management. A draft note in Increment 0 must not be represented as the full task module planned for Increment 4.
-- Installer signing or public desktop distribution pending security and OS support gates.
+- Installer signing or public desktop distribution pending security gates. Windows 10 x64 and Windows 11 x64 are the requested application compatibility targets, including unsupported Windows 10 installations; compatibility does not imply OS security support. Production use with real client data on an unsupported OS requires separate documented security risk acceptance and approval.
 
 ## 3. Technical baseline and implementation decisions
 
@@ -253,7 +253,7 @@ Before declaring either increment complete, provide:
 ## 12. Decisions still requiring owner or qualified review
 
 These do not block the local synthetic prototype unless stated:
-- **Windows 10 support policy:** see the explicit product-owner decision request in the PR discussion. Do not claim general Windows 10 support or package for unsupported Windows 10 until lifecycle, edition and security-update eligibility are confirmed. This blocks the supported OS matrix and installer acceptance, not Windows 11/local prototype work.
+- **Windows 10/11 compatibility:** product owner selected broad application compatibility for Windows 10 x64 and Windows 11 x64, including unsupported Windows 10 installations. Do not describe unsupported Windows as secure or Microsoft-supported. Test and publish an edition/build compatibility matrix. Do not disable OS security features. Real client data on unsupported Windows remains blocked pending security review, documented risk acceptance and compensating controls. This requirement does not waive the production security gate.
 - **Encryption library and key lifecycle:** blocks real data and distribution; synthetic spike may proceed.
 - **Production identity/RBAC and full permission matrix:** blocks real multi-tenant data; demo persona guards are not production security.
 - **Legal entity types, branch structure and multiple TINs:** collect through practitioner sessions before expanding the profile schema.
