@@ -20,7 +20,7 @@ A sprint/increment should end with something a practitioner can try, not only an
 
 **Demo:** user opens a demo client workspace offline, creates a local draft note (not a task or workpaper) and sees it remain after restart.
 
-**Normative detail:** follow [Developer Implementation Specification — Increments 0 and 1](developer-implementation-specification-increments-0-and-1.md).
+**Normative detail:** follow [Developer Implementation Specification — Increments 0–5](developer-implementation-specification-increments-0-and-1.md).
 
 ### Increment 1 — Client and company registration
 - Guided client profile.
@@ -32,7 +32,7 @@ A sprint/increment should end with something a practitioner can try, not only an
 
 **Demo:** auditor creates a company, sees missing required details, completes the profile and retrieves it later.
 
-**Normative detail:** follow [Developer Implementation Specification — Increments 0 and 1](developer-implementation-specification-increments-0-and-1.md).
+**Normative detail:** follow the consolidated [Developer Implementation Specification — Increments 0–5](developer-implementation-specification-increments-0-and-1.md).
 
 ### Increment 2 — Product/category register and invoice capture
 - Product categories and product register.
@@ -66,7 +66,7 @@ A sprint/increment should end with something a practitioner can try, not only an
 
 **Demo:** reviewer reproduces the cost calculation from the saved inputs and assumptions.
 
-**Detailed user and window workflows:** [Window-by-window and user-by-user workflow specification — Increments 1–5](window-by-window-user-by-user-increments-1-to-5.md). This is the screen-flow companion to the Increment 0/1 normative developer contract. For Increments 2–5, fields and state rules explicitly marked as practitioner decisions must be confirmed before being implemented as business rules.
+**Normative developer handoff:** the consolidated [Developer Implementation Specification — Increments 0–5](developer-implementation-specification-increments-0-and-1.md) now contains the screen-by-screen and role-by-role workflows for all five increments. For Increments 2–5, fields and state rules explicitly marked as practitioner decisions must be confirmed before being implemented as business rules.
 
 ## 3. Practitioner demonstration protocol
 
