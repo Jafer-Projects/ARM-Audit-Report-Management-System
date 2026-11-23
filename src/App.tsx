@@ -234,7 +234,7 @@ export default function App() {
     return parseRecordPayload(recordEditor);
   }, [recordEditor]);
   const visibleRecords = useMemo(() => recordType === "invoice" && invoiceQueueOnly ? records.filter(record => record.status === "Submitted for review") : records, [records, recordType, invoiceQueueOnly]);
-  const taskAssignees = useMemo(() => ["All", ...Array.from(new Set(records.filter(record => record.record_type === "task").map(record => parseRecordPayload(record).assignee).filter(Boolean)))], [records]);
+  const taskAssignees = useMemo(() => ["All", ...Array.from(new Set(records.filter(record => record.record_type === "task").map(record => parseRecordPayload(record).assignee).filter((name): name is string => Boolean(name))))], [records]);
   const visibleTasks = useMemo(() => records.filter(record => record.record_type === "task")
     .filter(record => taskAssigneeFilter === "All" || parseRecordPayload(record).assignee === taskAssigneeFilter)
     .filter(record => taskPriorityFilter === "All" || parseRecordPayload(record).priority === taskPriorityFilter)
@@ -493,8 +493,8 @@ export default function App() {
           {section === "work" && workDashboard && <div className="work-dashboard"><div className="work-dashboard-head"><div><span className="overline">INCREMENT 4 · WORK OVERVIEW</span><h3>{workspace?.persona === "auditor" ? "My work" : workspace?.persona === "reviewer" ? "Assigned review queue" : "Team work overview"}</h3><p>Counts are derived from task records for the selected client. No staff performance scores are calculated.</p></div><button className="secondary" onClick={() => setWorkloadView(value => !value)}>{workloadView ? "Back to task list" : "Workload by assignee"}</button></div>
             <div className="task-stats">
               <button onClick={() => {setTaskStatusFilter("All");setTaskDueFilter("All");}}><strong>{records.length}</strong><span>All tasks</span></button>
-              <button onClick={() => {setTaskDueFilter("Due soon");setTaskStatusFilter("All");}}><strong>{records.filter(task => taskDueState(parseRecordPayload(task).due_date) === "Due soon").length}</strong><span>Due soon</span></button>
-              <button onClick={() => {setTaskDueFilter("Overdue");setTaskStatusFilter("All");}}><strong>{records.filter(task => taskDueState(parseRecordPayload(task).due_date) === "Overdue").length}</strong><span>Overdue</span></button>
+              <button onClick={() => {setTaskDueFilter("Due soon");setTaskStatusFilter("All");}}><strong>{records.filter(task => taskDueState(parseRecordPayload(task).due_date ?? "") === "Due soon").length}</strong><span>Due soon</span></button>
+              <button onClick={() => {setTaskDueFilter("Overdue");setTaskStatusFilter("All");}}><strong>{records.filter(task => taskDueState(parseRecordPayload(task).due_date ?? "") === "Overdue").length}</strong><span>Overdue</span></button>
               <button onClick={() => {setTaskStatusFilter("Blocked");setTaskDueFilter("All");}}><strong>{records.filter(task => task.status === "Blocked").length}</strong><span>Blocked</span></button>
               <button onClick={() => {setTaskStatusFilter("Submitted");setTaskDueFilter("All");}}><strong>{records.filter(task => task.status === "Submitted").length}</strong><span>Waiting for review</span></button>
               <button onClick={() => {setTaskStatusFilter("Completed");setTaskDueFilter("All");}}><strong>{records.filter(task => task.status === "Completed").length}</strong><span>Completed</span></button>
