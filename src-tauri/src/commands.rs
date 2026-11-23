@@ -901,14 +901,18 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
     if input.record_type == "staff" && !["administrator","manager"].contains(&persona.as_str()) {
         return Err("Only the demo administrator or manager can maintain staff records.".into());
     }
-    if let Some(client_id) = input.client_id.as_deref() {
+    if input.record_type == "staff" {
+        if input.client_id.is_some() { return Err("Staff records belong to the demonstration firm, not a client workspace.".into()); }
+    } else {
+        let client_id = input.client_id.as_deref().ok_or_else(||"Select the client workspace for this record.".to_string())?;
         let active: bool = db.connection.query_row(
             "SELECT EXISTS(SELECT 1 FROM client WHERE id=?1 AND firm_id=?2 AND status='Active')",
             params![client_id,FIRM_ID], |r| r.get(0)
         ).map_err(|e| e.to_string())?;
         if !active { return Err("Choose an active client in this demonstration firm.".into()); }
-    } else if ["category","product","invoice","historical_record","period","task","import_case"].contains(&input.record_type.as_str()) {
-        return Err("Select the client workspace for this record.".into());
+        if !actor_has_client_access(&db,client_id,&actor_name,&persona)? {
+            return Err("This client workspace is not assigned to your demo persona.".into());
+        }
     }
 
     let id = input.id.clone().unwrap_or_else(|| Uuid::new_v4().to_string());
