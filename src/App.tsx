@@ -217,7 +217,7 @@ export default function App() {
     const config = recordTypes[section as keyof typeof recordTypes];
     if (config) setRecordType(config.type);
   }, [section]);
-  useEffect(() => { setWorkDashboard(section === "work"); setWorkloadView(false); }, [section]);
+  useEffect(() => { setWorkDashboard(section === "work"); setWorkloadView(false); if (section === "work") setRecordType("task"); }, [section]);
 
   useEffect(() => {
     if (["catalogue", "history", "work", "imports"].includes(section)) {
