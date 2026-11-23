@@ -46,7 +46,7 @@
 - Local changes are not represented as cloud-received until acknowledged by the server.
 - Government submission is not represented as successful until an official acknowledgement is recorded.
 - Automation assists professional work; required human review and authorization remain mandatory.
-- Supported OS matrix remains a product-owner decision: Windows 11 x64 is the default target; Windows 10 x64 support is limited to editions/releases with verifiable security-update eligibility. Unsupported Windows 10 installations are not an approved production target. Installer acceptance is blocked until the owner confirms the Windows 10 support boundary.
+- Product-owner OS compatibility decision (2026-11-23): target Windows 10 x64 and Windows 11 x64 broadly, including ordinary Windows 10 installations that no longer receive Microsoft security updates. This is an application compatibility requirement, not a representation that unsupported Windows installations are secure or vendor-supported. The application must not disable or bypass OS security controls. Maintain a tested compatibility matrix by Windows edition/build and document known limitations. Production use with real client data on an unsupported OS remains a security-risk exception and is blocked until the security reviewer approves a documented risk assessment and compensating controls. Installer acceptance requires explicit warnings and verified behavior on each declared target.
 - No production use until backup restoration, incident response, monitoring, access control and agreed RPO/RTO are demonstrated.
 
 ## 5. Approval record
