@@ -535,13 +535,13 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
     if exists.is_some() {
         tx.execute(
             "UPDATE workspace_record SET client_id=?1,title=?2,status=?3,reference=?4,amount_text=?5,notes=?6,payload_json=?7,row_version=row_version+1,updated_at=?8,updated_by=?9 WHERE id=?10 AND firm_id=?11",
-            params![input.client_id,input.title.trim(),input.status,input.reference.unwrap_or_default(),input.amount_text.unwrap_or_default(),input.notes.unwrap_or_default(),payload.to_string(),now,actor_id,id,FIRM_ID]
+            params![input.client_id.as_deref(),input.title.trim(),input.status,input.reference.as_deref().unwrap_or(""),input.amount_text.as_deref().unwrap_or(""),input.notes.as_deref().unwrap_or(""),payload.to_string(),now,actor_id,id,FIRM_ID]
         ).map_err(|e|e.to_string())?;
     } else {
         tx.execute(
             "INSERT INTO workspace_record(id,firm_id,client_id,record_type,title,status,reference,amount_text,notes,payload_json,row_version,created_at,updated_at,created_by,updated_by)
              VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,1,?11,?11,?12,?12)",
-            params![id,FIRM_ID,input.client_id,input.record_type,input.title.trim(),input.status,input.reference.unwrap_or_default(),input.amount_text.unwrap_or_default(),input.notes.unwrap_or_default(),payload.to_string(),now,actor_id]
+            params![id,FIRM_ID,input.client_id.as_deref(),input.record_type,input.title.trim(),input.status,input.reference.as_deref().unwrap_or(""),input.amount_text.as_deref().unwrap_or(""),input.notes.as_deref().unwrap_or(""),payload.to_string(),now,actor_id]
         ).map_err(|e|e.to_string())?;
     }
     let new_version = exists.as_ref().map(|(version,_,_,_)| *version + 1).unwrap_or(1);
