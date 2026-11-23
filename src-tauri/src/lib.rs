@@ -46,6 +46,9 @@ pub fn run() {
             commands::save_record,
             commands::list_events,
             commands::calculate_import_cost_preview,
+            commands::attach_source_document,
+            commands::list_source_documents,
+            commands::read_source_document,
             commands::reset_demo_data
         ])
         .run(tauri::generate_context!())
