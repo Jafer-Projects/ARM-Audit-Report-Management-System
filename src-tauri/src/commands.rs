@@ -315,7 +315,7 @@ fn valid_record_transition(record_type: &str, previous: Option<&str>, next: &str
         ("task", Some("Blocked"), "Blocked" | "In progress" | "Cancelled") => true,
         ("task", Some("Submitted"), "Submitted" | "Returned" | "Completed") => true,
         ("task", Some("Returned"), "Returned" | "In progress" | "Cancelled") => true,
-        ("task", Some("Completed" | "Cancelled"), next) if next == "Completed" || next == "Cancelled" => true,
+        ("task", Some("Completed"), "Completed") | ("task", Some("Cancelled"), "Cancelled") => true,
         ("import_case", None, "Discovery") => true,
         ("import_case", Some("Discovery"), "Discovery" | "Needs practitioner input" | "Ready for workshop" | "Deferred") => true,
         ("import_case", Some("Needs practitioner input"), "Needs practitioner input" | "Ready for workshop" | "Deferred") => true,
