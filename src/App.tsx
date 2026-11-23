@@ -24,13 +24,99 @@ const subtypeOptions: Record<"catalogue" | "history" | "work" | "imports", { typ
   work: [{ type: "staff", label: "Staff" }, { type: "task", label: "Tasks" }],
   imports: [{ type: "import_case", label: "Discovery workspace" }, { type: "import_cost_input", label: "Cost inputs" }],
 };
+type RecordField = {
+  key: string;
+  label: string;
+  kind?: "select" | "date" | "textarea";
+  options?: string[];
+  placeholder?: string;
+  wide?: boolean;
+};
+
 const statusOptions: Record<string, string[]> = {
-  category: ["Draft","Active","Archived"], product: ["Draft","Active","Archived"],
-  invoice: ["Draft","Submitted for review","Returned","Archived"],
-  period: ["Draft","Needs source","Ready for review"],
-  historical_record: ["Draft","Needs source","Ready for review"],
+  category: ["Draft","Active","Archived"],
+  product: ["Draft","Active","Archived"],
+  invoice: ["Draft","Needs correction","Ready for review","Reviewed","Archived"],
+  period: ["Draft","Needs source","Ready for review","Reviewed"],
+  historical_record: ["Draft","Needs source","Ready for review","Reviewed"],
   staff: ["Draft","Active","Inactive"],
   task: ["Draft","Assigned","In progress","Blocked","Submitted","Returned","Completed","Cancelled"],
+  import_case: ["Discovery","Inputs captured","Needs review","Reviewed","Deferred"],
+  import_cost_input: ["Draft","Needs source","Ready for review"],
+};
+
+const recordFields: Record<string, RecordField[]> = {
+  category: [
+    { key: "description", label: "Description", kind: "textarea", wide: true },
+    { key: "parent_category_reference", label: "Parent category reference (optional)", placeholder: "Only if a practitioner confirms category hierarchy" },
+  ],
+  product: [
+    { key: "category_reference", label: "Category reference (optional)" },
+    { key: "description", label: "Description", kind: "textarea", wide: true },
+    { key: "item_code", label: "Item code / SKU (optional; not assumed unique)" },
+    { key: "unit_description", label: "Unit / quantity description (optional)" },
+  ],
+  invoice: [
+    { key: "transaction_class", label: "Transaction class", kind: "select", options: ["Sales","Purchase"] },
+    { key: "invoice_number", label: "Invoice number (source text)" },
+    { key: "invoice_date", label: "Invoice date", kind: "date" },
+    { key: "financial_period_reference", label: "Financial period/year reference (do not infer tax period)" },
+    { key: "counterparty_name", label: "Customer / supplier name" },
+    { key: "counterparty_tin", label: "Customer / supplier TIN (opaque optional text)" },
+    { key: "vat_amount", label: "VAT amount as shown on source (text)" },
+    { key: "currency_code", label: "Currency code as shown on source (text)" },
+    { key: "quantity_text", label: "Quantity as shown (text; no unit assumptions)" },
+    { key: "line_items_text", label: "Line item descriptions as shown on source", kind: "textarea", wide: true },
+    { key: "line_note", label: "Line note / remark", kind: "textarea", wide: true },
+    { key: "remark", label: "Invoice remark", kind: "textarea", wide: true },
+    { key: "source_type", label: "Source type", kind: "select", options: ["Paper","PDF","Spreadsheet","Other"] },
+    { key: "source_reference", label: "Source document reference" },
+    { key: "source_filename", label: "Source filename (metadata only)" },
+    { key: "source_received_date", label: "Source received date", kind: "date" },
+    { key: "source_association_note", label: "Source association note", kind: "textarea", wide: true },
+  ],
+  period: [
+    { key: "period_label", label: "Period label" },
+    { key: "start_date", label: "Start date", kind: "date" },
+    { key: "end_date", label: "End date", kind: "date" },
+    { key: "calendar_policy_reference", label: "Approved calendar / period policy reference" },
+    { key: "period_note", label: "Period note", kind: "textarea", wide: true },
+  ],
+  historical_record: [
+    { key: "historical_class", label: "Record class", kind: "select", options: ["Purchase","Expense","Tax-related record","Other"] },
+    { key: "transaction_date", label: "Transaction date", kind: "date" },
+    { key: "description", label: "Description" },
+    { key: "currency", label: "Currency as shown on source" },
+    { key: "supplier", label: "Supplier / payee" },
+    { key: "supplier_tin", label: "Supplier TIN (opaque optional text)" },
+    { key: "vat_amount", label: "VAT amount as stated (text)" },
+    { key: "invoice_reference", label: "Invoice reference" },
+    { key: "period_reference", label: "Period reference (do not infer tax period)" },
+    { key: "source_type", label: "Source type", kind: "select", options: ["Paper","PDF","Spreadsheet","Bank export","Other"] },
+    { key: "source_reference", label: "Source document reference" },
+    { key: "source_filename", label: "Source filename (metadata only)" },
+    { key: "source_row", label: "Source row number (metadata)" },
+    { key: "import_batch_id", label: "Import batch ID (metadata)" },
+    { key: "exception_note", label: "Missing data / exception note", kind: "textarea", wide: true },
+  ],
+  staff: [
+    { key: "staff_code", label: "Staff reference (optional)" },
+    { key: "role_title", label: "Role / professional title" },
+    { key: "email", label: "Work email (optional)" },
+    { key: "staff_note", label: "Staff note", kind: "textarea", wide: true },
+  ],
+  task: [
+    { key: "description", label: "Task description / expected output", kind: "textarea", wide: true },
+    { key: "assignee", label: "Assigned preparer" },
+    { key: "reviewer", label: "Assigned reviewer" },
+    { key: "priority", label: "Priority", kind: "select", options: ["Low","Normal","High","Urgent"] },
+    { key: "due_date", label: "Due date", kind: "date" },
+    { key: "related_record_reference", label: "Related record reference" },
+    { key: "completion_summary", label: "Completion summary", kind: "textarea", wide: true },
+    { key: "blocker_explanation", label: "Blocker explanation", kind: "textarea", wide: true },
+    { key: "reassignment_reason", label: "Assignee / reviewer change reason", kind: "textarea", wide: true },
+    { key: "cancellation_reason", label: "Cancellation reason", kind: "textarea", wide: true },
+  ],
   import_case: [
     { key: "discovery_stage", label: "Discovery stage", kind: "select", options: ["Workflow discovery","Source inventory","Cost component discovery","FX policy discovery","Allocation method discovery","Review and approval discovery","Unresolved questions","Deferred"] },
     { key: "workshop_date", label: "Workshop date", kind: "date" },
@@ -70,6 +156,7 @@ const statusOptions: Record<string, string[]> = {
     { key: "inclusion_reason", label: "Inclusion / exclusion reason", kind: "textarea", wide: true },
   ],
 };
+
 const csvMappingFields = [
   { key: "transaction_date", label: "Transaction date", required: false },
   { key: "description", label: "Description", required: true },
