@@ -892,8 +892,8 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
         let description = payload.get("description").and_then(|v|v.as_str()).unwrap_or("").trim();
         let assignee = payload.get("assignee").and_then(|v|v.as_str()).unwrap_or("").trim();
         let reviewer = payload.get("reviewer").and_then(|v|v.as_str()).unwrap_or("").trim();
-        if description.is_empty() || assignee.is_empty() {
-            return Err("A task needs a description/expected output and an assignee.".into());
+        if description.is_empty() || (input.status != "Draft" && assignee.is_empty()) {
+            return Err("A task needs a description; assign an active preparer before leaving Draft.".into());
         }
         if input.status == "Submitted" && payload.get("completion_summary").and_then(|v|v.as_str()).unwrap_or("").trim().is_empty() {
             return Err("Add a completion summary before submitting the task for review.".into());
@@ -918,7 +918,7 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
             let prior_assignee = prior.get("assignee").and_then(|v|v.as_str()).unwrap_or("");
             let prior_reviewer = prior.get("reviewer").and_then(|v|v.as_str()).unwrap_or("");
             if existing_type != "task" { return Err("Task record type mismatch.".into()); }
-            if prior_assignee != assignee || (!prior_reviewer.is_empty() && prior_reviewer != reviewer) {
+            if (!prior_assignee.is_empty() && prior_assignee != assignee) || (!prior_reviewer.is_empty() && prior_reviewer != reviewer) {
                 if !["administrator","manager"].contains(&persona.as_str()) {
                     return Err("Only a manager can reassign a task or reviewer.".into());
                 }
