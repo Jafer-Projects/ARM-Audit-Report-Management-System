@@ -131,3 +131,10 @@ There is no individual increment exit/acceptance decision. The first controlled 
 - Offline/restart/sync behavior is demonstrated for the workflow.
 - No unresolved critical defect or unsafe tax/accounting assumption remains.
 - Applicable real-data and operational gates are approved before any real client data is introduced.
+
+
+## Binding override — prototype build and deferred collective verification
+
+The product owner has issued a later, explicit decision recorded in [PR #2](https://github.com/Jafermenza/ARM-Audit-Report-Management-System/pull/2) and [Prototype Build Binding Contract](prototype-build-binding-contract.md). ARM is a controlled prototype using synthetic data. All implementation remains on `implementation/increments-0-to-5` in PR #2. Close the outstanding Increments 0–5 implementation gaps to the best practical professional standard, preserving existing behavior and avoiding scope expansion.
+
+**This later decision supersedes any earlier wording in this file that requires continuous test execution or increment-level verification.** Formal verification and testing of the integrated Increments 0–5 delivery occur only after Increment 5 implementation is complete. Do not declare any increment accepted, passed, or independently complete. Test plans and fixtures may be prepared during implementation, but partial checks must not be presented as acceptance. This timing decision does not permit test deletion, assertion weakening, or unsupported claims. The one collective gate and separate production/legal/security/professional gates remain mandatory.
