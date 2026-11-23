@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Client, ClientChange, ClientInput, DuplicateCandidate, EventItem, HistoricalImportBatch, HistoricalImportResult, HistoricalImportRow, InvoiceDuplicateCandidate, LocalNote, RecordInput, TaskReviewNote, WorkspaceInfo, WorkspaceRecord, WorkspaceRecordVersion } from "../types";
+import type { Client, ClientChange, ClientInput, DuplicateCandidate, EventItem, HistoricalImportBatch, HistoricalImportResult, HistoricalImportRow, ImportCostResult, InvoiceDuplicateCandidate, LocalNote, RecordInput, TaskReviewNote, WorkspaceInfo, WorkspaceRecord, WorkspaceRecordVersion } from "../types";
 
 export const desktop = {
   initialize: () => invoke<WorkspaceInfo>("initialize_workspace"),
@@ -21,6 +21,7 @@ export const desktop = {
   importHistoricalBatch: (input: { client_id: string; source_filename: string; source_content: string; mapping_json: string; rows: HistoricalImportRow[] }) => invoke<HistoricalImportResult>("import_historical_batch", { input }),
   importBatches: (clientId: string) => invoke<HistoricalImportBatch[]>("list_historical_import_batches", { clientId }),
   findInvoiceDuplicates: (clientId: string, invoiceNumber: string, excludeId?: string) => invoke<InvoiceDuplicateCandidate[]>("find_invoice_duplicates", { clientId, invoiceNumber, excludeId }),
+  calculateImportCostPreview: (clientId: string, caseReference: string, baseCurrency: string) => invoke<ImportCostResult>("calculate_import_cost_preview", { clientId, caseReference, baseCurrency }),
   records: (recordType: string, clientId?: string) => invoke<WorkspaceRecord[]>("list_records", { recordType, clientId: clientId ?? null }),
   saveRecord: (input: RecordInput) => invoke<WorkspaceRecord>("save_record", { input }),
   events: () => invoke<EventItem[]>("list_events"),
