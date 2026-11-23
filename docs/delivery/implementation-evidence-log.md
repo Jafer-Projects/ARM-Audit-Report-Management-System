@@ -104,3 +104,13 @@ These implementation notes describe code added, not test results, increment acce
 - Period records require unique client-scoped references, valid ISO date windows, source/calendar policy references before review, and manager/administrator review before use.
 - Historical records submitted for review require an explicit reviewed period and source evidence; dated transactions must fall inside the selected period. Tax-history rows preserve the tax period exactly as supplied.
 - These checks prevent automatic tax-period inference and stop unassigned/out-of-window records from being treated as review-ready.
+
+
+### Increment 4 workspace notification implementation added
+
+- Added migration 11 for persistent firm/client/record-scoped notifications addressed to the current demo actor.
+- Task assignment, reviewer assignment, submission for review, blocked, returned and completed events create idempotent notifications inside the same local database transaction as the task update.
+- Task assignee and reviewer must map to active demo identities; this keeps the notification recipient and task workspace context explicit in the controlled prototype.
+- The inbox is recipient-scoped, filters notifications through the active persona's client access, shows unread state, and routes to the linked task and client workspace.
+- Read state is one-way; notification content is immutable and history cannot be deleted except through the explicit synthetic-demo reset.
+- Notifications are in-app/local only. No email, SMS, push, background due-date scheduler or production identity delivery is implemented.
