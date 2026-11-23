@@ -12,7 +12,7 @@ Its defining product requirement is a **Windows-first, fully offline-capable des
 - Users: auditors, accountants, clients, managers and platform administrators.
 - Initial market: Ethiopia.
 - Initial scale target: capacity hypothesis to be tested, not a production guarantee.
-- Desktop: Windows-first; Windows 11 supported editions are the production baseline.
+- Desktop: Windows-first; Windows 11 x64 is the default target. Windows 10 x64 compatibility/support boundary remains pending confirmation and must not include unsupported installations.
 - Offline: core professional workflows remain usable without internet.
 - Devices: individually assigned computers.
 - Synchronization: automatic background synchronization plus user-controlled retry/status.
