@@ -255,6 +255,7 @@ export default function App() {
   const [taskAssigneeFilter, setTaskAssigneeFilter] = useState("All");
   const [taskPriorityFilter, setTaskPriorityFilter] = useState("All");
   const [taskStatusFilter, setTaskStatusFilter] = useState("All");
+  const [taskDueFilter, setTaskDueFilter] = useState("All");
 
   async function refresh(nextSection = section) {
     try {
@@ -294,7 +295,8 @@ export default function App() {
   const visibleTasks = useMemo(() => records.filter(record => record.record_type === "task")
     .filter(record => taskAssigneeFilter === "All" || parseRecordPayload(record).assignee === taskAssigneeFilter)
     .filter(record => taskPriorityFilter === "All" || parseRecordPayload(record).priority === taskPriorityFilter)
-    .filter(record => taskStatusFilter === "All" || record.status === taskStatusFilter), [records, taskAssigneeFilter, taskPriorityFilter, taskStatusFilter]);
+    .filter(record => taskStatusFilter === "All" || record.status === taskStatusFilter)
+    .filter(record => taskDueFilter === "All" || taskDueState(parseRecordPayload(record).due_date) === taskDueFilter), [records, taskAssigneeFilter, taskPriorityFilter, taskStatusFilter, taskDueFilter]);
 
   const filteredClients = useMemo(() => clients.filter((c) =>
     [c.legal_name, c.display_name, c.tin_raw].join(" ").toLowerCase().includes(search.toLowerCase())), [clients, search]);
