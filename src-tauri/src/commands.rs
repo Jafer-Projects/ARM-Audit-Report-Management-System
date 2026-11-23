@@ -317,6 +317,10 @@ pub struct ClientChange {
 #[tauri::command]
 pub fn list_client_changes(client_id: String, state: State<'_, AppState>) -> Result<Vec<ClientChange>, String> {
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
+    let (_,actor_name,persona) = active_actor(&db)?;
+    if !actor_has_client_access(&db,&client_id,&actor_name,&persona)? {
+        return Err("This client is not assigned to your demo persona.".into());
+    }
     let client_exists: bool = db.connection.query_row(
         "SELECT EXISTS(SELECT 1 FROM client WHERE id=?1 AND firm_id=?2)",
         params![client_id,FIRM_ID], |r| r.get(0)
@@ -476,6 +480,8 @@ pub fn find_invoice_duplicates(client_id: String, invoice_number: String, exclud
         params![client_id,FIRM_ID], |r|r.get(0)
     ).map_err(|e|e.to_string())?;
     if !active { return Err("Select an active client before checking invoice duplicates.".into()); }
+    let (_,actor_name,persona) = active_actor(&db)?;
+    if !actor_has_client_access(&db,&client_id,&actor_name,&persona)? { return Err("This client is not assigned to your demo persona.".into()); }
     let mut stmt = db.connection.prepare(
         "SELECT id,title,status,payload_json FROM workspace_record
          WHERE firm_id=?1 AND client_id=?2 AND record_type='invoice' AND id<>?3
@@ -836,8 +842,16 @@ pub fn list_records(record_type: String, client_id: Option<String>, state: State
             params![selected,FIRM_ID], |r|r.get(0)
         ).map_err(|e|e.to_string())?;
         if !active { return Err("Selected client is not active in this demonstration firm.".into()); }
+        let (_,actor_name,persona) = active_actor(&db)?;
+        if !actor_has_client_access(&db,&selected,&actor_name,&persona)? {
+            return Err("This client workspace is not assigned to your demo persona.".into());
+        }
         Some(selected)
     };
+    if record_type == "staff" {
+        let (_,_,persona) = active_actor(&db)?;
+        if !["administrator","manager"].contains(&persona.as_str()) { return Err("The staff directory is restricted to the demo administrator and manager.".into()); }
+    }
     let mut stmt = db.connection.prepare(
         "SELECT id,client_id,record_type,title,status,reference,amount_text,notes,payload_json,row_version,updated_at
          FROM workspace_record WHERE firm_id=?1 AND record_type=?2 AND client_id IS ?3 ORDER BY updated_at DESC"
