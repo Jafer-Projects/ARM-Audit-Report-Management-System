@@ -497,6 +497,8 @@ mod tests {
         assert_eq!(count, 2);
         assert!(first.contains("Invoice A"));
         assert!(second.contains("Invoice B"));
+        assert!(db.connection.execute("UPDATE workspace_record_version SET snapshot_json='{}' WHERE id='version-1'", []).is_err());
+        assert!(db.connection.execute("DELETE FROM workspace_record_version WHERE id='version-1'", []).is_err());
     }
 
 
@@ -534,6 +536,21 @@ mod tests {
         ).expect("create import batch");
         let stored: String = db.connection.query_row("SELECT source_content FROM historical_import_batch WHERE id='batch-test'", [], |r|r.get(0)).unwrap();
         assert_eq!(stored, source);
+        assert!(db.connection.execute("UPDATE historical_import_batch SET source_content='changed' WHERE id='batch-test'", []).is_err());
+        assert!(db.connection.execute("DELETE FROM historical_import_batch WHERE id='batch-test'", []).is_err());
+    }
+
+
+    #[test]
+    fn client_change_history_is_immutable() {
+        let db = Database::memory().expect("in-memory db");
+        db.connection.execute(
+            "INSERT INTO client_change(id,client_id,firm_id,actor_id,action,changed_at,before_json,after_json,correlation_id)
+             VALUES('change-test','00000000-0000-4000-8000-000000000101','00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000011','created','now','{}','{\"legal_name\":\"Sample\"}','corr')",
+            [],
+        ).expect("create client change");
+        assert!(db.connection.execute("UPDATE client_change SET after_json='{}' WHERE id='change-test'", []).is_err());
+        assert!(db.connection.execute("DELETE FROM client_change WHERE id='change-test'", []).is_err());
     }
 
 }
