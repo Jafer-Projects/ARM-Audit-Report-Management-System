@@ -470,7 +470,7 @@ export default function App() {
           <span className="nav-dot" /><span><small>{item.eyebrow}</small>{item.label}</span>{section === item.id && <b>›</b>}
         </button>)}
       </nav>
-      <div className="sidebar-bottom"><div className="demo-chip">DEMO ENVIRONMENT</div><p>Synthetic data only. Not connected to production.</p><button className="text-button" onClick={resetDemo}>Reset demo workspace</button></div>
+      <div className="sidebar-bottom"><div className="demo-chip">DEMO ENVIRONMENT</div><p>Synthetic data only. Not connected to production.</p>{workspace?.persona === "administrator" && <button className="text-button" onClick={resetDemo}>Reset demo workspace</button>}</div>
     </aside>
     <main className="main">
       <header className="topbar"><div><span className="overline">ARM WORKSPACE / {nav.find(n => n.id === section)?.label.toUpperCase()}</span><h1>{section === "home" ? "Good work starts with a clear next step." : nav.find(n => n.id === section)?.label}</h1></div>
