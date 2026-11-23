@@ -83,7 +83,12 @@ pub struct RecordInput {
     amount_text: Option<String>,
     notes: Option<String>,
     payload_json: Option<String>,
+    duplicate_acknowledged: Option<bool>,
+    duplicate_acknowledgement_reason: Option<String>,
 }
+
+#[derive(Serialize)]
+pub struct InvoiceDuplicateCandidate { id: String, title: String, status: String, invoice_number: String, invoice_date: String }
 
 #[derive(Serialize)]
 pub struct EventItem {
@@ -415,6 +420,39 @@ pub fn save_note(input: LocalNoteInput, state: State<'_, AppState>) -> Result<Lo
         params![Uuid::new_v4().to_string(),FIRM_ID,actor_id,id,now,Uuid::new_v4().to_string(),json!({"title":title}).to_string()]).map_err(|e|e.to_string())?;
     tx.commit().map_err(|e|e.to_string())?;
     db.connection.query_row("SELECT id,client_id,title,body,status,updated_at FROM local_note WHERE id=?1 AND firm_id=?2",params![id,FIRM_ID],|r|Ok(LocalNote{id:r.get(0)?,client_id:r.get(1)?,title:r.get(2)?,body:r.get(3)?,status:r.get(4)?,updated_at:r.get(5)?})).map_err(|e|e.to_string())
+}
+
+#[tauri::command]
+pub fn find_invoice_duplicates(client_id: String, invoice_number: String, exclude_id: Option<String>, state: State<'_, AppState>) -> Result<Vec<InvoiceDuplicateCandidate>, String> {
+    let number = invoice_number.trim();
+    if number.is_empty() { return Ok(Vec::new()); }
+    let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
+    let active: bool = db.connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM client WHERE id=?1 AND firm_id=?2 AND status='Active')",
+        params![client_id,FIRM_ID], |r|r.get(0)
+    ).map_err(|e|e.to_string())?;
+    if !active { return Err("Select an active client before checking invoice duplicates.".into()); }
+    let mut stmt = db.connection.prepare(
+        "SELECT id,title,status,payload_json FROM workspace_record
+         WHERE firm_id=?1 AND client_id=?2 AND record_type='invoice' AND id<>?3
+         ORDER BY updated_at DESC LIMIT 500"
+    ).map_err(|e|e.to_string())?;
+    let rows = stmt.query_map(params![FIRM_ID,client_id,exclude_id.unwrap_or_default()], |r| {
+        Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,String>(3)?))
+    }).map_err(|e|e.to_string())?;
+    let mut candidates = Vec::new();
+    for row in rows {
+        let (id,title,status,raw) = row.map_err(|e|e.to_string())?;
+        let payload: serde_json::Value = serde_json::from_str(&raw).unwrap_or_else(|_|json!({}));
+        let candidate_number = payload.get("invoice_number").and_then(|v|v.as_str()).unwrap_or("").trim();
+        if candidate_number.eq_ignore_ascii_case(number) {
+            candidates.push(InvoiceDuplicateCandidate {
+                id,title,status,invoice_number:candidate_number.to_string(),
+                invoice_date:payload.get("invoice_date").and_then(|v|v.as_str()).unwrap_or("").to_string()
+            });
+        }
+    }
+    Ok(candidates)
 }
 
 #[tauri::command]
