@@ -586,7 +586,7 @@ pub fn reset_demo_data(state: State<'_, AppState>) -> Result<(), String> {
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
     let (actor_id,_,_) = ensure_can_mutate(&db)?;
     let tx = db.connection.unchecked_transaction().map_err(|e|e.to_string())?;
-    tx.execute("DELETE FROM workspace_record WHERE firm_id=?1",[FIRM_ID]).map_err(|e|e.to_string())?;
+    tx.execute("DELETE FROM workspace_record WHERE firm_id=?1 AND record_type<>'staff'",[FIRM_ID]).map_err(|e|e.to_string())?;
     tx.execute("DELETE FROM local_note WHERE firm_id=?1",[FIRM_ID]).map_err(|e|e.to_string())?;
     tx.execute("DELETE FROM client_change WHERE firm_id=?1",[FIRM_ID]).map_err(|e|e.to_string())?;
     tx.execute("DELETE FROM client WHERE firm_id=?1",[FIRM_ID]).map_err(|e|e.to_string())?;
