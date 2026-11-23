@@ -542,10 +542,13 @@ pub struct TaskReviewNote {
 pub fn list_task_review_notes(task_id: String, state: State<'_, AppState>) -> Result<Vec<TaskReviewNote>, String> {
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
     let (_, actor_name, persona) = active_actor(&db)?;
-    let raw: String = db.connection.query_row(
-        "SELECT payload_json FROM workspace_record WHERE id=?1 AND firm_id=?2 AND record_type='task'",
-        params![task_id,FIRM_ID], |r|r.get(0)
+    let (task_status,raw): (String,String) = db.connection.query_row(
+        "SELECT status,payload_json FROM workspace_record WHERE id=?1 AND firm_id=?2 AND record_type='task'",
+        params![task_id,FIRM_ID], |r|Ok((r.get(0)?,r.get(1)?))
     ).map_err(|_|"Task not found in this demonstration firm.".to_string())?;
+    if task_status == "Draft" && ["auditor","reviewer"].contains(&persona.as_str()) {
+        return Err("This task has not been assigned for work or review.".into());
+    }
     let payload: serde_json::Value = serde_json::from_str(&raw).unwrap_or_else(|_|json!({}));
     let assignee = payload.get("assignee").and_then(|v|v.as_str()).unwrap_or("");
     let reviewer = payload.get("reviewer").and_then(|v|v.as_str()).unwrap_or("");
