@@ -63,3 +63,8 @@ export type InvoiceLineDraft = {
   quantity_text: string; unit_text: string; unit_price_text: string;
   line_amount_text: string; tax_label: string; tax_amount_text: string;
 };
+
+export type WorkspaceNotification = {
+  id: string; client_id: string; record_id: string; record_type: string;
+  event_type: string; title: string; body: string; created_at: string; read_at: string | null;
+};
