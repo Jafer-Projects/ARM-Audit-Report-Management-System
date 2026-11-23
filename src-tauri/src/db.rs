@@ -299,4 +299,21 @@ mod tests {
         assert!(db.migrate().is_err());
     }
 
+
+    #[test]
+    fn client_change_history_stores_before_and_after_snapshots() {
+        let db = Database::memory().expect("in-memory db");
+        db.connection.execute(
+            "INSERT INTO client_change(id,client_id,firm_id,actor_id,action,changed_at,before_json,after_json,correlation_id)
+             VALUES('change-1','00000000-0000-4000-8000-000000000101','00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000011','updated','2026-11-23T00:00:00Z','{\"legal_name\":\"Before\"}','{\"legal_name\":\"After\"}','corr-1')",
+            [],
+        ).expect("insert client change");
+        let (before, after): (String, String) = db.connection.query_row(
+            "SELECT before_json,after_json FROM client_change WHERE id='change-1'", [],
+            |r| Ok((r.get(0)?,r.get(1)?))
+        ).unwrap();
+        assert!(before.contains("Before"));
+        assert!(after.contains("After"));
+    }
+
 }
