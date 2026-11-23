@@ -28,3 +28,7 @@ export type LocalNote = { id: string; client_id: string | null; title: string; b
 export type ClientChange = { id: string; action: string; changed_at: string; actor_name: string; before_json: string; after_json: string };
 
 export type InvoiceDuplicateCandidate = { id: string; title: string; status: string; invoice_number: string; invoice_date: string };
+
+export type HistoricalImportRow = { source_row: number; transaction_date: string; description: string; amount_text: string; currency: string; supplier: string; supplier_tin: string; vat_amount: string; invoice_reference: string };
+export type HistoricalImportResult = { batch_id: string; source_checksum_sha256: string; source_row_count: number; imported_row_count: number };
+export type HistoricalImportBatch = { id: string; source_filename: string; source_checksum_sha256: string; source_row_count: number; imported_row_count: number; imported_at: string };
