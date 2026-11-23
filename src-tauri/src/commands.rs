@@ -902,7 +902,7 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
             return Err("Explain the blocker before moving the task to Blocked.".into());
         }
         if input.status == "Assigned" {
-            if reviewer.is_empty() || reviewer == assignee || reviewer == "Demo Read-only Reviewer" {
+            if reviewer.is_empty() || reviewer == assignee {
                 return Err("Assign a separate active reviewer; the preparer cannot review their own task.".into());
             }
             for staff_name in [assignee, reviewer] {
