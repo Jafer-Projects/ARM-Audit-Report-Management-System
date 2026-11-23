@@ -24,7 +24,7 @@
 | ID | Normative scenario | Test / evidence | Status |
 |---|---|---|---|
 | I1-01 | Minimal Company profile saves as Draft and completeness is correct | `commands.rs::save_client_command_persists_draft_history_and_audit_event`; completeness indicator/UI integration test still required | PARTIAL |
-| I1-02 | Optional TIN/contact/sector updates profile summary | Command update + summary UI integration test required | PENDING |
+| I1-02 | Optional TIN/contact/sector updates profile summary | `commands.rs::save_client_command_updates_optional_profile_fields_without_losing_existing_values`; summary UI rendering test pending | PARTIAL |
 | I1-03 | Invalid email is flagged without losing other entered values | `commands.rs::save_client_command_rejects_invalid_email_without_partial_write` and field validator tests; dirty-form retention UI test pending | PARTIAL |
 | I1-04 | Duplicate name/TIN warns and never silently merges/overwrites | `commands.rs::save_client_command_requires_duplicate_acknowledgement_and_never_merges`; TIN candidate comparison/UI advisory test pending | PARTIAL |
 | I1-05 | Search is firm-scoped; archived hidden by default and shown on request | `commands.rs::client_activation_archive_restore_and_archived_filter_are_consistent` covers archived filter; text search and multi-firm boundary tests pending | PARTIAL |
@@ -39,15 +39,15 @@
 | ID | Normative scenario | Test / evidence | Status |
 |---|---|---|---|
 | I2-01 | Product/category records are client-scoped; cross-client ID substitution is rejected | `commands.rs::save_record_command_rejects_moving_an_existing_record_between_two_clients`; extend to every record type and read command | PARTIAL |
-| I2-02 | Archived product remains visible on historical invoice | Product archive + historical invoice rendering integration test required | PENDING |
+| I2-02 | Archived product remains visible on historical invoice | `commands.rs::archived_product_remains_addressable_from_a_historical_invoice_record` verifies archived product reference survives invoice persistence/reopen; rendered label test pending | PARTIAL |
 | I2-03 | Draft invoice saves with permitted missing fields and shows exact missing list | `commands.rs::invoice_draft_can_be_saved_with_missing_fields_and_duplicates_remain_advisory` and review-prerequisite test; exact missing-field UI list pending | PARTIAL |
 | I2-04 | Invalid values do not erase other entered values | Form state retention/UI validation test required | PENDING |
 | I2-05 | Duplicate invoice candidate is advisory; no automatic overwrite/merge | `commands.rs::invoice_draft_can_be_saved_with_missing_fields_and_duplicates_remain_advisory` verifies separate record after reasoned acknowledgment; candidate UI comparison pending | PARTIAL |
 | I2-06 | Source attachment metadata and association survive restart | `commands.rs::attach_source_document_command_persists_validated_evidence_across_database_reopen` | AUTOMATED |
 | I2-07 | Unsupported or unsafe file type is rejected clearly | `commands.rs::source_document_validation_checks_content_name_mime_extension_and_size` and `attach_source_document_command_persists_validated_evidence_and_rejects_spoofing` | AUTOMATED |
-| I2-08 | Preparer cannot mark own work reviewed | Assigned preparer/reviewer command integration test required | PENDING |
-| I2-09 | Reviewer decision and preparer correction are distinct events | Review/correction event-separation integration test required | PENDING |
-| I2-10 | Offline capture and restart preserve records | Invoice/product/attachment restart integration test required | PENDING |
+| I2-08 | Preparer cannot mark own work reviewed | `commands.rs::invoice_review_requires_a_different_actor_from_the_preparer` verifies self-review rejection, including after reviewer-note edits | AUTOMATED |
+| I2-09 | Reviewer decision and preparer correction are distinct events | `commands.rs::invoice_review_requires_a_different_actor_from_the_preparer`; separate review actor is enforced, correction/resubmission event chain pending | PARTIAL |
+| I2-10 | Offline capture and restart preserve records | Archived product/invoice and source attachment command tests verify persistence across database reopen | AUTOMATED |
 | I2-11 | No VAT calculation or tax-compliance claim appears | Existing Node vocabulary test is a local constant, not UI implementation; UI copy regression required | PARTIAL |
 
 ### Increment 3 — Historical data and draft VAT workpaper (10)
@@ -63,7 +63,7 @@
 | I3-07 | Tax rule version/effective date is stored with each calculated draft | Rule-pack versioned draft test required; authoritative calculation remains gated | PENDING |
 | I3-08 | Input changes do not rewrite previously reviewed snapshots | Workspace version immutability exists; reviewed-input revision command test required | PARTIAL |
 | I3-09 | Review notes and preparer corrections are distinct events | `db.rs::task_review_notes_cannot_be_deleted`; same-actor separation and command-level attribution test pending | PARTIAL |
-| I3-10 | Offline restart preserves source references and draft workpapers | Historical import/workpaper restart integration test required | PENDING |
+| I3-10 | Offline restart preserves source references and draft workpapers | `commands.rs::import_historical_batch_command_reconciles_all_rows_and_retains_row_provenance` verifies source and rows after database reopen | AUTOMATED |
 
 ### Increment 4 — Staff tasks and review workflow (10)
 
@@ -76,9 +76,9 @@
 | I4-05 | Reviewer action is attributable and cannot be deleted | `commands.rs::review_note_requires_assigned_reviewer_and_preparer_response_before_disposition` asserts reviewer, response and disposition actor IDs; database immutability test also exists | AUTOMATED |
 | I4-06 | Blocked task requires reason and appears in manager queue | `commands.rs::task_workflow_requires_blocker_and_submission_evidence_then_separate_reviewer_completion` verifies blocker reason; manager queue visibility test pending | PARTIAL |
 | I4-07 | Overdue calculation uses stored due date and local display timezone | Deterministic clock/timezone boundary test required | PENDING |
-| I4-08 | Cancelled task retains history and work product | Cancellation preservation integration test required | PENDING |
+| I4-08 | Cancelled task retains history and work product | `commands.rs::cancelled_task_retains_work_product_and_restart_state` | AUTOMATED |
 | I4-09 | Cross-client task access is rejected | Assigned-persona access helper is tested; actual two-client task command boundary test pending | PARTIAL |
-| I4-10 | Offline task updates persist after restart; no sync status fabricated | Task restart + UI sync-claim regression required | PENDING |
+| I4-10 | Offline task updates persist after restart; no sync status fabricated | `commands.rs::cancelled_task_retains_work_product_and_restart_state` verifies task state/history after reopen; sync-status UI regression pending | PARTIAL |
 
 ### Increment 5 — Import-cost worksheet (9)
 
@@ -89,8 +89,8 @@
 | I5-03 | FX rate has source, date and authorization | New costing provenance negative tests in `import_cost.rs`; saved-input command test pending | PARTIAL |
 | I5-04 | Allocation is reproducible and versioned | New quantity/weight/volume/value and deterministic remainder tests in `import_cost.rs`; persisted revision version test pending | PARTIAL |
 | I5-05 | Missing source/rate blocks readiness instead of using guessed default | New source/FX negative tests in `import_cost.rs`; save-record readiness command test pending | PARTIAL |
-| I5-06 | Input change creates a new revision and invalidates prior review | Calculation revision and reviewed-snapshot invalidation test required | PENDING |
-| I5-07 | Reviewer sees exact submitted snapshot | Submitted calculation snapshot read-back/reviewer test required | PENDING |
+| I5-06 | Input change creates a new revision and invalidates prior review | `commands.rs::import_cost_calculation_snapshots_are_immutable_and_new_versions_are_separate_records`; reviewed-snapshot invalidation for revised inputs pending | PARTIAL |
+| I5-07 | Reviewer sees exact submitted snapshot | `commands.rs::import_cost_calculation_snapshots_are_immutable_and_new_versions_are_separate_records` reads exact version snapshot; reviewer-role visibility test pending | PARTIAL |
 | I5-08 | Calculation reproduces independently verified expected results | Synthetic arithmetic fixtures exist; practitioner-approved independent expected-result fixture remains required | PARTIAL |
 | I5-09 | Optional selling-price analysis remains separate from statutory/audit result | Feature boundary/UI copy regression test required | PENDING |
 
@@ -113,7 +113,7 @@
 ## 3. Newly added executable test groups
 
 The current commit adds:
-- Real Tauri-command tests using Tauri's mock runtime for demo initialization/reset, local-note and source-document persistence across reopen, client activation/archive/restore/filtering, for client creation, draft state, audit/history creation, invalid email rejection, duplicate acknowledgment/no-merge, stale-version conflict, reviewer mutation rejection, invoice draft/duplicate/review behavior, cross-client record reassignment rejection, historical-import duplicate-row rejection and successful row reconciliation/provenance, source-document attachment validation across database reopen, import-cost discovery evidence gating, task assignment notifications, inactive-staff rejection, reassignment history, blocker/submission evidence, review-note actor separation and reviewer completion.
+- Real Tauri-command tests using Tauri's mock runtime for demo initialization/reset, local-note and source-document persistence across reopen, client activation/archive/restore/filtering, for client creation, draft state, audit/history creation, invalid email rejection, duplicate acknowledgment/no-merge, stale-version conflict, reviewer mutation rejection, invoice draft/duplicate/review behavior, cross-client record reassignment rejection, historical-import duplicate-row rejection and successful row reconciliation/provenance, source-document, product/invoice and historical-import persistence across database reopen, import-cost discovery evidence gating, task assignment notifications, inactive-staff rejection, reassignment history, blocker/submission evidence, review-note actor separation and reviewer completion.
 - Shared helper tests for reviewed-period date boundaries, client field validation, duplicate acknowledgment, optimistic version guards, persona assignment, record allowlists/transitions and historical import row validation.
 - Import-cost tests for quantity, weight, volume and value allocation; deterministic largest-remainder rounding; fractional quantity/FX rounding; duplicate references; invalid quantities/prices/weights/currencies/provenance; unknown direct targets; unsupported allocation/treatment; negative components; and arithmetic overflow.
 - Database tests for dropped-transaction rollback, foreign-key enforcement and actor/firm/target event scope.
