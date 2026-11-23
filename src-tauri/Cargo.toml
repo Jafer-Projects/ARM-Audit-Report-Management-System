@@ -1,0 +1,25 @@
+[package]
+name = "arm-desktop"
+version = "0.1.0"
+description = "ARM Audit Report Management System desktop prototype"
+authors = ["ARM"]
+edition = "2021"
+rust-version = "1.90"
+
+[lib]
+name = "arm_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = "=2.7.6"
+
+[dependencies]
+rusqlite = { version = "=0.43.0", features = ["bundled"] }
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.145"
+tauri = "=2.12.7"
+time = { version = "=0.3.53", features = ["formatting"] }
+uuid = { version = "=1.19.0", features = ["v4", "serde"] }
+
+[dev-dependencies]
+tempfile = "=3.23.0"
