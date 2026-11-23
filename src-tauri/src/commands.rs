@@ -990,7 +990,7 @@ pub fn list_records(record_type: String, client_id: Option<String>, state: State
 
 fn valid_iso_date(value: &str) -> bool {
     let bytes = value.as_bytes();
-    if bytes.len() != 10 || bytes[4] != b'-' || bytes[7] != b'-' { return false; }
+    if !value.is_ascii() || bytes.len() != 10 || bytes[4] != b'-' || bytes[7] != b'-' { return false; }
     let year = match value[0..4].parse::<i32>() { Ok(v) if v > 0 => v, _ => return false };
     let month = match value[5..7].parse::<u32>() { Ok(v) if (1..=12).contains(&v) => v, _ => return false };
     let day = match value[8..10].parse::<u32>() { Ok(v) if v > 0 => v, _ => return false };
