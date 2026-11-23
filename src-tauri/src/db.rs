@@ -141,7 +141,7 @@ impl Database {
             )?;
             tx.commit()?;
         }
-        if applied > 9 {
+        if applied > 10 {
             return Err(rusqlite::Error::InvalidQuery);
         }
         if applied < 3 {
@@ -303,6 +303,37 @@ impl Database {
             )?;
             tx.commit()?;
         }
+
+        if applied < 10 {
+            let tx = self.connection.unchecked_transaction()?;
+            tx.execute_batch(
+                "CREATE TABLE source_document (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    firm_id TEXT NOT NULL REFERENCES demo_firm(id),
+                    client_id TEXT NOT NULL REFERENCES client(id),
+                    record_id TEXT NOT NULL REFERENCES workspace_record(id),
+                    actor_id TEXT NOT NULL REFERENCES demo_actor(id),
+                    file_name TEXT NOT NULL,
+                    media_type TEXT NOT NULL CHECK(media_type IN ('application/pdf','image/jpeg','image/png')),
+                    size_bytes INTEGER NOT NULL CHECK(size_bytes > 0 AND size_bytes <= 5242880),
+                    sha256 TEXT NOT NULL CHECK(length(sha256)=64),
+                    content BLOB NOT NULL,
+                    created_at TEXT NOT NULL,
+                    correlation_id TEXT NOT NULL,
+                    UNIQUE(firm_id,record_id,sha256)
+                );
+                CREATE INDEX source_document_record ON source_document(firm_id,client_id,record_id,created_at DESC);
+                CREATE TRIGGER source_document_no_update BEFORE UPDATE ON source_document
+                BEGIN SELECT RAISE(ABORT, 'source document evidence is immutable'); END;
+                CREATE TRIGGER source_document_no_delete BEFORE DELETE ON source_document
+                BEGIN SELECT RAISE(ABORT, 'source document evidence is immutable'); END;"
+            )?;
+            tx.execute(
+                "INSERT INTO schema_migration(version, checksum, applied_at) VALUES(10, ?1, ?2)",
+                rusqlite::params!["arm-source-documents-v10", now_utc()],
+            )?;
+            tx.commit()?;
+        }
         for (version, expected_checksum) in [
             (1_i64, "arm-initial-schema-v1"),
             (2_i64, "arm-local-notes-v2"),
@@ -313,6 +344,7 @@ impl Database {
             (7_i64, "arm-task-review-notes-v7"),
             (8_i64, "arm-immutable-history-artifacts-v8"),
             (9_i64, "arm-review-note-transition-guards-v9"),
+            (10_i64, "arm-source-documents-v10"),
         ] {
             let actual: String = self.connection.query_row(
                 "SELECT checksum FROM schema_migration WHERE version=?1",
@@ -414,7 +446,7 @@ mod tests {
         let staff: i64 = db.connection.query_row("SELECT COUNT(*) FROM workspace_record WHERE record_type='staff'", [], |r| r.get(0)).unwrap();
         assert_eq!(clients, 1);
         assert_eq!(actors, 4);
-        assert_eq!(migrations, 9);
+        assert_eq!(migrations, 10);
         assert_eq!(staff, 4);
     }
 
