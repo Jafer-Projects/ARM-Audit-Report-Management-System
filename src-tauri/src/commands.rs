@@ -468,7 +468,7 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
             };
             let prior: serde_json::Value = serde_json::from_str(existing_payload).unwrap_or_else(|_|json!({}));
             let prior_assignee = prior.get("assignee").and_then(|v|v.as_str()).unwrap_or("");
-            if existing_type != "task" || prior_assignee != actor_name || assignee != actor_name {
+            if existing_type != "task" || prior_assignee != actor_name.as_str() || assignee != actor_name.as_str() {
                 return Err("You can only update a task assigned to your demo persona.".into());
             }
             if !["In progress","Blocked","Submitted"].contains(&input.status.as_str()) {
