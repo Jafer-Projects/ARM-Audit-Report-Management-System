@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { desktop } from "./services/desktop";
-import type { Client, ClientChange, EventItem, HistoricalImportBatch, HistoricalImportRow, LocalNote, Persona, WorkspaceInfo, WorkspaceRecord } from "./types";
+import type { Client, ClientChange, EventItem, HistoricalImportBatch, HistoricalImportRow, LocalNote, Persona, TaskReviewNote, WorkspaceInfo, WorkspaceRecord } from "./types";
 
 type Section = "home" | "clients" | "catalogue" | "history" | "work" | "imports" | "activity";
 const nav: { id: Section; label: string; eyebrow: string }[] = [
@@ -216,6 +216,12 @@ export default function App() {
   const [historyClient, setHistoryClient] = useState<Client | null>(null);
   const [clientChanges, setClientChanges] = useState<ClientChange[]>([]);
   const [importBatches, setImportBatches] = useState<HistoricalImportBatch[]>([]);
+  const [taskReviewNotes, setTaskReviewNotes] = useState<TaskReviewNote[]>([]);
+  const [reviewNoteCategory, setReviewNoteCategory] = useState("Missing evidence");
+  const [reviewNoteDescription, setReviewNoteDescription] = useState("");
+  const [reviewNoteReference, setReviewNoteReference] = useState("");
+  const [reviewNoteRequired, setReviewNoteRequired] = useState("");
+  const [reviewResponses, setReviewResponses] = useState<Record<string, string>>({});
   const [showImportModal, setShowImportModal] = useState(false);
   const [csvFileName, setCsvFileName] = useState("");
   const [csvContent, setCsvContent] = useState("");
@@ -296,6 +302,42 @@ export default function App() {
       setClientEditor(undefined); setClients(await desktop.clients(includeArchived));
     } catch (e) { setError(String(e)); } finally { setBusy(false); }
   }
+  async function openRecord(record: WorkspaceRecord) {
+    setRecordEditor(record);
+    setTaskReviewNotes([]);
+    if (record.record_type === "task") {
+      try { setTaskReviewNotes(await desktop.taskReviewNotes(record.id)); }
+      catch (e) { setError(String(e)); }
+    }
+  }
+  async function addReviewNote() {
+    if (!recordEditor?.id) return;
+    try {
+      setBusy(true); setError("");
+      await desktop.addTaskReviewNote({ taskId: recordEditor.id, category: reviewNoteCategory, description: reviewNoteDescription, affectedRecordReference: reviewNoteReference, requiredResponse: reviewNoteRequired });
+      setTaskReviewNotes(await desktop.taskReviewNotes(recordEditor.id));
+      setReviewNoteDescription(""); setReviewNoteReference(""); setReviewNoteRequired("");
+    } catch (e) { setError(String(e)); } finally { setBusy(false); }
+  }
+  async function respondReviewNote(note: TaskReviewNote) {
+    const response = reviewResponses[note.id] ?? "";
+    try {
+      setBusy(true); setError("");
+      await desktop.respondTaskReviewNote(note.id, response);
+      setTaskReviewNotes(await desktop.taskReviewNotes(note.task_id));
+      setReviewResponses(current => ({ ...current, [note.id]: "" }));
+    } catch (e) { setError(String(e)); } finally { setBusy(false); }
+  }
+  async function disposeReviewNote(note: TaskReviewNote, decision: "Cleared" | "Reopened") {
+    const reason = window.prompt(decision === "Cleared" ? "Record why this review note is cleared:" : "Record why this review note is reopened:", "");
+    if (!reason || reason.trim().length < 3) return;
+    try {
+      setBusy(true); setError("");
+      await desktop.dispositionTaskReviewNote(note.id, decision, reason.trim());
+      setTaskReviewNotes(await desktop.taskReviewNotes(note.task_id));
+    } catch (e) { setError(String(e)); } finally { setBusy(false); }
+  }
+
   async function openClientHistory(client: Client) {
     try { setBusy(true); setError(""); setClientChanges(await desktop.clientChanges(client.id)); setHistoryClient(client); }
     catch (e) { setError(String(e)); } finally { setBusy(false); }
@@ -477,7 +519,7 @@ export default function App() {
           {recordType !== "staff" && <label className="client-context">CLIENT WORKSPACE<select value={selectedClientId} onChange={e => setSelectedClientId(e.target.value)}><option value="">Select a client…</option>{clients.map(c => <option key={c.id} value={c.id}>{c.display_name || c.legal_name}</option>)}</select></label>}
           {recordType === "invoice" && (workspace?.persona === "manager" || workspace?.persona === "administrator") && <div className="queue-filter"><button className={invoiceQueueOnly ? "subtype-tab active" : "subtype-tab"} onClick={() => setInvoiceQueueOnly(value => !value)}>{invoiceQueueOnly ? "Show all invoices" : "Review queue"}</button><span>{records.filter(record => record.status === "Submitted for review").length} awaiting review</span></div>}
           {section === "imports" && <p className="gate-note">Cost-input capture and calculation stay locked until the Gate 5-A practitioner discovery brief, approved input dictionary and independent worked example are recorded. Use the Discovery workspace to document questions; no customs or landed-cost assumptions are applied.</p>}
-          <div className="record-grid">{visibleRecords.map(r => <article className="record-card" key={r.id}><div className="record-card-top"><span className="status">{r.status}</span><small>{new Date(r.updated_at).toLocaleDateString()}</small></div>{r.record_type === "historical_record" && historicalClass(r) && <span className="duplicate-flag">{historicalClass(r)}</span>}{r.record_type === "historical_record" && hasPossibleDuplicate(r) && <span className="duplicate-flag">Possible duplicate source reference · review required</span>}<h3>{r.title}</h3><p>{r.notes || "No additional notes"}</p><div className="record-meta"><span>{r.reference || "No source reference"}</span>{r.amount_text && <strong>{r.amount_text}</strong>}</div><div className="record-actions"><button className="text-button" onClick={() => setRecordEditor(r)}>Open record →</button>{historicalClass(r) === "Draft VAT workpaper grouping only" && <button className="text-button" onClick={() => setPreviewRecord(r)}>Preview / Print →</button>}</div></article>)}
+          <div className="record-grid">{visibleRecords.map(r => <article className="record-card" key={r.id}><div className="record-card-top"><span className="status">{r.status}</span><small>{new Date(r.updated_at).toLocaleDateString()}</small></div>{r.record_type === "historical_record" && historicalClass(r) && <span className="duplicate-flag">{historicalClass(r)}</span>}{r.record_type === "historical_record" && hasPossibleDuplicate(r) && <span className="duplicate-flag">Possible duplicate source reference · review required</span>}<h3>{r.title}</h3><p>{r.notes || "No additional notes"}</p><div className="record-meta"><span>{r.reference || "No source reference"}</span>{r.amount_text && <strong>{r.amount_text}</strong>}</div><div className="record-actions"><button className="text-button" onClick={() => void openRecord(r)}>Open record →</button>{historicalClass(r) === "Draft VAT workpaper grouping only" && <button className="text-button" onClick={() => setPreviewRecord(r)}>Preview / Print →</button>}</div></article>)}
           {visibleRecords.length === 0 && <div className="empty-card"><strong>No records yet</strong><p>Create a record to start this workflow. Data is stored locally in the demo database.</p></div>}</div>
           {recordType === "historical_record" && importBatches.length > 0 && <section className="import-batches"><div className="preview-heading"><strong>Imported source batches</strong><span>Original CSV retained in local database</span></div>{importBatches.map(batch => <article className="batch-row" key={batch.id}><div><strong>{batch.source_filename}</strong><small>{batch.imported_row_count} rows · {new Date(batch.imported_at).toLocaleString()}</small><small>{batch.source_row_count === batch.imported_row_count ? "Row-count reconciled" : "Row-count mismatch · investigate" } · {records.filter(record => importBatchId(record) === batch.id && hasPossibleDuplicate(record)).length} possible duplicate references</small></div><div><small>SHA-256</small><code>{batch.source_checksum_sha256}</code><small>Monetary totals are not calculated in this prototype.</small></div></article>)}</section>}
         </section>;
