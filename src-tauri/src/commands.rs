@@ -2243,7 +2243,8 @@ mod tests {
             reference:Some("SKU-ARCH-01".into()),amount_text:None,notes:None,payload_json:Some(json!({"product_reference":"SKU-ARCH-01"}).to_string()),
             duplicate_acknowledged:None,duplicate_acknowledgement_reason:None,
         },app.state::<AppState>()).unwrap();
-        let invoice_payload = json!({"invoice_number":"INV-ARCH-01","invoice_lines_json":format!("[{{\\\"description\\\":\\\"Archived product\\\",\\\"line_amount_text\\\":\\\"50.00\\\",\\\"product_id\\\":\\\"{}\\\"}}]",product.id)});
+        let invoice_lines = json!([{"description":"Archived product","line_amount_text":"50.00","product_id":product.id}]).to_string();
+        let invoice_payload = json!({"invoice_number":"INV-ARCH-01","invoice_lines_json":invoice_lines});
         let invoice = save_record(RecordInput {
             id:None,row_version:None,client_id:Some(client_id.clone()),record_type:"invoice".into(),
             title:"Historical invoice with archived product".into(),status:"Draft".into(),reference:Some("INV-ARCH-01".into()),
