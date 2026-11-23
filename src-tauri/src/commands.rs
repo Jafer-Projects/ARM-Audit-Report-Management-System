@@ -2560,6 +2560,47 @@ mod tests {
     }
 
     #[test]
+    fn initialize_workspace_reports_demo_persona_and_disabled_sync() {
+        let app = test_app();
+        let info = initialize_workspace(app.state::<AppState>()).expect("initialize synthetic workspace");
+        assert_eq!(info.firm_name,"ARM Demonstration Firm");
+        assert_eq!(info.persona,"administrator");
+        assert!(info.sync_state.to_ascii_lowercase().contains("not enabled"));
+        let state = app.state::<AppState>();
+        let db = state.database.lock().unwrap();
+        let (actors,staff):(i64,i64) = db.connection.query_row(
+            "SELECT (SELECT COUNT(*) FROM demo_actor),(SELECT COUNT(*) FROM workspace_record WHERE record_type='staff' AND status='Active')",
+            [],|row|Ok((row.get(0)?,row.get(1)?))
+        ).unwrap();
+        assert_eq!((actors,staff),(4,4));
+    }
+
+    #[test]
+    fn reset_demo_data_is_admin_only_and_restores_only_synthetic_fixtures() {
+        let app = test_app();
+        let extra = save_client(command_client_input("Temporary Synthetic Client",None),app.state::<AppState>()).unwrap();
+        set_demo_persona("manager".into(),app.state::<AppState>()).unwrap();
+        assert!(reset_demo_data(app.state::<AppState>()).is_err());
+        {
+            let state = app.state::<AppState>();
+            let db = state.database.lock().unwrap();
+            let count: i64 = db.connection.query_row("SELECT COUNT(*) FROM client",[],|row|row.get(0)).unwrap();
+            assert_eq!(count,2);
+        }
+        set_demo_persona("administrator".into(),app.state::<AppState>()).unwrap();
+        reset_demo_data(app.state::<AppState>()).expect("reset synthetic demo data");
+        let state = app.state::<AppState>();
+        let db = state.database.lock().unwrap();
+        let (clients,staff,reset_events):(i64,i64,i64) = db.connection.query_row(
+            "SELECT (SELECT COUNT(*) FROM client),(SELECT COUNT(*) FROM workspace_record WHERE record_type='staff' AND status='Active'),(SELECT COUNT(*) FROM local_event WHERE event_type='demo_data_reset')",
+            [],|row|Ok((row.get(0)?,row.get(1)?,row.get(2)?))
+        ).unwrap();
+        assert_eq!((clients,staff,reset_events),(1,4,1));
+        let exists: i64 = db.connection.query_row("SELECT COUNT(*) FROM client WHERE id=?1",[&extra.id],|row|row.get(0)).unwrap();
+        assert_eq!(exists,0);
+    }
+
+    #[test]
     fn read_only_reviewer_is_rejected_by_the_shared_mutation_guard() {
         let db = crate::db::Database::memory().expect("seeded in-memory database");
         db.connection.execute(
