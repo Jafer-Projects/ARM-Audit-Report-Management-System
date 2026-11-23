@@ -987,6 +987,18 @@ pub fn list_records(record_type: String, client_id: Option<String>, state: State
 }
 
 
+
+fn valid_iso_date(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    if bytes.len() != 10 || bytes[4] != b'-' || bytes[7] != b'-' { return false; }
+    let year = match value[0..4].parse::<i32>() { Ok(v) if v > 0 => v, _ => return false };
+    let month = match value[5..7].parse::<u32>() { Ok(v) if (1..=12).contains(&v) => v, _ => return false };
+    let day = match value[8..10].parse::<u32>() { Ok(v) if v > 0 => v, _ => return false };
+    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let days = match month { 1|3|5|7|8|10|12 => 31, 4|6|9|11 => 30, 2 if leap => 29, 2 => 28, _ => 0 };
+    day <= days
+}
+
 fn validate_period_assignment(
     db: &Database,
     client_id: &str,
@@ -1007,12 +1019,12 @@ fn validate_period_assignment(
     let payload: serde_json::Value = serde_json::from_str(&raw).unwrap_or_else(|_| json!({}));
     let start = payload.get("start_date").and_then(|v| v.as_str()).unwrap_or("").trim();
     let end = payload.get("end_date").and_then(|v| v.as_str()).unwrap_or("").trim();
-    if start.len() != 10 || end.len() != 10 || start > end {
+    if !valid_iso_date(start) || !valid_iso_date(end) || start > end {
         return Err("The reviewed period must have valid ISO start and end dates.".into());
     }
     if let Some(date) = transaction_date {
         let date = date.trim();
-        if date.len() != 10 || date < start || date > end {
+        if !valid_iso_date(date) || date < start || date > end {
             return Err(format!("Transaction date {date} falls outside the reviewed period {start} to {end}."));
         }
     }
@@ -1107,9 +1119,9 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
             if input.status == "Ready for review" && source_reference.is_empty() {
                 return Err("Add a source document/reference before submitting an import-cost input for review.".into());
             }
-            if input.status == "Ready for review"
-                && payload.get("source_date").and_then(|v| v.as_str()).unwrap_or("").trim().is_empty() {
-                return Err("Record the source document date before submitting an import-cost input for review.".into());
+            if input.status == "Ready for review" {
+                let source_date = payload.get("source_date").and_then(|v| v.as_str()).unwrap_or("").trim();
+                if !valid_iso_date(source_date) { return Err("Record a valid ISO source document date before submitting an import-cost input for review.".into()); }
             }
             let read_integer = |key: &str| -> Result<i64, String> {
                 let raw = payload.get(key).and_then(|v| v.as_str()).unwrap_or("").trim();
@@ -1128,6 +1140,8 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
                         return Err(format!("Record {key}; for base-currency 1:1 conversion, document that basis explicitly."));
                     }
                 }
+                let fx_date = payload.get("fx_rate_date").and_then(|v| v.as_str()).unwrap_or("").trim();
+                if !valid_iso_date(fx_date) { return Err("FX rate date must be a valid ISO date.".into()); }
             }
             if entry_kind == "Goods line" {
                 if payload.get("item_reference").and_then(|v| v.as_str()).unwrap_or("").trim().is_empty()
