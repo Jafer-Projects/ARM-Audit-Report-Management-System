@@ -2118,6 +2118,179 @@ mod tests {
         assert!(ensure_expected_row_version(Some(3),4).is_err());
     }
 
+
+    fn test_app() -> tauri::App<tauri::test::MockRuntime> {
+        tauri::test::mock_builder()
+            .manage(AppState {
+                database: std::sync::Mutex::new(crate::db::Database::memory().expect("seeded in-memory database")),
+            })
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock Tauri app")
+    }
+
+    fn command_client_input(name: &str, email: Option<&str>) -> ClientInput {
+        ClientInput {
+            id: None, row_version: None, record_kind: "Company".into(), legal_name: name.into(),
+            display_name: Some("Synthetic display".into()), tin_raw: Some("TIN-001".into()), sector: Some("Services".into()),
+            contact_name: Some("Demo Contact".into()), contact_email: email.map(str::to_string),
+            contact_phone: None, address_text: None, internal_reference: None, notes: None,
+            duplicate_acknowledged: None,
+        }
+    }
+
+    fn command_active_client_id(app: &tauri::App<tauri::test::MockRuntime>) -> String {
+        let state = app.state::<AppState>();
+        let db = state.database.lock().expect("database lock");
+        db.connection.query_row("SELECT id FROM client WHERE firm_id=?1 AND status='Active' LIMIT 1", [FIRM_ID], |row| row.get(0))
+            .expect("seeded active demo client")
+    }
+
+    #[test]
+    fn save_client_command_persists_draft_history_and_audit_event() {
+        use tauri::Manager;
+        let app = test_app();
+        let client = save_client(command_client_input("Command Test Company",None),app.state::<AppState>()).expect("create client");
+        assert_eq!(client.status,"Draft");
+        assert_eq!(client.row_version,1);
+        let state = app.state::<AppState>();
+        let db = state.database.lock().unwrap();
+        let (events,changes): (i64,i64) = db.connection.query_row(
+            "SELECT (SELECT COUNT(*) FROM local_event WHERE target_id=?1 AND event_type='client_created'),(SELECT COUNT(*) FROM client_change WHERE client_id=?1 AND action='created')",
+            [&client.id], |row|Ok((row.get(0)?,row.get(1)?))
+        ).unwrap();
+        assert_eq!((events,changes),(1,1));
+    }
+
+    #[test]
+    fn save_client_command_rejects_invalid_email_without_partial_write() {
+        use tauri::Manager;
+        let app = test_app();
+        assert!(save_client(command_client_input("Invalid Email Company",Some("not-an-email")),app.state::<AppState>()).is_err());
+        let state = app.state::<AppState>();
+        let db = state.database.lock().unwrap();
+        let count: i64 = db.connection.query_row("SELECT COUNT(*) FROM client WHERE legal_name='Invalid Email Company'", [], |row|row.get(0)).unwrap();
+        assert_eq!(count,0);
+    }
+
+    #[test]
+    fn save_client_command_requires_duplicate_acknowledgement_and_never_merges() {
+        use tauri::Manager;
+        let app = test_app();
+        let existing_id = command_active_client_id(&app);
+        let existing_name: String = {
+            let state = app.state::<AppState>();
+            let db = state.database.lock().unwrap();
+            db.connection.query_row("SELECT legal_name FROM client WHERE id=?1",[&existing_id],|row|row.get(0)).unwrap()
+        };
+        assert!(save_client(command_client_input(&existing_name,None),app.state::<AppState>()).is_err());
+        let mut input = command_client_input(&existing_name,None);
+        input.duplicate_acknowledged = Some(true);
+        let duplicate = save_client(input,app.state::<AppState>()).expect("acknowledged duplicate is a new record");
+        assert_ne!(duplicate.id,existing_id);
+        let state = app.state::<AppState>();
+        let db = state.database.lock().unwrap();
+        let count: i64 = db.connection.query_row("SELECT COUNT(*) FROM client WHERE lower(trim(legal_name))=lower(trim(?1))",[&existing_name],|row|row.get(0)).unwrap();
+        assert_eq!(count,2);
+        let ack_count: i64 = db.connection.query_row("SELECT COUNT(*) FROM local_event WHERE event_type='possible_duplicate_acknowledged' AND target_id=?1",[&duplicate.id],|row|row.get(0)).unwrap();
+        assert_eq!(ack_count,1);
+    }
+
+    #[test]
+    fn save_client_command_rejects_stale_row_version_without_overwriting() {
+        use tauri::Manager;
+        let app = test_app();
+        let created = save_client(command_client_input("Versioned Command Client",None),app.state::<AppState>()).unwrap();
+        let mut stale = command_client_input("Attempted overwrite",None);
+        stale.id = Some(created.id.clone());
+        stale.row_version = Some(0);
+        assert!(save_client(stale,app.state::<AppState>()).is_err());
+        let state = app.state::<AppState>();
+        let db = state.database.lock().unwrap();
+        let current: String = db.connection.query_row("SELECT legal_name FROM client WHERE id=?1",[&created.id],|row|row.get(0)).unwrap();
+        assert_eq!(current,"Versioned Command Client");
+    }
+
+    #[test]
+    fn reviewer_cannot_mutate_through_save_client_command() {
+        use tauri::Manager;
+        let app = test_app();
+        set_demo_persona("reviewer".into(),app.state::<AppState>()).expect("select reviewer");
+        assert!(save_client(command_client_input("Reviewer Must Not Create",None),app.state::<AppState>()).is_err());
+    }
+
+    #[test]
+    fn save_record_command_rejects_invoice_review_without_lines_source_and_period() {
+        use tauri::Manager;
+        let app = test_app();
+        let client_id = command_active_client_id(&app);
+        let input = RecordInput {
+            id:None,row_version:None,client_id:Some(client_id),record_type:"invoice".into(),
+            title:"Invoice without source lines".into(),status:"Ready for review".into(),reference:None,
+            amount_text:None,notes:None,payload_json:Some("{}".into()),
+            duplicate_acknowledged:None,duplicate_acknowledgement_reason:None,
+        };
+        assert!(save_record(input,app.state::<AppState>()).is_err());
+    }
+
+    #[test]
+    fn import_historical_batch_command_rejects_duplicate_source_rows_atomically() {
+        use tauri::Manager;
+        let app = test_app();
+        let client_id = command_active_client_id(&app);
+        let make_row = || HistoricalImportRow {
+            source_row:2,transaction_date:"2026-01-01".into(),description:"Synthetic purchase".into(),
+            amount_text:"100.00".into(),currency:"ETB".into(),supplier:"Synthetic supplier".into(),
+            supplier_tin:"".into(),vat_amount:"".into(),invoice_reference:"INV-1".into(),
+        };
+        let input = HistoricalImportInput {
+            client_id,source_filename:"history.csv".into(),
+            source_content:"Date,Description,Amount\n2026-01-01,Synthetic purchase,100.00".into(),
+            mapping_json:"{}".into(),rows:vec![make_row(),make_row()],
+        };
+        assert!(import_historical_batch(input,app.state::<AppState>()).is_err());
+        let state = app.state::<AppState>();
+        let db = state.database.lock().unwrap();
+        let batches: i64 = db.connection.query_row("SELECT COUNT(*) FROM historical_import_batch",[],|row|row.get(0)).unwrap();
+        assert_eq!(batches,0);
+    }
+
+    #[test]
+    fn attach_source_document_command_persists_validated_evidence_and_rejects_spoofing() {
+        use tauri::Manager;
+        let app = test_app();
+        let client_id = command_active_client_id(&app);
+        let draft = save_record(RecordInput {
+            id:None,row_version:None,client_id:Some(client_id.clone()),record_type:"invoice".into(),
+            title:"Synthetic invoice evidence target".into(),status:"Draft".into(),reference:Some("INV-SYN-1".into()),
+            amount_text:None,notes:None,payload_json:Some("{}".into()),
+            duplicate_acknowledged:None,duplicate_acknowledgement_reason:None,
+        },app.state::<AppState>()).expect("create draft invoice");
+        let bytes = b"%PDF-1.7 synthetic fixture".to_vec();
+        assert!(attach_source_document(client_id.clone(),draft.id.clone(),"invoice.pdf".into(),"application/pdf".into(),bytes.clone(),app.state::<AppState>()).is_ok());
+        assert!(attach_source_document(client_id,draft.id,"spoofed.png".into(),"image/png".into(),bytes,app.state::<AppState>()).is_err());
+        let state = app.state::<AppState>();
+        let db = state.database.lock().unwrap();
+        let count: i64 = db.connection.query_row("SELECT COUNT(*) FROM source_document WHERE file_name='invoice.pdf'",[],|row|row.get(0)).unwrap();
+        assert_eq!(count,1);
+    }
+
+    #[test]
+    fn import_cost_preview_command_requires_reviewed_discovery_evidence() {
+        use tauri::Manager;
+        let app = test_app();
+        let client_id = command_active_client_id(&app);
+        {
+            let state = app.state::<AppState>();
+            let db = state.database.lock().unwrap();
+            db.connection.execute(
+                "INSERT INTO workspace_record(id,firm_id,client_id,record_type,title,status,reference,payload_json,created_at,updated_at,created_by,updated_by)
+                 VALUES('case-gate-test',?1,?2,'import_case','Synthetic case','Reviewed','CASE-GATE','{\"base_currency\":\"ETB\"}','now','now','00000000-0000-4000-8000-000000000011','00000000-0000-4000-8000-000000000011')",
+                params![FIRM_ID,client_id],
+            ).unwrap();
+        }
+        assert!(calculate_import_cost_preview(client_id,"CASE-GATE".into(),"ETB".into(),app.state::<AppState>()).is_err());
+    }
+
     #[test]
     fn read_only_reviewer_is_rejected_by_the_shared_mutation_guard() {
         let db = crate::db::Database::memory().expect("seeded in-memory database");
