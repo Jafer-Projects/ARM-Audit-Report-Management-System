@@ -2574,6 +2574,11 @@ mod tests {
             amount_text:None,notes:None,payload_json:Some(first_payload.to_string()),
             duplicate_acknowledged:None,duplicate_acknowledgement_reason:None,
         },app.state::<AppState>()).expect("save first calculation snapshot");
+        let snapshots = list_workspace_record_versions(first.id.clone(),app.state::<AppState>()).unwrap();
+        assert_eq!(snapshots.len(),1);
+        let snapshot: serde_json::Value = serde_json::from_str(&snapshots[0].snapshot_json).unwrap();
+        let snapshot_result: serde_json::Value = serde_json::from_str(snapshot["payload"]["result_json"].as_str().unwrap()).unwrap();
+        assert_eq!(snapshot_result["total"],100);
         let mut changed_payload = first_payload.clone();
         changed_payload["result_json"] = json!({"base_currency":"ETB","total":999}).to_string().into();
         assert!(save_record(RecordInput {
