@@ -2219,6 +2219,40 @@ mod tests {
     }
 
     #[test]
+    fn save_record_command_rejects_moving_an_existing_record_between_two_clients() {
+        use tauri::Manager;
+        let app = test_app();
+        let first_client = command_active_client_id(&app);
+        let second_client = "00000000-0000-4000-8000-000000000202";
+        {
+            let state = app.state::<AppState>();
+            let db = state.database.lock().unwrap();
+            db.connection.execute(
+                "INSERT INTO client(id,firm_id,record_kind,legal_name,display_name,tin_raw,sector,contact_name,contact_email,contact_phone,address_text,internal_reference,notes,status,row_version,created_at,updated_at,created_by,updated_by)
+                 VALUES(?1,?2,'Company','Second Synthetic Client','','','','','','','','','','Active',1,'now','now','00000000-0000-4000-8000-000000000011','00000000-0000-4000-8000-000000000011')",
+                params![second_client,FIRM_ID],
+            ).unwrap();
+        }
+        let created = save_record(RecordInput {
+            id:None,row_version:None,client_id:Some(first_client.clone()),record_type:"historical_record".into(),
+            title:"Client-bound historical row".into(),status:"Draft".into(),reference:Some("HIST-BOUND".into()),
+            amount_text:Some("10.00".into()),notes:None,payload_json:Some("{}".into()),
+            duplicate_acknowledged:None,duplicate_acknowledgement_reason:None,
+        },app.state::<AppState>()).expect("create record in first client");
+        let attempted_move = RecordInput {
+            id:Some(created.id.clone()),row_version:Some(created.row_version),client_id:Some(second_client.into()),
+            record_type:"historical_record".into(),title:"Attempted move".into(),status:"Draft".into(),
+            reference:Some("HIST-BOUND".into()),amount_text:Some("10.00".into()),notes:None,
+            payload_json:Some("{}".into()),duplicate_acknowledged:None,duplicate_acknowledgement_reason:None,
+        };
+        assert!(save_record(attempted_move,app.state::<AppState>()).is_err());
+        let state = app.state::<AppState>();
+        let db = state.database.lock().unwrap();
+        let stored_client: String = db.connection.query_row("SELECT client_id FROM workspace_record WHERE id=?1",[&created.id],|row|row.get(0)).unwrap();
+        assert_eq!(stored_client,first_client);
+    }
+
+    #[test]
     fn save_record_command_rejects_invoice_review_without_lines_source_and_period() {
         use tauri::Manager;
         let app = test_app();
