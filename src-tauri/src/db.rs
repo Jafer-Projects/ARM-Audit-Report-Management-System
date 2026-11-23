@@ -141,7 +141,7 @@ impl Database {
             )?;
             tx.commit()?;
         }
-        if applied > 10 {
+        if applied > 11 {
             return Err(rusqlite::Error::InvalidQuery);
         }
         if applied < 3 {
@@ -334,6 +334,43 @@ impl Database {
             )?;
             tx.commit()?;
         }
+
+        if applied < 11 {
+            let tx = self.connection.unchecked_transaction()?;
+            tx.execute_batch(
+                "CREATE TABLE workspace_notification (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    firm_id TEXT NOT NULL REFERENCES demo_firm(id),
+                    recipient_actor_id TEXT NOT NULL REFERENCES demo_actor(id),
+                    client_id TEXT NOT NULL REFERENCES client(id),
+                    record_id TEXT NOT NULL REFERENCES workspace_record(id),
+                    record_type TEXT NOT NULL,
+                    event_type TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    body TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    read_at TEXT,
+                    idempotency_key TEXT NOT NULL UNIQUE
+                );
+                CREATE INDEX workspace_notification_recipient ON workspace_notification(firm_id,recipient_actor_id,created_at DESC);
+                CREATE TRIGGER workspace_notification_content_immutable BEFORE UPDATE ON workspace_notification
+                WHEN NEW.id<>OLD.id OR NEW.firm_id<>OLD.firm_id OR NEW.recipient_actor_id<>OLD.recipient_actor_id
+                  OR NEW.client_id<>OLD.client_id OR NEW.record_id<>OLD.record_id OR NEW.record_type<>OLD.record_type
+                  OR NEW.event_type<>OLD.event_type OR NEW.title<>OLD.title OR NEW.body<>OLD.body
+                  OR NEW.created_at<>OLD.created_at OR NEW.idempotency_key<>OLD.idempotency_key
+                BEGIN SELECT RAISE(ABORT, 'notification content is immutable'); END;
+                CREATE TRIGGER workspace_notification_read_once BEFORE UPDATE OF read_at ON workspace_notification
+                WHEN OLD.read_at IS NOT NULL OR NEW.read_at IS NULL
+                BEGIN SELECT RAISE(ABORT, 'notification read state can only be set once'); END;
+                CREATE TRIGGER workspace_notification_no_delete BEFORE DELETE ON workspace_notification
+                BEGIN SELECT RAISE(ABORT, 'notification history is immutable'); END;"
+            )?;
+            tx.execute(
+                "INSERT INTO schema_migration(version, checksum, applied_at) VALUES(11, ?1, ?2)",
+                rusqlite::params!["arm-workspace-notifications-v11", now_utc()],
+            )?;
+            tx.commit()?;
+        }
         for (version, expected_checksum) in [
             (1_i64, "arm-initial-schema-v1"),
             (2_i64, "arm-local-notes-v2"),
@@ -345,6 +382,7 @@ impl Database {
             (8_i64, "arm-immutable-history-artifacts-v8"),
             (9_i64, "arm-review-note-transition-guards-v9"),
             (10_i64, "arm-source-documents-v10"),
+            (11_i64, "arm-workspace-notifications-v11"),
         ] {
             let actual: String = self.connection.query_row(
                 "SELECT checksum FROM schema_migration WHERE version=?1",
@@ -446,7 +484,7 @@ mod tests {
         let staff: i64 = db.connection.query_row("SELECT COUNT(*) FROM workspace_record WHERE record_type='staff'", [], |r| r.get(0)).unwrap();
         assert_eq!(clients, 1);
         assert_eq!(actors, 4);
-        assert_eq!(migrations, 10);
+        assert_eq!(migrations, 11);
         assert_eq!(staff, 4);
     }
 
