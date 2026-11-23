@@ -638,7 +638,20 @@ pub fn list_records(record_type: String, client_id: Option<String>, state: State
         id:r.get(0)?,client_id:r.get(1)?,record_type:r.get(2)?,title:r.get(3)?,status:r.get(4)?,
         reference:r.get(5)?,amount_text:r.get(6)?,notes:r.get(7)?,payload_json:r.get(8)?,row_version:r.get(9)?,updated_at:r.get(10)?
     })).map_err(|e|e.to_string())?;
-    rows.collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())
+    let mut records = rows.collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())?;
+    let (_, actor_name, persona) = active_actor(&db)?;
+    if record_type == "task" && persona == "auditor" {
+        records.retain(|record| {
+            let payload: serde_json::Value = serde_json::from_str(&record.payload_json).unwrap_or_else(|_|json!({}));
+            payload.get("assignee").and_then(|v|v.as_str()) == Some(actor_name.as_str())
+        });
+    } else if record_type == "task" && persona == "reviewer" {
+        records.retain(|record| {
+            let payload: serde_json::Value = serde_json::from_str(&record.payload_json).unwrap_or_else(|_|json!({}));
+            payload.get("reviewer").and_then(|v|v.as_str()) == Some(actor_name.as_str())
+        });
+    }
+    Ok(records)
 }
 
 #[tauri::command]
