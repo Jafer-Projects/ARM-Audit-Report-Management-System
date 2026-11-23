@@ -30,3 +30,5 @@
 @media(max-width:900px){.task-stats{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:650px){.task-dashboard-list{grid-template-columns:1fr}.work-dashboard-head{flex-direction:column}.task-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.task-card-meta{grid-template-columns:1fr}}
 
 .version-history{border-top:1px solid #e7ecef;margin-top:13px;padding-top:10px}.version-history summary{font-size:10px;color:#5f7488;cursor:pointer;font-weight:700}.version-item{border:1px solid #e8edf0;border-radius:5px;padding:8px;margin:8px 0}.version-item>div{display:flex;justify-content:space-between;gap:10px}.version-item strong{font-size:10px}.version-item small{font-size:8px;color:#84929e}.version-item pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f7f9fa;padding:8px;border-radius:4px;font:9px/1.45 Consolas,monospace;max-height:180px;overflow:auto}
+
+.form-fieldset{border:0;padding:0;margin:0;min-width:0}
