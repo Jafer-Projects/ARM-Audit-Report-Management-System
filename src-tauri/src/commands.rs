@@ -406,13 +406,29 @@ pub fn list_records(record_type: String, state: State<'_, AppState>) -> Result<V
 
 #[tauri::command]
 pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<WorkspaceRecord, String> {
-    if !allowed_record_type(&input.record_type) { return Err("Unsupported workspace record type.".into()); }
-    if input.record_type == "import_cost_input" { return Err("Import-cost inputs remain locked until Gate 5-A discovery is approved. Record discovery questions in the import case instead.".into()); }
-    if !allowed_status(&input.record_type, &input.status) { return Err("Unsupported status for this record type.".into()); }
-    if let Some(payload) = input.payload_json.as_deref() { if payload.len() > 16_384 || serde_json::from_str::<serde_json::Value>(payload).is_err() { return Err("Record metadata must be valid JSON under 16 KB.".into()); } }
-    if input.title.trim().is_empty() || input.title.chars().count() > 200 { return Err("A title of 1–200 characters is required.".into()); }
+    if !allowed_record_type(&input.record_type) {
+        return Err("Unsupported workspace record type.".into());
+    }
+    if input.record_type == "import_cost_input" {
+        return Err("Import-cost inputs remain locked until Gate 5-A discovery is approved. Record discovery questions in the import case instead.".into());
+    }
+    if !allowed_status(&input.record_type, &input.status) {
+        return Err("Unsupported status for this record type.".into());
+    }
+    if input.title.trim().is_empty() || input.title.chars().count() > 200 {
+        return Err("A title of 1–200 characters is required.".into());
+    }
+    let payload: serde_json::Value = match input.payload_json.as_deref() {
+        Some(raw) if raw.len() <= 16_384 => serde_json::from_str(raw).map_err(|_| "Record metadata must be valid JSON.".to_string())?,
+        Some(_) => return Err("Record metadata must be under 16 KB.".into()),
+        None => json!({}),
+    };
+
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
-    let (actor_id,_,_) = ensure_can_mutate(&db)?;
+    let (actor_id, actor_name, persona) = ensure_can_mutate(&db)?;
+    if input.record_type == "staff" && !["administrator","manager"].contains(&persona.as_str()) {
+        return Err("Only the demo administrator or manager can maintain staff records.".into());
+    }
     if let Some(client_id) = input.client_id.as_deref() {
         let active: bool = db.connection.query_row(
             "SELECT EXISTS(SELECT 1 FROM client WHERE id=?1 AND firm_id=?2 AND status='Active')",
@@ -422,28 +438,101 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
     } else if ["category","product","invoice","historical_record","period","task","import_case"].contains(&input.record_type.as_str()) {
         return Err("Select the client workspace for this record.".into());
     }
-    let id = input.id.unwrap_or_else(|| Uuid::new_v4().to_string());
-    let now = now_utc();
-    let exists: Option<(i64,String,String)> = db.connection.query_row("SELECT row_version,record_type,status FROM workspace_record WHERE id=?1 AND firm_id=?2",params![id,FIRM_ID],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional().map_err(|e|e.to_string())?;
-    let tx = db.connection.unchecked_transaction().map_err(|e|e.to_string())?;
-    if let Some((version, existing_type, previous_status)) = exists.as_ref() {
-        if existing_type != &input.record_type { return Err("A record cannot be changed into a different record type.".into()); }
-        if input.row_version != Some(*version) { return Err("This record changed since it was opened. Reload before saving.".into()); }
-        if !valid_record_transition(&input.record_type, Some(previous_status), &input.status) { return Err("This workflow status transition is not permitted.".into()); }
+
+    let id = input.id.clone().unwrap_or_else(|| Uuid::new_v4().to_string());
+    let exists: Option<(i64,String,String,String)> = db.connection.query_row(
+        "SELECT row_version,record_type,status,payload_json FROM workspace_record WHERE id=?1 AND firm_id=?2",
+        params![id,FIRM_ID],
+        |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))
+    ).optional().map_err(|e|e.to_string())?;
+
+    if input.record_type == "task" {
+        let description = payload.get("description").and_then(|v|v.as_str()).unwrap_or("").trim();
+        let assignee = payload.get("assignee").and_then(|v|v.as_str()).unwrap_or("").trim();
+        if description.is_empty() || assignee.is_empty() {
+            return Err("A task needs a description/expected output and an assignee.".into());
+        }
+        if input.status == "Submitted" && payload.get("completion_summary").and_then(|v|v.as_str()).unwrap_or("").trim().is_empty() {
+            return Err("Add a completion summary before submitting the task for review.".into());
+        }
+        if input.status == "Assigned" {
+            let active_staff: bool = db.connection.query_row(
+                "SELECT EXISTS(SELECT 1 FROM workspace_record WHERE firm_id=?1 AND record_type='staff' AND status='Active' AND title=?2)",
+                params![FIRM_ID,assignee], |r| r.get(0)
+            ).map_err(|e|e.to_string())?;
+            if !active_staff { return Err("Assign the task to an active staff record in this demo firm.".into()); }
+        }
+        if persona == "auditor" {
+            let Some((_, existing_type, _, existing_payload)) = exists.as_ref() else {
+                return Err("Demo auditors can only work on tasks already assigned to them.".into());
+            };
+            let prior: serde_json::Value = serde_json::from_str(existing_payload).unwrap_or_else(|_|json!({}));
+            let prior_assignee = prior.get("assignee").and_then(|v|v.as_str()).unwrap_or("");
+            if existing_type != "task" || prior_assignee != actor_name || assignee != actor_name {
+                return Err("You can only update a task assigned to your demo persona.".into());
+            }
+            if !["In progress","Blocked","Submitted"].contains(&input.status.as_str()) {
+                return Err("The demo auditor may start, block or submit their assigned task; managers control assignment and cancellation.".into());
+            }
+        }
+    }
+
+    if input.record_type == "invoice" && input.status == "Submitted for review"
+        && payload.get("invoice_date").and_then(|v|v.as_str()).unwrap_or("").is_empty() {
+        return Err("Enter the invoice date before submitting it for review.".into());
+    }
+    if input.record_type == "period" && input.status == "Ready for review"
+        && (payload.get("start_date").and_then(|v|v.as_str()).unwrap_or("").is_empty()
+            || payload.get("end_date").and_then(|v|v.as_str()).unwrap_or("").is_empty()) {
+        return Err("Enter both period dates before marking the period ready for review.".into());
+    }
+    if input.record_type == "historical_record" && input.status == "Ready for review"
+        && input.reference.as_deref().unwrap_or("").trim().is_empty()
+            && payload.get("source_filename").and_then(|v|v.as_str()).unwrap_or("").trim().is_empty() {
+        return Err("Add a source reference before marking historical data ready for review.".into());
+    }
+
+    if let Some((version, existing_type, previous_status, _)) = exists.as_ref() {
+        if existing_type != &input.record_type {
+            return Err("A record cannot be changed into a different record type.".into());
+        }
+        if input.row_version != Some(*version) {
+            return Err("This record changed since it was opened. Reload before saving.".into());
+        }
+        if !valid_record_transition(&input.record_type, Some(previous_status), &input.status) {
+            return Err("This workflow status transition is not permitted.".into());
+        }
     } else if !valid_record_transition(&input.record_type, None, &input.status) {
         return Err("A new record must start in its initial draft/discovery state.".into());
-        tx.execute("UPDATE workspace_record SET client_id=?1,title=?2,status=?3,reference=?4,amount_text=?5,notes=?6,payload_json=?7,row_version=row_version+1,updated_at=?8,updated_by=?9 WHERE id=?10 AND firm_id=?11",
-            params![input.client_id,input.title.trim(),input.status,input.reference.unwrap_or_default(),input.amount_text.unwrap_or_default(),input.notes.unwrap_or_default(),input.payload_json.unwrap_or_else(||"{}".into()),now,actor_id,id,FIRM_ID]).map_err(|e|e.to_string())?;
-    } else {
-        tx.execute("INSERT INTO workspace_record(id,firm_id,client_id,record_type,title,status,reference,amount_text,notes,payload_json,row_version,created_at,updated_at,created_by,updated_by) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,1,?11,?11,?12,?12)",
-            params![id,FIRM_ID,input.client_id,input.record_type,input.title.trim(),input.status,input.reference.unwrap_or_default(),input.amount_text.unwrap_or_default(),input.notes.unwrap_or_default(),input.payload_json.unwrap_or_else(||"{}".into()),now,actor_id]).map_err(|e|e.to_string())?;
     }
-    tx.execute("INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json) VALUES(?1,?2,?3,?4,'workspace_record',?5,?6,?7,?8)",
-        params![Uuid::new_v4().to_string(),FIRM_ID,actor_id,if exists.is_some(){"workspace_record_updated"}else{"workspace_record_created"},id,now,Uuid::new_v4().to_string(),json!({"record_type":input.record_type,"status":input.status}).to_string()]).map_err(|e|e.to_string())?;
+
+    let now = now_utc();
+    let tx = db.connection.unchecked_transaction().map_err(|e|e.to_string())?;
+    if exists.is_some() {
+        tx.execute(
+            "UPDATE workspace_record SET client_id=?1,title=?2,status=?3,reference=?4,amount_text=?5,notes=?6,payload_json=?7,row_version=row_version+1,updated_at=?8,updated_by=?9 WHERE id=?10 AND firm_id=?11",
+            params![input.client_id,input.title.trim(),input.status,input.reference.unwrap_or_default(),input.amount_text.unwrap_or_default(),input.notes.unwrap_or_default(),payload.to_string(),now,actor_id,id,FIRM_ID]
+        ).map_err(|e|e.to_string())?;
+    } else {
+        tx.execute(
+            "INSERT INTO workspace_record(id,firm_id,client_id,record_type,title,status,reference,amount_text,notes,payload_json,row_version,created_at,updated_at,created_by,updated_by)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,1,?11,?11,?12,?12)",
+            params![id,FIRM_ID,input.client_id,input.record_type,input.title.trim(),input.status,input.reference.unwrap_or_default(),input.amount_text.unwrap_or_default(),input.notes.unwrap_or_default(),payload.to_string(),now,actor_id]
+        ).map_err(|e|e.to_string())?;
+    }
+    tx.execute(
+        "INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json)
+         VALUES(?1,?2,?3,?4,'workspace_record',?5,?6,?7,?8)",
+        params![Uuid::new_v4().to_string(),FIRM_ID,actor_id,if exists.is_some(){"workspace_record_updated"}else{"workspace_record_created"},id,now,Uuid::new_v4().to_string(),json!({"record_type":input.record_type,"status":input.status}).to_string()]
+    ).map_err(|e|e.to_string())?;
     tx.commit().map_err(|e|e.to_string())?;
-    let mut stmt = db.connection.prepare("SELECT id,client_id,record_type,title,status,reference,amount_text,notes,payload_json,row_version,updated_at FROM workspace_record WHERE id=?1").map_err(|e|e.to_string())?;
+
+    let mut stmt = db.connection.prepare(
+        "SELECT id,client_id,record_type,title,status,reference,amount_text,notes,payload_json,row_version,updated_at FROM workspace_record WHERE id=?1"
+    ).map_err(|e|e.to_string())?;
     stmt.query_row([id], |r| Ok(WorkspaceRecord {
-        id:r.get(0)?,client_id:r.get(1)?,record_type:r.get(2)?,title:r.get(3)?,status:r.get(4)?,reference:r.get(5)?,amount_text:r.get(6)?,notes:r.get(7)?,payload_json:r.get(8)?,row_version:r.get(9)?,updated_at:r.get(10)?
+        id:r.get(0)?,client_id:r.get(1)?,record_type:r.get(2)?,title:r.get(3)?,status:r.get(4)?,
+        reference:r.get(5)?,amount_text:r.get(6)?,notes:r.get(7)?,payload_json:r.get(8)?,row_version:r.get(9)?,updated_at:r.get(10)?
     })).map_err(|e|e.to_string())
 }
 
