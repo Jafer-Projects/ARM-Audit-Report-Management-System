@@ -85,7 +85,7 @@ const recordFields: Record<string, RecordField[]> = {
   ],
   task: [
     { key: "description", label: "Description / expected output", kind: "textarea", wide: true },
-    { key: "assignee", label: "Assignee (demo staff reference)" },
+    { key: "assignee", label: "Assignee (active staff name)" },
     { key: "due_date", label: "Due date", kind: "date" },
     { key: "priority", label: "Priority", kind: "select", options: ["Not set","Low","Normal","High","Urgent"] },
     { key: "task_type", label: "Task type", kind: "select", options: ["Data capture","Review","Follow-up","Other"] },
