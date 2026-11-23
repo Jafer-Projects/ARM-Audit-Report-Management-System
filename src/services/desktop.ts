@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Client, ClientChange, ClientInput, DuplicateCandidate, EventItem, HistoricalImportBatch, HistoricalImportResult, HistoricalImportRow, InvoiceDuplicateCandidate, LocalNote, RecordInput, TaskReviewNote, WorkspaceInfo, WorkspaceRecord } from "../types";
+import type { Client, ClientChange, ClientInput, DuplicateCandidate, EventItem, HistoricalImportBatch, HistoricalImportResult, HistoricalImportRow, InvoiceDuplicateCandidate, LocalNote, RecordInput, TaskReviewNote, WorkspaceInfo, WorkspaceRecord, WorkspaceRecordVersion } from "../types";
 
 export const desktop = {
   initialize: () => invoke<WorkspaceInfo>("initialize_workspace"),
@@ -13,6 +13,7 @@ export const desktop = {
   restoreClient: (id: string) => invoke<void>("restore_client", { id }),
   notes: () => invoke<LocalNote[]>("list_notes"),
   saveNote: (input: { id?: string; client_id?: string | null; title: string; body: string }) => invoke<LocalNote>("save_note", { input }),
+  recordVersions: (recordId: string) => invoke<WorkspaceRecordVersion[]>("list_workspace_record_versions", { recordId }),
   taskReviewNotes: (taskId: string) => invoke<TaskReviewNote[]>("list_task_review_notes", { taskId }),
   addTaskReviewNote: (input: { taskId: string; category: string; description: string; affectedRecordReference: string; requiredResponse: string }) => invoke<TaskReviewNote>("add_task_review_note", input),
   respondTaskReviewNote: (noteId: string, response: string) => invoke<void>("respond_task_review_note", { noteId, response }),
