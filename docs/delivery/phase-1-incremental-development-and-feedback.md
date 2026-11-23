@@ -10,7 +10,7 @@ Each increment should produce a demonstrable vertical slice for practitioner fee
 
 ## 2. Initial increments
 
-**Binding delivery rule:** Increments 0–5 are one implementation programme on branch `implementation/increments-0-to-5` and PR #2. Do not split them into separate implementation branches or PRs. Execute relevant tests throughout development, but do not assign individual increment acceptance/pass status. The sole acceptance decision is made after Increment 5, using the integrated Increments 0–5 acceptance gate in the consolidated developer specification. A failed criterion blocks the collective gate; fix it and rerun relevant tests plus full regression. This rule does not waive separate professional, security, legal or production-release approvals.
+**Binding delivery rule:** Increments 0–5 are one implementation programme on branch `implementation/increments-0-to-5` and PR #2. Do not split them into separate implementation branches or PRs. Prepare relevant tests, fixtures and acceptance evidence mappings during development, but defer execution of the formal Increments 0–5 verification/test program until Increment 5 implementation is complete. Do not assign individual increment acceptance/pass status. The sole acceptance decision is made after Increment 5, using the integrated Increments 0–5 acceptance gate. A failed criterion blocks the collective gate; fix it and rerun the affected tests plus full regression. This rule does not waive separate professional, security, legal or production-release approvals.
 
 ### Increment 0 — Working shell and safe local workspace
 - Windows desktop shell and simple navigation.
