@@ -24,6 +24,16 @@ const subtypeOptions: Record<"catalogue" | "history" | "work" | "imports", { typ
   work: [{ type: "staff", label: "Staff" }, { type: "task", label: "Tasks" }],
   imports: [{ type: "import_case", label: "Import cases" }, { type: "import_cost_input", label: "Cost inputs" }],
 };
+const statusOptions: Record<string, string[]> = {
+  category: ["Draft","Active","Archived"], product: ["Draft","Active","Archived"],
+  invoice: ["Draft","Submitted for review","Reviewed","Returned","Archived"],
+  period: ["Draft","Needs source","Ready for review","Reviewed","Locked"],
+  historical_record: ["Draft","Needs source","Ready for review","Reviewed"],
+  staff: ["Draft","Active","Inactive"],
+  task: ["Draft","Assigned","In progress","Blocked","Submitted","Returned","Completed","Cancelled"],
+  import_case: ["Discovery","Inputs captured","Needs review","Reviewed","Returned"],
+  import_cost_input: ["Discovery","Inputs captured","Needs review","Reviewed","Returned"],
+};
 const personaLabels: Record<Persona, string> = {
   administrator: "Demo Firm Administrator", manager: "Demo Engagement Manager",
   auditor: "Demo Auditor", reviewer: "Demo Read-only Reviewer",
@@ -119,7 +129,7 @@ export default function App() {
       await desktop.saveRecord({
         id: recordEditor?.id || undefined, row_version: recordEditor?.id ? recordEditor.row_version : undefined,
         client_id: v.client_id || null, record_type: recordType, title: v.title,
-        status: v.status || config.statuses[0], reference: v.reference || "",
+        status: v.status || (statusOptions[recordType] ?? config.statuses)[0], reference: v.reference || "",
         amount_text: v.amount_text || "", notes: v.notes || "",
       });
       setRecordEditor(null); setRecords(await desktop.records(recordType));
@@ -181,7 +191,7 @@ export default function App() {
         const config = recordTypes[section as keyof typeof recordTypes];
         if (!config) return null;
         return <section className="content-panel">
-          <div className="section-head"><div><span className="overline">{config.label.toUpperCase()}</span><h2>{nav.find(n => n.id === section)?.label}</h2><p>{config.hint}</p></div><button className="primary" disabled={!canMutate} onClick={() => setRecordEditor({ id:"",client_id:null,record_type:recordType,title:"",status:config.statuses[0],reference:"",amount_text:"",notes:"",row_version:0,updated_at:"" })}>+ Add record</button></div>
+          <div className="section-head"><div><span className="overline">{config.label.toUpperCase()}</span><h2>{nav.find(n => n.id === section)?.label}</h2><p>{config.hint}</p></div><button className="primary" disabled={!canMutate} onClick={() => setRecordEditor({ id:"",client_id:null,record_type:recordType,title:"",status:(statusOptions[recordType] ?? config.statuses)[0],reference:"",amount_text:"",notes:"",row_version:0,updated_at:"" })}>+ Add record</button></div>
           <div className="subtype-tabs" role="group" aria-label="Record type">{subtypeOptions[section as keyof typeof subtypeOptions].map(option => <button key={option.type} className={recordType === option.type ? "subtype-tab active" : "subtype-tab"} onClick={() => setRecordType(option.type)}>{option.label}</button>)}</div>
           <div className="record-grid">{records.map(r => <article className="record-card" key={r.id}><div className="record-card-top"><span className="status">{r.status}</span><small>{new Date(r.updated_at).toLocaleDateString()}</small></div><h3>{r.title}</h3><p>{r.notes || "No additional notes"}</p><div className="record-meta"><span>{r.reference || "No source reference"}</span>{r.amount_text && <strong>{r.amount_text}</strong>}</div><button className="text-button" onClick={() => setRecordEditor(r)}>Open record →</button></article>)}
           {records.length === 0 && <div className="empty-card"><strong>No records yet</strong><p>Create a record to start this workflow. Data is stored locally in the demo database.</p></div>}</div>
@@ -205,7 +215,7 @@ export default function App() {
 
     {recordEditor && <div className="modal-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setRecordEditor(null); }}><form className="modal" onSubmit={saveRecord}>
       <div className="modal-head"><div><span className="overline">WORKFLOW RECORD</span><h2>{recordEditor.id ? "Edit record" : "Add record"}</h2><p>Store source information and review state; do not infer professional conclusions.</p></div><button type="button" className="close" onClick={() => setRecordEditor(null)}>×</button></div>
-      <div className="form-grid"><label className="wide">Title *<input name="title" required maxLength={200} defaultValue={recordEditor.title} /></label><label>Client<select name="client_id" defaultValue={recordEditor.client_id ?? ""}><option value="">No client selected</option>{clients.map(c => <option value={c.id} key={c.id}>{c.display_name || c.legal_name}</option>)}</select></label><label>Status<select name="status" defaultValue={recordEditor.status}>{recordTypes[section as keyof typeof recordTypes]?.statuses.map(s => <option key={s}>{s}</option>)}</select></label><label>Source / reference<input name="reference" defaultValue={recordEditor.reference} /></label><label>Amount / value (text only)<input name="amount_text" defaultValue={recordEditor.amount_text} placeholder="Preserve source notation; no calculation" /></label><label className="wide">Notes and assumptions<textarea name="notes" defaultValue={recordEditor.notes} /></label></div>
+      <div className="form-grid"><label className="wide">Title *<input name="title" required maxLength={200} defaultValue={recordEditor.title} /></label><label>Client<select name="client_id" defaultValue={recordEditor.client_id ?? ""}><option value="">No client selected</option>{clients.map(c => <option value={c.id} key={c.id}>{c.display_name || c.legal_name}</option>)}</select></label><label>Status<select name="status" defaultValue={recordEditor.status}>{(statusOptions[recordType] ?? recordTypes[section as keyof typeof recordTypes]?.statuses ?? []).map(s => <option key={s}>{s}</option>)}</select></label><label>Source / reference<input name="reference" defaultValue={recordEditor.reference} /></label><label>Amount / value (text only)<input name="amount_text" defaultValue={recordEditor.amount_text} placeholder="Preserve source notation; no calculation" /></label><label className="wide">Notes and assumptions<textarea name="notes" defaultValue={recordEditor.notes} /></label></div>
       <div className="modal-actions"><button type="button" className="secondary" onClick={() => setRecordEditor(null)}>Cancel</button><button className="primary" disabled={!canMutate || busy}>Save local record</button></div>
     </form></div>}
   </div>;
