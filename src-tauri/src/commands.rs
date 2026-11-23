@@ -1005,6 +1005,65 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
         if !active { return Err("Choose an active client in this demonstration firm.".into()); }
     }
 
+
+    if input.record_type == "import_cost_input" {
+        let entry_kind = payload.get("entry_kind").and_then(|v| v.as_str()).unwrap_or("").trim();
+        if !["Goods line", "Cost component", "calculation_result"].contains(&entry_kind) {
+            return Err("Classify the import-cost record as a Goods line or Cost component.".into());
+        }
+        if input.status == "Reviewed" && !["administrator", "manager"].contains(&persona.as_str()) {
+            return Err("Only the demo administrator or engagement manager may mark an import-cost record reviewed.".into());
+        }
+        if entry_kind == "calculation_result" {
+            if payload.get("result_json").and_then(|v| v.as_str()).unwrap_or("").trim().is_empty() {
+                return Err("A calculation result must retain its complete result snapshot.".into());
+            }
+        } else {
+            let source_reference = payload.get("source_reference").and_then(|v| v.as_str()).unwrap_or("").trim();
+            if input.status == "Ready for review" && source_reference.is_empty() {
+                return Err("Add a source document/reference before submitting an import-cost input for review.".into());
+            }
+            let read_integer = |key: &str| -> Result<i64, String> {
+                let raw = payload.get(key).and_then(|v| v.as_str()).unwrap_or("").trim();
+                raw.parse::<i64>().map_err(|_| format!("Import-cost field {key} must be a whole-number value."))
+            };
+            let currency = payload.get("currency_code").and_then(|v| v.as_str()).unwrap_or("").trim();
+            if currency.len() != 3 || !currency.chars().all(|ch| ch.is_ascii_alphabetic()) {
+                return Err("Enter a three-letter currency code for the source amount.".into());
+            }
+            if read_integer("fx_numerator")? <= 0 || read_integer("fx_denominator")? <= 0 {
+                return Err("Record a positive FX numerator and denominator; use 1 and 1 when source and base currency are the same.".into());
+            }
+            if entry_kind == "Goods line" {
+                if payload.get("item_reference").and_then(|v| v.as_str()).unwrap_or("").trim().is_empty()
+                    || read_integer("quantity_micros")? <= 0 || read_integer("unit_price_minor")? < 0 {
+                    return Err("A goods line needs an item reference, positive quantity (millionths), and non-negative unit price (minor units).".into());
+                }
+                if read_integer("weight_micros").unwrap_or(0) < 0 || read_integer("volume_micros").unwrap_or(0) < 0 {
+                    return Err("Weight and volume cannot be negative.".into());
+                }
+            } else {
+                if payload.get("component_reference").and_then(|v| v.as_str()).unwrap_or("").trim().is_empty()
+                    || payload.get("category").and_then(|v| v.as_str()).unwrap_or("").trim().is_empty()
+                    || read_integer("amount_minor")? < 0 {
+                    return Err("A cost component needs a reference, category, and non-negative amount in minor units.".into());
+                }
+                let treatment = payload.get("treatment").and_then(|v| v.as_str()).unwrap_or("");
+                if !["Capitalize", "Exclude", "Recoverable tax", "Customs-value-only", "Needs review"].contains(&treatment) {
+                    return Err("Select an explicit cost treatment; do not leave it implicit.".into());
+                }
+                let basis = payload.get("allocation_basis").and_then(|v| v.as_str()).unwrap_or("");
+                if !["Direct", "Quantity", "Weight", "Volume", "Value"].contains(&basis) {
+                    return Err("Select Direct, Quantity, Weight, Volume, or Value as the allocation basis.".into());
+                }
+                if treatment == "Capitalize" && basis == "Direct"
+                    && payload.get("direct_item_reference").and_then(|v| v.as_str()).unwrap_or("").trim().is_empty() {
+                    return Err("A directly allocated component needs its target item reference.".into());
+                }
+            }
+        }
+    }
+
     let id = input.id.clone().unwrap_or_else(|| Uuid::new_v4().to_string());
     let invoice_duplicate_candidates: Vec<(String,String)> = if input.record_type == "invoice" {
         let invoice_number = payload.get("invoice_number").and_then(|v|v.as_str()).unwrap_or("").trim();
@@ -1039,6 +1098,15 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
         |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?))
     ).optional().map_err(|e|e.to_string())?;
 
+    if input.record_type == "import_cost_input" {
+        if let Some((_, existing_type, _, existing_payload, _)) = exists.as_ref() {
+            if existing_type != "import_cost_input" { return Err("Import-cost record type mismatch.".into()); }
+            let previous: serde_json::Value = serde_json::from_str(existing_payload).unwrap_or_else(|_| json!({}));
+            if previous.get("entry_kind").and_then(|v| v.as_str()) == Some("calculation_result") {
+                return Err("Generated import-cost calculation snapshots are immutable. Create a new calculation version instead.".into());
+            }
+        }
+    }
     if input.record_type == "invoice" {
         let prior_reviewer_note = exists.as_ref().map(|row| serde_json::from_str::<serde_json::Value>(&row.3).unwrap_or_else(|_|json!({})))
             .and_then(|value|value.get("reviewer_note").and_then(|v|v.as_str()).map(str::to_string)).unwrap_or_default();
