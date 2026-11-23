@@ -49,6 +49,8 @@ pub fn run() {
             commands::attach_source_document,
             commands::list_source_documents,
             commands::read_source_document,
+            commands::list_workspace_notifications,
+            commands::mark_workspace_notification_read,
             commands::reset_demo_data
         ])
         .run(tauri::generate_context!())
