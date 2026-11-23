@@ -118,6 +118,28 @@ impl Database {
             )?;
             tx.commit()?;
         }
+        if applied < 2 {
+            let tx = self.connection.unchecked_transaction()?;
+            tx.execute_batch(
+                "CREATE TABLE local_note (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    firm_id TEXT NOT NULL REFERENCES demo_firm(id),
+                    client_id TEXT REFERENCES client(id),
+                    actor_id TEXT NOT NULL REFERENCES demo_actor(id),
+                    title TEXT NOT NULL CHECK(length(title) BETWEEN 1 AND 120),
+                    body TEXT NOT NULL CHECK(length(body) <= 2000),
+                    status TEXT NOT NULL CHECK(status='Local draft'),
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX local_note_firm_updated ON local_note(firm_id, updated_at);"
+            )?;
+            tx.execute(
+                "INSERT INTO schema_migration(version, checksum, applied_at) VALUES(2, ?1, ?2)",
+                rusqlite::params!["arm-local-notes-v2", now_utc()],
+            )?;
+            tx.commit()?;
+        }
         Ok(())
     }
 
