@@ -1,23 +1,23 @@
-# Phase 0 — Technical discovery and foundation plan
+# Phase 0 — Technical discovery and controlled development plan
 
-**Status:** In progress. Repository scaffolding is being established; discovery evidence and prototype gates remain open.
+**Status:** Approved for controlled initial development on 2026-11-23. Discovery and evidence validation continue alongside implementation. See `docs/governance/phase-0-gate-record.md`.
 
 ## 1. Purpose
 
-Convert the approved product direction into evidence-backed decisions before building the desktop application or accepting real client data. Phase 0 validates professional workflows, Ethiopian requirements, offline durability, local security, synchronization, data ownership and delivery readiness.
+Use the initial product direction and stakeholder interviews as a sufficient starting baseline for small, safe, demonstrable increments. Do not require auditors to produce exhaustive software specifications before development. The product team translates observed professional work into workflows, fields, validation, roles, states and acceptance tests, then demonstrates the result back to practitioners.
 
-The current technology direction (Tauri 2, Rust, React/TypeScript, Node.js/TypeScript, SQLite and PostgreSQL) is a candidate baseline to validate. It is not permission to select arbitrary versions/plugins or process production data.
+Phase 0 approval authorizes synthetic-data development and scoped technical spikes. It does not approve real client data, regulated operations, production deployment or closure of the legal/security/accounting/tax/operations evidence gates.
 
-## 2. Workstreams and required evidence
+## 2. Workstreams and evidence
 
-| ID | Workstream | Activities | Required evidence | Accountable role |
+| ID | Workstream | Activities | Evidence to develop progressively | Accountable role |
 |---|---|---|---|---|
-| P0-01 | Professional workflows | Interview auditors, partners, accountants, tax reviewers and clients; map engagement lifecycle and exceptions. | Consented interview notes, role journeys, process maps, exception cases, approved glossary. | Product/domain lead |
-| P0-02 | Ethiopian regulation | Verify standards, tax obligations, filing calendars, retention, privacy, licensing, e-invoice and portal processes using authoritative sources. | Source register with issuer, effective date, applicability and legal/professional review. | Ethiopian tax/audit specialists + counsel |
-| P0-03 | Data governance | Define responsibility per data class; client access, correction, export, retention, legal hold, termination and portability. | Data-flow map, classification, responsibility matrix, contract clauses and legal review. | Legal/privacy owner |
+| P0-01 | Professional workflows | Observe auditors, partners, accountants, tax reviewers and clients completing tasks; map lifecycle and exceptions. | Practitioner demo notes, role journeys, process maps, glossary, acceptance examples. | Product/domain lead |
+| P0-02 | Ethiopian regulation | Verify standards, tax obligations, filing calendars, retention, privacy, licensing, e-invoice and portal processes. | Source register with issuer, effective date, applicability and qualified review. | Ethiopian tax/audit specialists + counsel |
+| P0-03 | Data governance | Define responsibilities per data class; client access, correction, export, retention, legal hold, termination and portability. | Data-flow map, classification, responsibility matrix, contract clauses and legal review. | Legal/privacy owner |
 | P0-04 | Security threat model | Model tenant isolation, staff misuse, compromised/stolen devices, key extraction, malicious files, support access, backup compromise and sync replay. | Threat model, trust boundaries, abuse cases, controls and residual-risk register. | Security lead |
 | P0-05 | Offline storage/key protection | Prototype SQLite encryption, Windows DPAPI/CNG key wrapping, backup/restore, device migration and corruption recovery. | Reproducible benchmark, license/advisory review, key lifecycle and recovery demonstration. | Desktop/security engineers |
-| P0-06 | Tauri native boundary | Prototype command allowlist, capability model, filesystem sandboxing, update behavior and signed build chain. | Attack-surface inventory, permission matrix, signed test build and negative tests. | Desktop lead |
+| P0-06 | Tauri native boundary | Validate command allowlist, capability model, filesystem sandboxing, update behavior and signed build chain. | Attack-surface inventory, permission matrix, signed test build and negative tests. | Desktop lead |
 | P0-07 | Sync correctness | Prototype local transaction/outbox, server inbox/deduplication, ordering, idempotency, conflicts, resumable transfer and protocol evolution. | Fault-injection report, invariant tests, diagrams and entity conflict policy. | Backend/sync lead |
 | P0-08 | Accounting correctness | Validate accounts, journals, periods, currencies, precision, rounding, imports, corrections and statements. | Domain model, approved examples, independent expected-result fixtures and accounting review. | Accounting lead |
 | P0-09 | Audit methodology | Validate acceptance, independence, materiality, risk, procedures, evidence, sampling, review and report issuance. | Methodology mapping, evidence graph, segregation matrix and partner review. | Audit methodology lead |
@@ -25,31 +25,47 @@ The current technology direction (Tauri 2, Rust, React/TypeScript, Node.js/TypeS
 | P0-11 | Hosting/operations | Compare VPS/network/storage options; define environments, secrets, observability, backup isolation, RPO/RTO and support. | Threat model, cost model, restore test design and runbooks. | Operations lead |
 | P0-12 | Delivery readiness | Confirm skills, maintainer roles, release approvals, dependency review, incident handling and pilot support. | Responsibility matrix, estimates, support process and pilot checklist. | Product owner |
 
-## 3. Discovery participants
+## 3. Discovery method for practitioners
 
-Minimum discovery targets: two audit practitioners/partners, two accountants/bookkeepers, two tax practitioners, two client business representatives, one Ethiopian legal/regulatory adviser, and desktop/backend/security engineering reviewers. These are targets, not completed interviews. Record role and consent; avoid unnecessary personal or client-confidential data.
+Auditors are not expected to describe technical systems. Ask them to demonstrate their work using synthetic or properly de-identified examples. For each observed task, record:
+- Trigger and desired outcome.
+- Actor and reviewer.
+- Documents/inputs and where they originate.
+- Actual steps, decisions and calculations.
+- Exceptions, corrections and late/missing information.
+- Output and evidence that must be retained.
+- Approval/sign-off responsibility.
+- What must work offline.
 
-## 4. Required artefacts before Phase 1
+The product team creates the software requirement and acceptance tests, demonstrates the workflow back to the auditor, and records corrections. Silence or inability to explain technical terminology is not approval.
 
-1. Approved domain glossary and role-based process maps.
-2. Prioritized requirements with measurable acceptance criteria.
-3. Data classification, data-flow map and firm/client responsibility matrix.
-4. Threat model and local device/key lifecycle.
-5. Approved offline/sync protocol and fault-injection results.
-6. Accounting, audit and tax models reviewed by qualified practitioners.
-7. Ethiopian regulatory source register with unresolved questions explicit.
-8. Technology report covering versions, licenses, maintenance, vulnerabilities and Windows compatibility.
-9. Costed operations plan with RPO/RTO and recovery design.
-10. Phase 1 backlog, named owners, estimates and release gates.
+## 4. Minimum artefacts for the first increments
 
-## 5. Decision method
+Do not create large documents for every possible feature upfront. For each increment maintain:
+1. A short workflow/use-case description.
+2. Field dictionary for fields actually being built.
+3. Role/action and state-transition matrix.
+4. Acceptance examples, negative cases and test evidence.
+5. Demonstration notes, practitioner feedback and decisions.
+6. Known limitations, assumptions and deferred questions.
+
+The product requirements document and auditor pain-point annex provide the broader baseline. The Phase 1 incremental plan defines the initial order.
+
+## 5. Safety-critical evidence that remains mandatory
+
+The following evidence may be gathered while synthetic-data development proceeds, but must be approved before the relevant higher-risk use:
+- Privacy/legal roles, contracts, registration/cross-border analysis and retention before real client data.
+- Threat model, local encryption/key recovery and Tauri boundary review before distribution or sensitive data.
+- Sync invariants and fault-injection before relying on multi-device synchronization for authoritative records.
+- Accounting policies and independent fixtures before live posting or relying on statements.
+- Audit methodology and professional authorization before operational report signing.
+- Tax matrix source reconciliation and independent expected results before relying on tax calculations or filing.
+- RPO/RTO, backup restore, incident response and hosting approval before production.
+
+## 6. Decision method
 
 For each decision record options, evidence, assumptions, security/operational consequences, cost, reversibility, owner, approval date and revisit trigger. Update the relevant ADR. A prototype compiling is not validation: include negative/failure cases and reproducible evidence. Use synthetic data only.
 
-## 6. Exit criteria
+## 7. Revisit criteria
 
-Phase 0 is complete only when every mandatory item in docs/governance/phase-0-gate-record.md has an evidence link, named reviewer and explicit approval. Unresolved high-severity security, data ownership, financial integrity, regulatory or offline durability issues block Phase 1.
-
-## 7. Out of scope
-
-Production features, real client/taxpayer data, production credentials, shared/production migrations, government portal automation, production VPS provisioning and unverified tax/retention rules.
+The product owner may authorize further increments as they are scoped and acceptance criteria are documented. Revisit the authorization before real client data, live posting/signing/filing, desktop distribution, production deployment, material changes to data ownership, or changes to cryptographic/storage architecture. Record explicit approval and evidence for each transition.
