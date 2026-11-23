@@ -12,7 +12,7 @@ Its defining product requirement is a **Windows-first, fully offline-capable des
 - Users: auditors, accountants, clients, managers and platform administrators.
 - Initial market: Ethiopia.
 - Initial scale target: capacity hypothesis to be tested, not a production guarantee.
-- Desktop: Windows-first; Windows 11 x64 is the default target. Windows 10 x64 compatibility/support boundary remains pending confirmation and must not include unsupported installations.
+- Desktop OS compatibility target: Windows 10 x64 and Windows 11 x64, including ordinary Windows 10 installations that no longer receive Microsoft security updates, as explicitly requested by the product owner. This is an application compatibility target, not a claim that unsupported Windows versions are secure or vendor-supported. Production use with real client data on an unsupported OS remains a security-risk exception requiring documented risk acceptance and separate security approval.
 - Offline: core professional workflows remain usable without internet.
 - Devices: individually assigned computers.
 - Synchronization: automatic background synchronization plus user-controlled retry/status.
@@ -54,7 +54,8 @@ These are architecture directions to validate; final versions, licenses, mainten
 - [Roles, permissions and workflows](docs/product/user-roles-and-permissions.md)
 - [Ownership and licensing model](docs/product/data-ownership-and-licensing.md)
 - [Implementation roadmap and acceptance criteria](docs/delivery/implementation-roadmap-and-acceptance.md)
-- [Phase 1 incremental development and practitioner feedback](docs/delivery/phase-1-incremental-development-and-feedback.md)\n- [Developer implementation specification for Increments 0 and 1](docs/delivery/developer-implementation-specification-increments-0-and-1.md)
+- [Phase 1 incremental development and practitioner feedback](docs/delivery/phase-1-incremental-development-and-feedback.md)
+- [Developer implementation specification for Increments 0 and 1](docs/delivery/developer-implementation-specification-increments-0-and-1.md)
 
 ## Architecture and domain references
 
