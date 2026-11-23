@@ -49,6 +49,8 @@ These are architecture directions to validate; final versions, licenses, mainten
 
 ## Product and delivery documents
 
+- [PR #2 prototype build binding contract — implementation and deferred collective verification](docs/delivery/prototype-build-binding-contract.md)
+
 - [Implementation evidence log — Increments 0–5](docs/delivery/implementation-evidence-log.md)
 - [PR #2 — single-branch implementation and collective acceptance contract](https://github.com/Jafermenza/ARM-Audit-Report-Management-System/pull/2)
 
