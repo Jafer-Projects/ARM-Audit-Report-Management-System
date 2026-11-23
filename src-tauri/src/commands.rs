@@ -318,11 +318,21 @@ pub fn list_records(record_type: String, state: State<'_, AppState>) -> Result<V
 #[tauri::command]
 pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<WorkspaceRecord, String> {
     if !allowed_record_type(&input.record_type) { return Err("Unsupported workspace record type.".into()); }
+    if input.record_type == "import_cost_input" { return Err("Import-cost inputs remain locked until Gate 5-A discovery is approved. Record discovery questions in the import case instead.".into()); }
     if !allowed_status(&input.record_type, &input.status) { return Err("Unsupported status for this record type.".into()); }
     if let Some(payload) = input.payload_json.as_deref() { if payload.len() > 16_384 || serde_json::from_str::<serde_json::Value>(payload).is_err() { return Err("Record metadata must be valid JSON under 16 KB.".into()); } }
     if input.title.trim().is_empty() || input.title.chars().count() > 200 { return Err("A title of 1–200 characters is required.".into()); }
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
     let (actor_id,_,_) = ensure_can_mutate(&db)?;
+    if let Some(client_id) = input.client_id.as_deref() {
+        let active: bool = db.connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM client WHERE id=?1 AND firm_id=?2 AND status='Active')",
+            params![client_id,FIRM_ID], |r| r.get(0)
+        ).map_err(|e| e.to_string())?;
+        if !active { return Err("Choose an active client in this demonstration firm.".into()); }
+    } else if ["category","product","invoice","historical_record","period","task","import_case"].contains(&input.record_type.as_str()) {
+        return Err("Select the client workspace for this record.".into());
+    }
     let id = input.id.unwrap_or_else(|| Uuid::new_v4().to_string());
     let now = now_utc();
     let exists: Option<i64> = db.connection.query_row("SELECT row_version FROM workspace_record WHERE id=?1 AND firm_id=?2",params![id,FIRM_ID],|r|r.get(0)).optional().map_err(|e|e.to_string())?;
