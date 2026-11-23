@@ -416,7 +416,7 @@ pub struct LocalNoteInput {
 #[tauri::command]
 pub fn list_notes(state: State<'_, AppState>) -> Result<Vec<LocalNote>, String> {
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
-    let (actor_id,actor_name,persona) = active_actor(&db)?;
+    let (actor_id,_,_) = active_actor(&db)?;
     let mut stmt = db.connection.prepare("SELECT id,client_id,title,body,status,updated_at FROM local_note WHERE firm_id=?1 AND actor_id=?2 ORDER BY updated_at DESC").map_err(|e|e.to_string())?;
     let rows = stmt.query_map(params![FIRM_ID,actor_id], |r| Ok(LocalNote { id:r.get(0)?,client_id:r.get(1)?,title:r.get(2)?,body:r.get(3)?,status:r.get(4)?,updated_at:r.get(5)? })).map_err(|e|e.to_string())?;
     rows.collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())
@@ -429,7 +429,7 @@ pub fn save_note(input: LocalNoteInput, state: State<'_, AppState>) -> Result<Lo
         return Err("A note title (1–120 characters) and body (up to 2,000 characters) are required.".into());
     }
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
-    let (actor_id,actor_name,persona) = ensure_can_mutate(&db)?;
+    let (actor_id,_,_) = ensure_can_mutate(&db)?;
     if let Some(client_id) = input.client_id.as_deref() {
         let active: bool = db.connection.query_row("SELECT EXISTS(SELECT 1 FROM client WHERE id=?1 AND firm_id=?2 AND status='Active')",params![client_id,FIRM_ID],|r|r.get(0)).map_err(|e|e.to_string())?;
         if !active { return Err("Selected client is not active in this demo workspace.".into()); }
@@ -713,15 +713,12 @@ pub fn import_historical_batch(input: HistoricalImportInput, state: State<'_, Ap
     let digest = Sha256::digest(input.source_content.as_bytes());
     let checksum = digest.iter().map(|byte| format!("{byte:02x}")).collect::<String>();
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
-    let (actor_id,actor_name,persona) = ensure_can_mutate(&db)?;
+    let (actor_id,_,_) = ensure_can_mutate(&db)?;
     let active: bool = db.connection.query_row(
         "SELECT EXISTS(SELECT 1 FROM client WHERE id=?1 AND firm_id=?2 AND status='Active')",
         params![input.client_id,FIRM_ID], |r|r.get(0)
     ).map_err(|e|e.to_string())?;
     if !active { return Err("Choose an active client in this demonstration firm.".into()); }
-    if !actor_has_client_access(&db,&input.client_id,&actor_name,&persona)? {
-        return Err("This client workspace is not assigned to your demo persona.".into());
-    }
 
     let batch_id = Uuid::new_v4().to_string();
     let correlation_id = Uuid::new_v4().to_string();
@@ -796,7 +793,6 @@ pub fn list_historical_import_batches(client_id: String, state: State<'_, AppSta
         params![client_id,FIRM_ID], |r|r.get(0)
     ).map_err(|e|e.to_string())?;
     if !active { return Err("Choose an active client in this demonstration firm.".into()); }
-    let (_,actor_name,persona) = active_actor(&db)?;
     let mut stmt = db.connection.prepare(
         "SELECT id,source_filename,source_checksum_sha256,source_row_count,imported_row_count,imported_at
          FROM historical_import_batch WHERE firm_id=?1 AND client_id=?2 ORDER BY imported_at DESC"
