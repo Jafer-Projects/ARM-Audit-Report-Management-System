@@ -176,6 +176,11 @@ function hasPossibleDuplicate(record: WorkspaceRecord): boolean {
   catch { return false; }
 }
 
+function importBatchId(record: WorkspaceRecord): string {
+  try { return JSON.parse(record.payload_json).import_batch_id ?? ""; }
+  catch { return ""; }
+}
+
 function formatSnapshot(value: string): string {
   try { return JSON.stringify(JSON.parse(value), null, 2); }
   catch { return value; }
@@ -456,7 +461,7 @@ export default function App() {
           {section === "imports" && <p className="gate-note">Cost-input capture and calculation stay locked until the Gate 5-A practitioner discovery brief, approved input dictionary and independent worked example are recorded. Use the Discovery workspace to document questions; no customs or landed-cost assumptions are applied.</p>}
           <div className="record-grid">{visibleRecords.map(r => <article className="record-card" key={r.id}><div className="record-card-top"><span className="status">{r.status}</span><small>{new Date(r.updated_at).toLocaleDateString()}</small></div>{r.record_type === "historical_record" && hasPossibleDuplicate(r) && <span className="duplicate-flag">Possible duplicate source reference · review required</span>}<h3>{r.title}</h3><p>{r.notes || "No additional notes"}</p><div className="record-meta"><span>{r.reference || "No source reference"}</span>{r.amount_text && <strong>{r.amount_text}</strong>}</div><button className="text-button" onClick={() => setRecordEditor(r)}>Open record →</button></article>)}
           {visibleRecords.length === 0 && <div className="empty-card"><strong>No records yet</strong><p>Create a record to start this workflow. Data is stored locally in the demo database.</p></div>}</div>
-          {recordType === "historical_record" && importBatches.length > 0 && <section className="import-batches"><div className="preview-heading"><strong>Imported source batches</strong><span>Original CSV retained in local database</span></div>{importBatches.map(batch => <article className="batch-row" key={batch.id}><div><strong>{batch.source_filename}</strong><small>{batch.imported_row_count} rows · {new Date(batch.imported_at).toLocaleString()}</small></div><div><small>SHA-256</small><code>{batch.source_checksum_sha256}</code></div></article>)}</section>}
+          {recordType === "historical_record" && importBatches.length > 0 && <section className="import-batches"><div className="preview-heading"><strong>Imported source batches</strong><span>Original CSV retained in local database</span></div>{importBatches.map(batch => <article className="batch-row" key={batch.id}><div><strong>{batch.source_filename}</strong><small>{batch.imported_row_count} rows · {new Date(batch.imported_at).toLocaleString()}</small><small>{batch.source_row_count === batch.imported_row_count ? "Row-count reconciled" : "Row-count mismatch · investigate" } · {records.filter(record => importBatchId(record) === batch.id && hasPossibleDuplicate(record)).length} possible duplicate references</small></div><div><small>SHA-256</small><code>{batch.source_checksum_sha256}</code><small>Monetary totals are not calculated in this prototype.</small></div></article>)}</section>}
         </section>;
       })()}
 
