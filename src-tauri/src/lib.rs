@@ -28,6 +28,7 @@ pub fn run() {
             commands::save_client,
             commands::find_client_duplicates,
             commands::archive_client,
+            commands::list_client_changes,
             commands::activate_client,
             commands::restore_client,
             commands::list_notes,
