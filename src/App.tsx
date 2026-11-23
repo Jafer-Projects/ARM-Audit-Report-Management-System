@@ -361,7 +361,7 @@ export default function App() {
         status: v.status || (statusOptions[recordType] ?? config.statuses)[0], reference: v.reference || "",
         amount_text: v.amount_text || "", notes: v.notes || "", payload_json: JSON.stringify(Object.fromEntries((recordFields[recordType] ?? []).map(field => [field.key, v[field.key] ?? ""]))),
       });
-      setRecordEditor(null); setRecords(await desktop.records(recordType, recordType === "staff" ? undefined : selectedClientId || undefined));
+      setRecordEditor(null); setRecords(await desktop.records(recordType, recordType === "staff" ? undefined : selectedClientId || undefined)); if (recordType === "staff") setStaffRecords(await desktop.records("staff"));
     } catch (e) { setError(String(e)); } finally { setBusy(false); }
   }
   async function saveNote(event: FormEvent<HTMLFormElement>) {
