@@ -1711,7 +1711,7 @@ fn document_record_context(db: &Database, record_id: &str) -> Result<(String, St
          WHERE r.id=?1 AND r.firm_id=?2 AND c.firm_id=?2",
         params![record_id,FIRM_ID],
         |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))
-    ).map_err(|_| "The source document must be attached to an existing client invoice or historical record.".to_string())
+    ).map_err(|_| "The source document must be attached to an existing client invoice, historical record or import-cost input.".to_string())
 }
 
 fn detected_document_type(content: &[u8]) -> Option<&'static str> {
@@ -1754,7 +1754,7 @@ pub fn attach_source_document(
         return Err("The record must belong to the selected active client workspace.".into());
     }
     if !["invoice", "historical_record", "import_cost_input"].contains(&record_type.as_str()) {
-        return Err("Source documents can be attached only to invoice or historical-record evidence in this prototype.".into());
+        return Err("Source documents can be attached only to invoice, historical-record or import-cost input evidence in this prototype.".into());
     }
     if !actor_has_client_access(&db, &client_id, &actor_name, &persona)? {
         return Err("This demo persona does not have access to the selected client evidence.".into());
