@@ -211,6 +211,25 @@ pub fn save_client(input: ClientInput, state: State<'_, AppState>) -> Result<Cli
     }
     let now = now_utc();
     let exists: Option<i64> = db.connection.query_row("SELECT row_version FROM client WHERE id=?1 AND firm_id=?2", params![id,FIRM_ID], |r| r.get(0)).optional().map_err(|e| e.to_string())?;
+    let before_snapshot: Option<serde_json::Value> = if exists.is_some() {
+        Some(db.connection.query_row(
+            "SELECT record_kind,legal_name,display_name,tin_raw,sector,contact_name,contact_email,contact_phone,address_text,internal_reference,notes FROM client WHERE id=?1 AND firm_id=?2",
+            params![id,FIRM_ID],
+            |r| Ok(json!({
+                "record_kind":r.get::<_,String>(0)?,"legal_name":r.get::<_,String>(1)?,"display_name":r.get::<_,String>(2)?,
+                "tin_raw":r.get::<_,String>(3)?,"sector":r.get::<_,String>(4)?,"contact_name":r.get::<_,String>(5)?,
+                "contact_email":r.get::<_,String>(6)?,"contact_phone":r.get::<_,String>(7)?,"address_text":r.get::<_,String>(8)?,
+                "internal_reference":r.get::<_,String>(9)?,"notes":r.get::<_,String>(10)?
+            }))
+        ).map_err(|e|e.to_string())?)
+    } else { None };
+    let after_snapshot = json!({
+        "record_kind":input.record_kind,"legal_name":legal_name,"display_name":input.display_name.as_deref().unwrap_or(""),
+        "tin_raw":input.tin_raw.as_deref().unwrap_or("").trim(),"sector":input.sector.as_deref().unwrap_or(""),
+        "contact_name":input.contact_name.as_deref().unwrap_or(""),"contact_email":input.contact_email.as_deref().unwrap_or("").trim(),
+        "contact_phone":input.contact_phone.as_deref().unwrap_or(""),"address_text":input.address_text.as_deref().unwrap_or(""),
+        "internal_reference":input.internal_reference.as_deref().unwrap_or(""),"notes":input.notes.as_deref().unwrap_or("")
+    });
     let tx = db.connection.unchecked_transaction().map_err(|e| e.to_string())?;
     if let Some(current_version) = exists {
         if input.row_version != Some(current_version) { return Err("This client changed since it was opened. Reload or copy your changes before saving.".into()); }
@@ -229,6 +248,15 @@ pub fn save_client(input: ClientInput, state: State<'_, AppState>) -> Result<Cli
         tx.execute("INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json) VALUES(?1,?2,?3,'client_created','client',?4,?5,?6,'{}')",
             params![Uuid::new_v4().to_string(),FIRM_ID,actor_id,id,now,Uuid::new_v4().to_string()]).map_err(|e| e.to_string())?;
     }
+    let change_correlation_id = Uuid::new_v4().to_string();
+    tx.execute(
+        "INSERT INTO client_change(id,client_id,firm_id,actor_id,action,changed_at,before_json,after_json,correlation_id) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+        params![
+            Uuid::new_v4().to_string(),id,FIRM_ID,actor_id,
+            if exists.is_some() { "updated" } else { "created" },now,
+            before_snapshot.unwrap_or_else(||json!({})).to_string(),after_snapshot.to_string(),change_correlation_id
+        ]
+    ).map_err(|e|e.to_string())?;
     for (candidate_id, candidate_name) in duplicates {
         tx.execute("INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json) VALUES(?1,?2,?3,'possible_duplicate_acknowledged','client',?4,?5,?6,?7)",
             params![Uuid::new_v4().to_string(),FIRM_ID,actor_id,id,now,Uuid::new_v4().to_string(),json!({"candidate_id":candidate_id,"candidate_name":candidate_name}).to_string()]
