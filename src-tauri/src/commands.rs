@@ -110,18 +110,6 @@ fn ensure_can_mutate(db: &Database) -> Result<(String, String, String), String> 
     Ok(actor)
 }
 
-fn event(db: &Database, actor_id: &str, event_type: &str, target_type: &str, target_id: &str, payload: serde_json::Value) -> rusqlite::Result<()> {
-    db.connection.execute(
-        "INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json)
-         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)",
-        params![
-            Uuid::new_v4().to_string(),FIRM_ID,actor_id,event_type,target_type,target_id,
-            now_utc(),Uuid::new_v4().to_string(),payload.to_string()
-        ],
-    )?;
-    Ok(())
-}
-
 #[tauri::command]
 pub fn initialize_workspace(state: State<'_, AppState>) -> Result<WorkspaceInfo, String> {
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
@@ -141,8 +129,14 @@ pub fn set_demo_persona(persona: String, state: State<'_, AppState>) -> Result<W
     let actor_id: String = db.connection.query_row(
         "SELECT id FROM demo_actor WHERE persona=?1", [&persona], |r| r.get(0)
     ).map_err(|_| "Unknown demo persona".to_string())?;
-    db.connection.execute("UPDATE app_setting SET value=?1 WHERE key='active_actor_id'", [&actor_id]).map_err(|e| e.to_string())?;
-    event(&db, &actor_id, "demo_persona_changed", "demo_actor", &actor_id, json!({"persona":persona})).map_err(|e| e.to_string())?;
+    let tx = db.connection.unchecked_transaction().map_err(|e|e.to_string())?;
+    tx.execute("UPDATE app_setting SET value=?1 WHERE key='active_actor_id'", [&actor_id]).map_err(|e|e.to_string())?;
+    tx.execute(
+        "INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json)
+         VALUES(?1,?2,?3,'demo_persona_changed','demo_actor',?4,?5,?6,?7)",
+        params![Uuid::new_v4().to_string(),FIRM_ID,actor_id,actor_id,now_utc(),Uuid::new_v4().to_string(),json!({"persona":persona}).to_string()]
+    ).map_err(|e|e.to_string())?;
+    tx.commit().map_err(|e|e.to_string())?;
     let (_, actor_name, current_persona) = active_actor(&db)?;
     let clients_count = db.connection.query_row("SELECT COUNT(*) FROM client WHERE firm_id=?1 AND status<>'Archived'", [FIRM_ID], |r| r.get(0)).map_err(|e| e.to_string())?;
     Ok(WorkspaceInfo { firm_name:"ARM Demonstration Firm".into(), actor_name, persona:current_persona, clients_count, sync_state:"Sync is not enabled in this prototype" })
