@@ -1395,7 +1395,9 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
         if input.status == "Blocked" && payload.get("blocker_explanation").and_then(|v|v.as_str()).unwrap_or("").trim().is_empty() {
             return Err("Explain the blocker before moving the task to Blocked.".into());
         }
-        if input.status == "Assigned" {
+        if input.status != "Draft" {
+            let due_date = payload.get("due_date").and_then(|v|v.as_str()).unwrap_or("").trim();
+            if !valid_iso_date(due_date) { return Err("Set a valid due date before assigning or progressing a task.".into()); }
             if reviewer.is_empty() || reviewer == assignee {
                 return Err("Assign a separate active reviewer; the preparer cannot review their own task.".into());
             }
