@@ -178,7 +178,7 @@ export default function App() {
       let duplicateAcknowledged = false;
       if (duplicateCandidates.length > 0) {
         const names = duplicateCandidates.map(candidate => `• ${candidate.legal_name} (${candidate.record_kind}, TIN: ${candidate.tin_raw || "not provided"}, ${candidate.status})`).join("\n");
-        duplicateAcknowledged = window.confirm(`Possible existing client records were found:\n\n\${names}\n\nNo records will be merged. Continue saving this as a separate client and record that you acknowledged the possible duplicate?`);
+        duplicateAcknowledged = window.confirm(`Possible existing client records were found:\n\n${names}\n\nNo records will be merged. Continue saving this as a separate client and record that you acknowledged the possible duplicate?`);
         if (!duplicateAcknowledged) return;
       }
       await desktop.saveClient({
