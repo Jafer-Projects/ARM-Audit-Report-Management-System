@@ -343,7 +343,7 @@ fn valid_record_transition(record_type: &str, previous: Option<&str>, next: &str
         ("task", Some("Assigned"), "Assigned" | "In progress" | "Cancelled") => true,
         ("task", Some("In progress"), "In progress" | "Blocked" | "Submitted" | "Cancelled") => true,
         ("task", Some("Blocked"), "Blocked" | "In progress" | "Cancelled") => true,
-        ("task", Some("Submitted"), "Submitted" | "Returned" | "Completed") => true,
+        ("task", Some("Submitted"), "Submitted" | "Returned" | "Completed" | "Cancelled") => true,
         ("task", Some("Returned"), "Returned" | "In progress" | "Cancelled") => true,
         ("task", Some("Completed"), "Completed") | ("task", Some("Cancelled"), "Cancelled") => true,
         ("import_case", None, "Discovery") => true,
