@@ -24,3 +24,5 @@ export type RecordInput = {
 };
 
 export type LocalNote = { id: string; client_id: string | null; title: string; body: string; status: string; updated_at: string };
+
+export type ClientChange = { id: string; action: string; changed_at: string; actor_name: string; before_json: string; after_json: string };
