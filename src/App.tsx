@@ -301,7 +301,7 @@ export default function App() {
       })()}
 
       {section === "activity" && <section className="content-panel"><div className="section-head"><div><span className="overline">LOCAL AUDIT HISTORY</span><h2>Recent activity</h2><p>Append-only local events for the synthetic workspace.</p></div><button className="secondary" onClick={() => void refresh("activity")}>Refresh</button></div>
-        <div className="event-list">{events.map(e => <div className="event-row" key={e.id}><span className="event-mark" /><div><strong>{e.event_type.replaceAll("_"," ")}</strong><small>{e.actor_name} · {e.target_type} · {e.target_id}</small></div><time>{new Date(e.occurred_at_utc).toLocaleString()}</time></div>)}{events.length === 0 && <p className="empty">No activity recorded yet.</p>}</div>
+        <div className="event-list">{events.map(e => <div className="event-row" key={e.id}><span className="event-mark" /><div><strong>{e.event_type.replaceAll("_"," ")}</strong><small>{e.actor_name} · {e.target_type} · {e.target_id}</small><details className="event-details"><summary>Event data</summary><pre>{formatSnapshot(e.payload_json)}</pre></details></div><time>{new Date(e.occurred_at_utc).toLocaleString()}</time></div>)}{events.length === 0 && <p className="empty">No activity recorded yet.</p>}</div>
       </section>}
 
       <footer className="main-footer"><span>ARM · Local demonstration workspace</span><span>Changes are saved on this device only</span></footer>
