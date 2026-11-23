@@ -1033,6 +1033,43 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
     })).map_err(|e|e.to_string())
 }
 
+#[derive(Serialize)]
+pub struct WorkspaceRecordVersion {
+    id: String,
+    row_version: i64,
+    actor_name: String,
+    changed_at: String,
+    snapshot_json: String,
+}
+
+#[tauri::command]
+pub fn list_workspace_record_versions(record_id: String, state: State<'_, AppState>) -> Result<Vec<WorkspaceRecordVersion>, String> {
+    let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
+    let (_, actor_name, persona) = active_actor(&db)?;
+    let (record_type, raw): (String,String) = db.connection.query_row(
+        "SELECT record_type,payload_json FROM workspace_record WHERE id=?1 AND firm_id=?2",
+        params![record_id,FIRM_ID], |r|Ok((r.get(0)?,r.get(1)?))
+    ).map_err(|_|"Record not found in this demonstration firm.".to_string())?;
+    if record_type == "task" {
+        let payload: serde_json::Value = serde_json::from_str(&raw).unwrap_or_else(|_|json!({}));
+        let assignee = payload.get("assignee").and_then(|v|v.as_str()).unwrap_or("");
+        let reviewer = payload.get("reviewer").and_then(|v|v.as_str()).unwrap_or("");
+        if (persona == "auditor" && assignee != actor_name.as_str())
+            || (persona == "reviewer" && reviewer != actor_name.as_str()) {
+            return Err("This task history is not assigned to your demo persona.".into());
+        }
+    }
+    let mut stmt = db.connection.prepare(
+        "SELECT v.id,v.row_version,a.display_name,v.changed_at,v.snapshot_json
+         FROM workspace_record_version v JOIN demo_actor a ON a.id=v.actor_id
+         WHERE v.firm_id=?1 AND v.record_id=?2 ORDER BY v.row_version DESC"
+    ).map_err(|e|e.to_string())?;
+    let rows = stmt.query_map(params![FIRM_ID,record_id], |r| Ok(WorkspaceRecordVersion {
+        id:r.get(0)?,row_version:r.get(1)?,actor_name:r.get(2)?,changed_at:r.get(3)?,snapshot_json:r.get(4)?
+    })).map_err(|e|e.to_string())?;
+    rows.collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())
+}
+
 #[tauri::command]
 pub fn list_events(state: State<'_, AppState>) -> Result<Vec<EventItem>, String> {
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
