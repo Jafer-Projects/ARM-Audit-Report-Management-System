@@ -2223,7 +2223,9 @@ mod tests {
 
     #[test]
     fn archived_product_remains_addressable_from_a_historical_invoice_record() {
-        let app = test_app();
+        let directory = tempfile::tempdir().expect("temporary data directory");
+        let path = directory.path().join("arm-archived-product.sqlite3");
+        let app = test_app_with_database(crate::db::Database::open(&path).expect("file-backed database"));
         let client_id = command_active_client_id(&app);
         let product = save_record(RecordInput {
             id:None,row_version:None,client_id:Some(client_id.clone()),record_type:"product".into(),
@@ -2257,6 +2259,15 @@ mod tests {
         let db = state.database.lock().unwrap();
         let payload: String = db.connection.query_row("SELECT payload_json FROM workspace_record WHERE id=?1",[&invoice.id],|row|row.get(0)).unwrap();
         assert!(payload.contains(&product.id));
+        drop(db);
+        drop(app);
+        let reopened = crate::db::Database::open(&path).expect("reopen archived product database");
+        let (stored_product_status,stored_invoice_payload):(String,String) = reopened.connection.query_row(
+            "SELECT (SELECT status FROM workspace_record WHERE id=?1),(SELECT payload_json FROM workspace_record WHERE id=?2)",
+            params![product.id,invoice.id],|row|Ok((row.get(0)?,row.get(1)?))
+        ).unwrap();
+        assert_eq!(stored_product_status,"Archived");
+        assert!(stored_invoice_payload.contains(&product.id));
     }
 
     #[test]
@@ -2730,7 +2741,9 @@ mod tests {
 
     #[test]
     fn import_historical_batch_command_reconciles_all_rows_and_retains_row_provenance() {
-        let app = test_app();
+        let directory = tempfile::tempdir().expect("temporary data directory");
+        let path = directory.path().join("arm-historical-import.sqlite3");
+        let app = test_app_with_database(crate::db::Database::open(&path).expect("file-backed database"));
         let client_id = command_active_client_id(&app);
         let source_content = "Date,Description,Amount\n2026-01-01,First purchase,10.00\n2026-01-02,Second purchase,20.00";
         let make_row = |source_row, description: &str, amount: &str| HistoricalImportRow {
@@ -2765,6 +2778,15 @@ mod tests {
             [&client_id],|row|Ok((row.get(0)?,row.get(1)?))
         ).unwrap();
         assert_eq!(provenance,(3,1));
+        drop(db);
+        drop(app);
+        let reopened = crate::db::Database::open(&path).expect("reopen historical import database");
+        let (persisted_source,persisted_rows):(String,i64) = reopened.connection.query_row(
+            "SELECT source_content,imported_row_count FROM historical_import_batch WHERE id=?1",
+            [&result.batch_id],|row|Ok((row.get(0)?,row.get(1)?))
+        ).unwrap();
+        assert_eq!(persisted_source,source_content);
+        assert_eq!(persisted_rows,2);
     }
 
     #[test]
