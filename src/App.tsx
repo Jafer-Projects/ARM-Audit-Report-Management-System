@@ -37,7 +37,7 @@ type RecordField = {
 const statusOptions: Record<string, string[]> = {
   category: ["Draft","Active","Archived"],
   product: ["Draft","Active","Archived"],
-  invoice: ["Draft","Needs correction","Ready for review","Reviewed","Archived"],
+  invoice: ["Draft","Needs correction","Ready for review","Reviewed"],
   period: ["Draft","Needs source","Ready for review","Reviewed"],
   historical_record: ["Draft","Needs source","Ready for review","Reviewed"],
   staff: ["Draft","Active","Inactive"],
