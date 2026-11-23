@@ -141,7 +141,7 @@ impl Database {
             )?;
             tx.commit()?;
         }
-        if applied > 4 {
+        if applied > 5 {
             return Err(rusqlite::Error::InvalidQuery);
         }
         if applied < 3 {
@@ -180,11 +180,34 @@ impl Database {
             )?;
             tx.commit()?;
         }
+        if applied < 5 {
+            let tx = self.connection.unchecked_transaction()?;
+            tx.execute_batch(
+                "CREATE TABLE workspace_record_version (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    firm_id TEXT NOT NULL REFERENCES demo_firm(id),
+                    record_id TEXT NOT NULL REFERENCES workspace_record(id) ON DELETE CASCADE,
+                    row_version INTEGER NOT NULL,
+                    actor_id TEXT NOT NULL REFERENCES demo_actor(id),
+                    changed_at TEXT NOT NULL,
+                    snapshot_json TEXT NOT NULL,
+                    correlation_id TEXT NOT NULL,
+                    UNIQUE(record_id,row_version)
+                );
+                CREATE INDEX workspace_record_version_history ON workspace_record_version(firm_id,record_id,row_version DESC);"
+            )?;
+            tx.execute(
+                "INSERT INTO schema_migration(version, checksum, applied_at) VALUES(5, ?1, ?2)",
+                rusqlite::params!["arm-workspace-record-versions-v5", now_utc()],
+            )?;
+            tx.commit()?;
+        }
         for (version, expected_checksum) in [
             (1_i64, "arm-initial-schema-v1"),
             (2_i64, "arm-local-notes-v2"),
             (3_i64, "arm-append-only-events-v3"),
             (4_i64, "arm-client-change-history-v4"),
+            (5_i64, "arm-workspace-record-versions-v5"),
         ] {
             let actual: String = self.connection.query_row(
                 "SELECT checksum FROM schema_migration WHERE version=?1",
@@ -262,7 +285,7 @@ mod tests {
         let migrations: i64 = db.connection.query_row("SELECT COUNT(*) FROM schema_migration", [], |r| r.get(0)).unwrap();
         assert_eq!(clients, 1);
         assert_eq!(actors, 4);
-        assert_eq!(migrations, 4);
+        assert_eq!(migrations, 5);
     }
 
     #[test]
