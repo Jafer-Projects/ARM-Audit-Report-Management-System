@@ -885,12 +885,12 @@ pub fn calculate_import_cost_preview(
     let mut components = Vec::new();
     for row in rows {
         let (title, status, raw) = row.map_err(|e| e.to_string())?;
-        if !["Ready for review", "Reviewed"].contains(&status.as_str()) {
-            return Err(format!("Import-cost input '{title}' must be Ready for review before calculation."));
-        }
         let payload: serde_json::Value = serde_json::from_str(&raw).map_err(|_| format!("Import-cost input '{title}' contains invalid metadata."))?;
         if read_text(&payload, "entry_kind") == "calculation_result" {
             continue;
+        }
+        if !["Ready for review", "Reviewed"].contains(&status.as_str()) {
+            return Err(format!("Import-cost input '{title}' must be Ready for review before calculation."));
         }
         if read_text(&payload, "source_reference").is_empty() {
             return Err(format!("Import-cost input '{title}' needs a source document/reference before calculation."));
