@@ -163,7 +163,7 @@ export default function App() {
   }, [section]);
   useEffect(() => {
     if (["catalogue", "history", "work", "imports"].includes(section)) {
-      void desktop.clients(false).then(items => { setClients(items); setSelectedClientId(current => current || items[0]?.id || ""); }).catch((e) => setError(String(e)));
+      void desktop.clients(false).then(items => { setClients(items); setSelectedClientId(current => items.some(item => item.id === current) ? current : items[0]?.id || ""); }).catch((e) => setError(String(e)));
       if (recordType === "staff" || selectedClientId) {
         void desktop.records(recordType, recordType === "staff" ? undefined : selectedClientId).then(setRecords).catch((e) => setError(String(e)));
       } else { setRecords([]); }
