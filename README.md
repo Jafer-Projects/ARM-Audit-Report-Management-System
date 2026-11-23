@@ -56,6 +56,7 @@ These are architecture directions to validate; final versions, licenses, mainten
 - [Implementation roadmap and acceptance criteria](docs/delivery/implementation-roadmap-and-acceptance.md)
 - [Phase 1 incremental development and practitioner feedback](docs/delivery/phase-1-incremental-development-and-feedback.md)
 - [Developer implementation specification for Increments 0 and 1](docs/delivery/developer-implementation-specification-increments-0-and-1.md)
+- [Window-by-window and user-by-user workflows for Increments 1–5](docs/delivery/window-by-window-user-by-user-increments-1-to-5.md)
 
 ## Architecture and domain references
 
