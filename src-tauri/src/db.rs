@@ -141,6 +141,9 @@ impl Database {
             )?;
             tx.commit()?;
         }
+        if applied > 3 {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
         if applied < 3 {
             let tx = self.connection.unchecked_transaction()?;
             tx.execute_batch(
@@ -154,6 +157,20 @@ impl Database {
                 rusqlite::params!["arm-append-only-events-v3", now_utc()],
             )?;
             tx.commit()?;
+        }
+        for (version, expected_checksum) in [
+            (1_i64, "arm-initial-schema-v1"),
+            (2_i64, "arm-local-notes-v2"),
+            (3_i64, "arm-append-only-events-v3"),
+        ] {
+            let actual: String = self.connection.query_row(
+                "SELECT checksum FROM schema_migration WHERE version=?1",
+                [version],
+                |row| row.get(0),
+            )?;
+            if actual != expected_checksum {
+                return Err(rusqlite::Error::InvalidQuery);
+            }
         }
         Ok(())
     }
