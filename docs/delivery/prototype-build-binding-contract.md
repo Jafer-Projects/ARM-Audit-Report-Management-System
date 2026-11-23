@@ -182,7 +182,8 @@ At the collective gate, produce:
 
 ## 9. Source references
 
-- IAASB, ISA 230 — Audit Documentation, IAASB Handbook: https://ifacweb.blob.core.windows.net/publicfiles/2024-08/IAASB-2023-2024-Handbook-Volume-1.pdf
+- IAASB, 2025 Handbook, ISA 230 — Audit Documentation and ISA 500 — Audit Evidence: https://ifacweb.blob.core.windows.net/publicfiles/2025-09/IAASB-2025-Handbook-Volume-1.pdf
+- IAASB, 2025 Handbook publication record: https://www.iaasb.org/publications/2025-handbook-international-quality-management-auditing-review-other-assurance-and-related-services
 - IFRS Foundation, IAS 1 — Presentation of Financial Statements: https://www.ifrs.org/issued-standards/list-of-standards/ias-1-presentation-of-financial-statements/
 - Ethiopian Ministry of Justice, VAT Regulation No. 570/2025: https://justice.gov.et/en/law/570-2025-value-added-tax-regulation/
 - Ethiopian Ministry of Finance, VAT Proclamation No. 1341/2024: https://www.mofed.gov.et/media/filer_public/af/45/af45af2f-7959-4e8b-b736-9494dda9f017/vat_proclamation_no_1341-2016_with_annex.pdf
