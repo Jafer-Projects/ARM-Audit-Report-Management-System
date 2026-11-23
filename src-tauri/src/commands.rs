@@ -965,6 +965,11 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
         if payload.get("cancellation_reason").and_then(|v|v.as_str()).unwrap_or("").trim().chars().count() < 3 {
             return Err("Record a cancellation reason of at least 3 characters.".into());
         }
+        let open_notes: i64 = db.connection.query_row(
+            "SELECT COUNT(*) FROM task_review_note WHERE task_id=?1 AND status IN ('Open','Responded','Reopened')",
+            params![id], |r|r.get(0)
+        ).map_err(|e|e.to_string())?;
+        if open_notes > 0 { return Err("Resolve every task review note before cancellation.".into()); }
     }
     if input.record_type == "task" {
         if let Some((_,_,previous_status,previous_payload,_)) = exists.as_ref() {
