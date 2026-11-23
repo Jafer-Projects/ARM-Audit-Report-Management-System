@@ -209,13 +209,14 @@ pub fn calculate_import_cost(
         });
     }
 
+    let mut seen_components = std::collections::HashSet::new();
     let mut component_results = Vec::with_capacity(components.len());
     let mut capitalized_total = 0_i64;
     let mut excluded_total = 0_i64;
 
     for component in components {
         let reference = component.component_reference.trim();
-        if reference.is_empty() || component.category.trim().is_empty() {
+        if reference.is_empty() || component.category.trim().is_empty() || !seen_components.insert(reference.to_string()) {
             return Err("Every cost component needs a reference and category.".into());
         }
         if component.source_reference.trim().is_empty() || component.fx_rate_source.trim().is_empty() || component.fx_rate_date.trim().is_empty() || component.fx_authorized_by.trim().is_empty() {
