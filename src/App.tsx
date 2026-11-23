@@ -234,7 +234,25 @@ export default function App() {
     if (!config) return;
     try {
       setBusy(true); setError("");
+      let duplicateAcknowledged = false;
+      let duplicateReason = "";
+      if (recordType === "invoice" && selectedClientId && v.invoice_number?.trim()) {
+        const candidates = await desktop.findInvoiceDuplicates(selectedClientId, v.invoice_number, recordEditor?.id || undefined);
+        if (candidates.length > 0) {
+          const candidateText = candidates.map(item => `• ${item.invoice_number} · ${item.invoice_date || "date not captured"} · ${item.title} · ${item.status}`).join("\n");
+          const proceed = window.confirm(`Possible duplicate invoice number found for this client:\n\n${candidateText}\n\nARM will not merge or overwrite either invoice. Continue as a separate invoice?`);
+          if (!proceed) return;
+          const reason = window.prompt("Record why this is a separate invoice (3–500 characters):", "");
+          if (!reason || reason.trim().length < 3 || reason.trim().length > 500) {
+            setError("A 3–500 character reason is required to acknowledge a possible duplicate.");
+            return;
+          }
+          duplicateAcknowledged = true;
+          duplicateReason = reason.trim();
+        }
+      }
       await desktop.saveRecord({
+        duplicate_acknowledged: duplicateAcknowledged, duplicate_acknowledgement_reason: duplicateReason,
         id: recordEditor?.id || undefined, row_version: recordEditor?.id ? recordEditor.row_version : undefined,
         client_id: v.client_id || null, record_type: recordType, title: v.title,
         status: v.status || (statusOptions[recordType] ?? config.statuses)[0], reference: v.reference || "",
