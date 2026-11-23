@@ -54,11 +54,11 @@
 
 | ID | Normative scenario | Test / evidence | Status |
 |---|---|---|---|
-| I3-01 | Historical data remains distinct from posted accounting data | Record-type/schema/command separation test required | PENDING |
-| I3-02 | Import preview identifies unmapped columns and bad rows before commit | Import-preview parser/UI fixture test required | PENDING |
+| I3-01 | Historical data remains distinct from posted accounting data | `commands.rs::record_type_allowlist_and_initial_state_guards_reject_untrusted_values` explicitly rejects posted transaction, journal, ledger and tax filing record types | AUTOMATED |
+| I3-02 | Import preview identifies unmapped columns and bad rows before commit | `commands.rs::historical_import_row_validation_rejects_duplicates_empty_values_and_invalid_row_numbers` and command batch rejection test cover malformed rows; unmapped-column preview UI remains pending | PARTIAL |
 | I3-03 | Import provenance identifies file, sheet/row and mapping version | `commands.rs::import_historical_batch_command_reconciles_all_rows_and_retains_row_provenance` plus database source immutability test | PARTIAL |
 | I3-04 | No row is silently dropped | `commands.rs::import_historical_batch_command_reconciles_all_rows_and_retains_row_provenance` verifies row totals; rejected-row preview/reason coverage pending | PARTIAL |
-| I3-05 | Source-to-workpaper drill-down reconciles to included rows | Workpaper-to-source reconciliation integration test required | PENDING |
+| I3-05 | Source-to-workpaper drill-down reconciles to included rows | `commands.rs::import_historical_batch_command_reconciles_all_rows_and_retains_row_provenance` verifies source row, title and amount for every imported row; workpaper drill-down UI pending | PARTIAL |
 | I3-06 | No approved tax rule pack means no authoritative VAT calculation | Existing Node status vocabulary test only; production command/UI gate test required | PARTIAL |
 | I3-07 | Tax rule version/effective date is stored with each calculated draft | Rule-pack versioned draft test required; authoritative calculation remains gated | PENDING |
 | I3-08 | Input changes do not rewrite previously reviewed snapshots | Workspace version immutability exists; reviewed-input revision command test required | PARTIAL |
@@ -92,7 +92,7 @@
 | I5-06 | Input change creates a new revision and invalidates prior review | `commands.rs::import_cost_calculation_snapshots_are_immutable_and_new_versions_are_separate_records`; reviewed-snapshot invalidation for revised inputs pending | PARTIAL |
 | I5-07 | Reviewer sees exact submitted snapshot | `commands.rs::import_cost_calculation_snapshots_are_immutable_and_new_versions_are_separate_records` reads exact version snapshot; reviewer-role visibility test pending | PARTIAL |
 | I5-08 | Calculation reproduces independently verified expected results | Synthetic arithmetic fixtures exist; practitioner-approved independent expected-result fixture remains required | PARTIAL |
-| I5-09 | Optional selling-price analysis remains separate from statutory/audit result | Feature boundary/UI copy regression test required | PENDING |
+| I5-09 | Optional selling-price analysis remains separate from statutory/audit result | `import_cost.rs::base_currency_is_normalized_and_results_retain_limitation_notices` asserts calculation result excludes selling-price and profit fields | AUTOMATED |
 
 ## 2. Shared foundation and cross-increment regression
 
