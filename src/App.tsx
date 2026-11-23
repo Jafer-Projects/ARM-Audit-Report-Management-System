@@ -191,6 +191,19 @@ function parseRecordPayload(record: WorkspaceRecord): Record<string, string> {
   catch { return {}; }
 }
 
+function taskDueState(value: string): "Overdue" | "Due soon" | "Scheduled" | "No due date" | "Invalid date" {
+  if (!value) return "No due date";
+  const parts = value.split("-").map(Number);
+  if (parts.length !== 3 || parts.some(part => !Number.isFinite(part))) return "Invalid date";
+  const due = new Date(parts[0], parts[1] - 1, parts[2], 23, 59, 59);
+  if (Number.isNaN(due.getTime())) return "Invalid date";
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const days = Math.ceil((due.getTime() - today.getTime()) / 86_400_000);
+  if (days < 0) return "Overdue";
+  if (days <= 7) return "Due soon";
+  return "Scheduled";
+}
+
 function historicalClass(record: WorkspaceRecord): string {
   return parseRecordPayload(record).historical_class ?? "";
 }
@@ -237,6 +250,11 @@ export default function App() {
   const [recordEditor, setRecordEditor] = useState<WorkspaceRecord | null>(null);
   const [recordType, setRecordType] = useState("product");
   const [invoiceQueueOnly, setInvoiceQueueOnly] = useState(false);
+  const [workDashboard, setWorkDashboard] = useState(false);
+  const [workloadView, setWorkloadView] = useState(false);
+  const [taskAssigneeFilter, setTaskAssigneeFilter] = useState("All");
+  const [taskPriorityFilter, setTaskPriorityFilter] = useState("All");
+  const [taskStatusFilter, setTaskStatusFilter] = useState("All");
 
   async function refresh(nextSection = section) {
     try {
@@ -255,6 +273,8 @@ export default function App() {
     const config = recordTypes[section as keyof typeof recordTypes];
     if (config) setRecordType(config.type);
   }, [section]);
+  useEffect(() => { setWorkDashboard(section === "work"); setWorkloadView(false); }, [section]);
+
   useEffect(() => {
     if (["catalogue", "history", "work", "imports"].includes(section)) {
       void desktop.clients(false).then(items => { setClients(items); setSelectedClientId(current => items.some(item => item.id === current) ? current : items[0]?.id || ""); }).catch((e) => setError(String(e)));
@@ -270,6 +290,12 @@ export default function App() {
     return parseRecordPayload(recordEditor);
   }, [recordEditor]);
   const visibleRecords = useMemo(() => recordType === "invoice" && invoiceQueueOnly ? records.filter(record => record.status === "Submitted for review") : records, [records, recordType, invoiceQueueOnly]);
+  const taskAssignees = useMemo(() => ["All", ...Array.from(new Set(records.filter(record => record.record_type === "task").map(record => parseRecordPayload(record).assignee).filter(Boolean)))], [records]);
+  const visibleTasks = useMemo(() => records.filter(record => record.record_type === "task")
+    .filter(record => taskAssigneeFilter === "All" || parseRecordPayload(record).assignee === taskAssigneeFilter)
+    .filter(record => taskPriorityFilter === "All" || parseRecordPayload(record).priority === taskPriorityFilter)
+    .filter(record => taskStatusFilter === "All" || record.status === taskStatusFilter), [records, taskAssigneeFilter, taskPriorityFilter, taskStatusFilter]);
+
   const filteredClients = useMemo(() => clients.filter((c) =>
     [c.legal_name, c.display_name, c.tin_raw].join(" ").toLowerCase().includes(search.toLowerCase())), [clients, search]);
   const canMutate = workspace?.persona !== "reviewer";
