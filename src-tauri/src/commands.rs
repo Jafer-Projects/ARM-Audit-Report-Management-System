@@ -2247,6 +2247,82 @@ mod tests {
         assert_eq!(stored_client,first_client);
     }
 
+    fn task_input(
+        id: Option<String>,
+        row_version: Option<i64>,
+        client_id: &str,
+        status: &str,
+        payload: serde_json::Value,
+    ) -> RecordInput {
+        RecordInput {
+            id,row_version,client_id:Some(client_id.into()),record_type:"task".into(),
+            title:"Synthetic task workflow".into(),status:status.into(),reference:Some("TASK-SYN-1".into()),
+            amount_text:None,notes:None,payload_json:Some(payload.to_string()),
+            duplicate_acknowledged:None,duplicate_acknowledgement_reason:None,
+        }
+    }
+
+    fn assigned_task_payload() -> serde_json::Value {
+        json!({
+            "description":"Review synthetic purchase invoices",
+            "assignee":"Demo Auditor",
+            "reviewer":"Demo Engagement Manager",
+            "due_date":"2026-11-30"
+        })
+    }
+
+    #[test]
+    fn task_assignment_creates_recipient_scoped_notifications_once() {
+        let app = test_app();
+        let client_id = command_active_client_id(&app);
+        set_demo_persona("manager".into(),app.state::<AppState>()).unwrap();
+        let draft = save_record(task_input(None,None,&client_id,"Draft",json!({"description":"Review synthetic purchase invoices"})),app.state::<AppState>()).unwrap();
+        let payload = assigned_task_payload();
+        let assigned = save_record(task_input(Some(draft.id.clone()),Some(draft.row_version),&client_id,"Assigned",payload.clone()),app.state::<AppState>()).unwrap();
+        assert_eq!(assigned.status,"Assigned");
+        {
+            let state = app.state::<AppState>();
+            let db = state.database.lock().unwrap();
+            let (count,recipients):(i64,i64) = db.connection.query_row(
+                "SELECT COUNT(*),COUNT(DISTINCT recipient_actor_id) FROM workspace_notification WHERE record_id=?1",
+                [&draft.id],|row|Ok((row.get(0)?,row.get(1)?))
+            ).unwrap();
+            assert_eq!((count,recipients),(2,2));
+        }
+        let repeated = save_record(task_input(Some(assigned.id.clone()),Some(assigned.row_version),&client_id,"Assigned",payload),app.state::<AppState>()).unwrap();
+        assert_eq!(repeated.row_version,assigned.row_version+1);
+        let state = app.state::<AppState>();
+        let db = state.database.lock().unwrap();
+        let count: i64 = db.connection.query_row("SELECT COUNT(*) FROM workspace_notification WHERE record_id=?1",[&draft.id],|row|row.get(0)).unwrap();
+        assert_eq!(count,2);
+    }
+
+    #[test]
+    fn task_workflow_requires_blocker_and_submission_evidence_then_separate_reviewer_completion() {
+        let app = test_app();
+        let client_id = command_active_client_id(&app);
+        set_demo_persona("manager".into(),app.state::<AppState>()).unwrap();
+        let draft = save_record(task_input(None,None,&client_id,"Draft",json!({"description":"Review synthetic purchase invoices"})),app.state::<AppState>()).unwrap();
+        let assigned = save_record(task_input(Some(draft.id.clone()),Some(draft.row_version),&client_id,"Assigned",assigned_task_payload()),app.state::<AppState>()).unwrap();
+
+        set_demo_persona("auditor".into(),app.state::<AppState>()).unwrap();
+        assert!(save_record(task_input(Some(assigned.id.clone()),Some(assigned.row_version),&client_id,"Completed",assigned_task_payload()),app.state::<AppState>()).is_err());
+        let in_progress = save_record(task_input(Some(assigned.id.clone()),Some(assigned.row_version),&client_id,"In progress",assigned_task_payload()),app.state::<AppState>()).unwrap();
+        assert!(save_record(task_input(Some(in_progress.id.clone()),Some(in_progress.row_version),&client_id,"Blocked",assigned_task_payload()),app.state::<AppState>()).is_err());
+
+        let mut blocked_payload = assigned_task_payload();
+        blocked_payload["blocker_explanation"] = json!("Waiting for source invoice from client");
+        let blocked = save_record(task_input(Some(in_progress.id.clone()),Some(in_progress.row_version),&client_id,"Blocked",blocked_payload.clone()),app.state::<AppState>()).unwrap();
+        let resumed = save_record(task_input(Some(blocked.id.clone()),Some(blocked.row_version),&client_id,"In progress",blocked_payload.clone()),app.state::<AppState>()).unwrap();
+        assert!(save_record(task_input(Some(resumed.id.clone()),Some(resumed.row_version),&client_id,"Submitted",blocked_payload.clone()),app.state::<AppState>()).is_err());
+
+        blocked_payload["completion_summary"] = json!("Completed the synthetic invoice evidence review.");
+        let submitted = save_record(task_input(Some(resumed.id.clone()),Some(resumed.row_version),&client_id,"Submitted",blocked_payload.clone()),app.state::<AppState>()).unwrap();
+        set_demo_persona("manager".into(),app.state::<AppState>()).unwrap();
+        let completed = save_record(task_input(Some(submitted.id.clone()),Some(submitted.row_version),&client_id,"Completed",blocked_payload),app.state::<AppState>()).unwrap();
+        assert_eq!(completed.status,"Completed");
+    }
+
     #[test]
     fn save_record_command_rejects_invoice_review_without_lines_source_and_period() {
         let app = test_app();
