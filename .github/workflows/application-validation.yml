@@ -26,9 +26,11 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
       - name: Domain contract tests
+        if: always()
         run: npm test
-      - name: Build frontend
-        run: npm run build
+      - name: Build frontend independently of typecheck
+        if: always()
+        run: npm run build:frontend
 
   rust-validation:
     name: Rust tests and Windows desktop build
@@ -43,13 +45,16 @@ jobs:
       - name: Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
       - uses: actions/setup-node@v4
+        if: always()
         with:
           node-version: "22.16.0"
       - name: Tauri Windows build (no installer)
+        if: always()
         run: |
           npm install --no-audit --no-fund
           npm run tauri -- build --no-bundle
       - name: Preserve generated dependency lockfiles for review
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: arm-generated-lockfiles
