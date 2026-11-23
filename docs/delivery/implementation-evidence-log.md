@@ -4,7 +4,7 @@
 **Branch:** `implementation/increments-0-to-5`  
 **Acceptance model:** one collective gate after Increment 5; no increment-level acceptance/pass declarations.
 
-This log records engineering evidence while the integrated system is being built. Individual checks are continuous verification only.
+This log records implementation progress, design decisions and prepared test evidence while the integrated prototype is being built. Formal verification and test execution are deferred until Increment 5 implementation is complete.
 
 ## Current implementation baseline
 
