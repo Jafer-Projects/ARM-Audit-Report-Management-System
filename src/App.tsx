@@ -148,6 +148,7 @@ export default function App() {
   const [clientEditor, setClientEditor] = useState<Client | null | undefined>(undefined);
   const [recordEditor, setRecordEditor] = useState<WorkspaceRecord | null>(null);
   const [recordType, setRecordType] = useState("product");
+  const [invoiceQueueOnly, setInvoiceQueueOnly] = useState(false);
 
   async function refresh(nextSection = section) {
     try {
@@ -180,6 +181,7 @@ export default function App() {
     try { return JSON.parse(recordEditor.payload_json) as Record<string, string>; }
     catch { return {}; }
   }, [recordEditor]);
+  const visibleRecords = useMemo(() => recordType === "invoice" && invoiceQueueOnly ? records.filter(record => record.status === "Submitted for review") : records, [records, recordType, invoiceQueueOnly]);
   const filteredClients = useMemo(() => clients.filter((c) =>
     [c.legal_name, c.display_name, c.tin_raw].join(" ").toLowerCase().includes(search.toLowerCase())), [clients, search]);
   const canMutate = workspace?.persona !== "reviewer";
@@ -325,9 +327,10 @@ export default function App() {
           <div className="section-head"><div><span className="overline">{config.label.toUpperCase()}</span><h2>{nav.find(n => n.id === section)?.label}</h2><p>{config.hint}</p></div><button className="primary" disabled={!canMutate || (recordType !== "staff" && !selectedClientId)} onClick={() => setRecordEditor({ id:"",client_id:recordType === "staff" ? null : selectedClientId,record_type:recordType,title:"",status:(statusOptions[recordType] ?? config.statuses)[0],reference:"",amount_text:"",notes:"",payload_json:"{}",row_version:0,updated_at:"" })}>+ Add record</button></div>
           <div className="subtype-tabs" role="group" aria-label="Record type">{subtypeOptions[section as keyof typeof subtypeOptions].map(option => <button key={option.type} className={recordType === option.type ? "subtype-tab active" : "subtype-tab"} disabled={option.type === "import_cost_input"} onClick={() => setRecordType(option.type)}>{option.type === "import_cost_input" ? "Cost inputs · gated" : option.label}</button>)}</div>
           {recordType !== "staff" && <label className="client-context">CLIENT WORKSPACE<select value={selectedClientId} onChange={e => setSelectedClientId(e.target.value)}><option value="">Select a client…</option>{clients.map(c => <option key={c.id} value={c.id}>{c.display_name || c.legal_name}</option>)}</select></label>}
+          {recordType === "invoice" && (workspace?.persona === "manager" || workspace?.persona === "administrator") && <div className="queue-filter"><button className={invoiceQueueOnly ? "subtype-tab active" : "subtype-tab"} onClick={() => setInvoiceQueueOnly(value => !value)}>{invoiceQueueOnly ? "Show all invoices" : "Review queue"}</button><span>{records.filter(record => record.status === "Submitted for review").length} awaiting review</span></div>}
           {section === "imports" && <p className="gate-note">Cost-input capture and calculation stay locked until the Gate 5-A practitioner discovery brief, approved input dictionary and independent worked example are recorded. Use the Discovery workspace to document questions; no customs or landed-cost assumptions are applied.</p>}
-          <div className="record-grid">{records.map(r => <article className="record-card" key={r.id}><div className="record-card-top"><span className="status">{r.status}</span><small>{new Date(r.updated_at).toLocaleDateString()}</small></div><h3>{r.title}</h3><p>{r.notes || "No additional notes"}</p><div className="record-meta"><span>{r.reference || "No source reference"}</span>{r.amount_text && <strong>{r.amount_text}</strong>}</div><button className="text-button" onClick={() => setRecordEditor(r)}>Open record →</button></article>)}
-          {records.length === 0 && <div className="empty-card"><strong>No records yet</strong><p>Create a record to start this workflow. Data is stored locally in the demo database.</p></div>}</div>
+          <div className="record-grid">{visibleRecords.map(r => <article className="record-card" key={r.id}><div className="record-card-top"><span className="status">{r.status}</span><small>{new Date(r.updated_at).toLocaleDateString()}</small></div><h3>{r.title}</h3><p>{r.notes || "No additional notes"}</p><div className="record-meta"><span>{r.reference || "No source reference"}</span>{r.amount_text && <strong>{r.amount_text}</strong>}</div><button className="text-button" onClick={() => setRecordEditor(r)}>Open record →</button></article>)}
+          {visibleRecords.length === 0 && <div className="empty-card"><strong>No records yet</strong><p>Create a record to start this workflow. Data is stored locally in the demo database.</p></div>}</div>
         </section>;
       })()}
 
