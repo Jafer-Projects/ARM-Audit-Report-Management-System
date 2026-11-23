@@ -1064,6 +1064,34 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
         }
     }
 
+
+    if input.record_type == "import_case" {
+        let reference = input.reference.as_deref().unwrap_or("").trim();
+        if input.status != "Discovery" && reference.is_empty() {
+            return Err("Add a unique import case reference before moving the case beyond Discovery.".into());
+        }
+        if !reference.is_empty() {
+            let duplicate: bool = db.connection.query_row(
+                "SELECT EXISTS(SELECT 1 FROM workspace_record WHERE firm_id=?1 AND client_id=?2 AND record_type='import_case' AND reference=?3 AND id<>?4)",
+                params![FIRM_ID,input.client_id.as_deref().unwrap_or(""),reference,input.id.as_deref().unwrap_or("")],
+                |r| r.get(0)
+            ).map_err(|e| e.to_string())?;
+            if duplicate { return Err("This import case reference is already used by another case for this client.".into()); }
+        }
+    }
+    if input.record_type == "import_cost_input" {
+        let reference = input.reference.as_deref().unwrap_or("").trim();
+        if reference.is_empty() {
+            return Err("Link each cost input to its import case using the exact case reference.".into());
+        }
+        let case_exists: bool = db.connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM workspace_record WHERE firm_id=?1 AND client_id=?2 AND record_type='import_case' AND reference=?3)",
+            params![FIRM_ID,input.client_id.as_deref().unwrap_or(""),reference],
+            |r| r.get(0)
+        ).map_err(|e| e.to_string())?;
+        if !case_exists { return Err("The referenced import case does not exist in this client workspace.".into()); }
+    }
+
     let id = input.id.clone().unwrap_or_else(|| Uuid::new_v4().to_string());
     let invoice_duplicate_candidates: Vec<(String,String)> = if input.record_type == "invoice" {
         let invoice_number = payload.get("invoice_number").and_then(|v|v.as_str()).unwrap_or("").trim();
