@@ -11,23 +11,28 @@ A sprint/increment should end with something a practitioner can try, not only an
 ## 2. Initial increments
 
 ### Increment 0 — Working shell and safe local workspace
-- Windows desktop shell and role-aware navigation.
-- Synthetic demo firm/client/engagement.
-- Local encrypted-storage spike and protected key handling.
-- Clear local-only/synchronized/pending states.
-- Basic event/audit history.
+- Windows desktop shell and simple navigation.
+- One synthetic demo firm and fictional clients; fixed demo personas are explicitly not production authentication or RBAC.
+- Local SQLite persistence and a separately documented encryption/key-management spike; no production-encryption claim until verified.
+- Clear local-only state; synchronization is not implemented or simulated.
+- Append-only local activity history for material demo actions.
 - No production client data.
 
-**Demo:** user opens a demo client workspace offline, creates a draft note/task and sees it remain after restart.
+**Demo:** user opens a demo client workspace offline, creates a local draft note (not a task or workpaper) and sees it remain after restart.
+
+**Normative detail:** follow [Developer Implementation Specification — Increments 0 and 1](developer-implementation-specification-increments-0-and-1.md).
 
 ### Increment 1 — Client and company registration
 - Guided client profile.
 - Legal/business name, TIN, sector and approved contact fields.
 - Completeness indicator and field-level help.
 - Duplicate warning and change history.
-- Client-scoped access.
+- One demo-firm-scoped client profile; no production tenant authorization.
+- Explicit field dictionary, validation, duplicate warning, completeness, archive/restore and change-history behavior.
 
 **Demo:** auditor creates a company, sees missing required details, completes the profile and retrieves it later.
+
+**Normative detail:** follow [Developer Implementation Specification — Increments 0 and 1](developer-implementation-specification-increments-0-and-1.md).
 
 ### Increment 2 — Product/category register and invoice capture
 - Product categories and product register.
