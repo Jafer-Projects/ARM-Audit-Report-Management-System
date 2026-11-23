@@ -2783,6 +2783,12 @@ mod tests {
             [&client_id],|row|Ok((row.get(0)?,row.get(1)?))
         ).unwrap();
         assert_eq!(provenance,(3,1));
+        let mut stmt = db.connection.prepare(
+            "SELECT json_extract(payload_json,'$.source_row'),title,amount_text FROM workspace_record WHERE client_id=?1 AND json_extract(payload_json,'$.import_batch_id')=?2 ORDER BY json_extract(payload_json,'$.source_row')"
+        ).unwrap();
+        let imported = stmt.query_map(params![client_id,result.batch_id],|row|Ok((row.get::<_,i64>(0)?,row.get::<_,String>(1)?,row.get::<_,String>(2)?))).unwrap()
+            .collect::<Result<Vec<_>,_>>().unwrap();
+        assert_eq!(imported,vec![(2,"First purchase".into(),"10.00".into()),(3,"Second purchase".into(),"20.00".into())]);
         drop(db);
         drop(app);
         let reopened = crate::db::Database::open(&path).expect("reopen historical import database");
@@ -2943,7 +2949,7 @@ mod tests {
         for allowed in ["category","product","invoice","historical_record","period","staff","task","import_case","import_cost_input"] {
             assert!(allowed_record_type(allowed), "expected {allowed} to be allowed");
         }
-        for rejected in ["users","client; DROP TABLE client","../client","", "invoice\\u0000"] {
+        for rejected in ["users","client; DROP TABLE client","../client","", "invoice\\u0000","posted_transaction","journal_entry","ledger_entry","vat_return","tax_filing"] {
             assert!(!allowed_record_type(rejected), "expected {rejected:?} to be rejected");
         }
         assert!(!allowed_status("invoice","Filed"));

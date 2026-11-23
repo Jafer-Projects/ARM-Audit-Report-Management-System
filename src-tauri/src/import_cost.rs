@@ -531,6 +531,10 @@ mod tests {
         let result = calculate_import_cost(" etb ", &[goods("A", 100, 1_000_000, 1)], &[]).unwrap();
         assert_eq!(result.base_currency, "ETB");
         assert!(result.limitations.iter().any(|notice| notice.contains("not a customs valuation")));
+        let result_json = serde_json::to_value(&result).unwrap();
+        assert!(result_json.get("selling_price").is_none());
+        assert!(result_json.get("profit").is_none());
+
     }
 
 }
