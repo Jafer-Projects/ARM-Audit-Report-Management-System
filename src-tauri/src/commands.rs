@@ -292,6 +292,39 @@ fn allowed_status(record_type: &str, status: &str) -> bool {
     }
 }
 
+fn valid_record_transition(record_type: &str, previous: Option<&str>, next: &str) -> bool {
+    match (record_type, previous, next) {
+        ("category" | "product", None, "Draft") => true,
+        ("category" | "product", Some("Draft"), "Draft" | "Active") => true,
+        ("category" | "product", Some("Active"), "Active" | "Archived") => true,
+        ("invoice", None, "Draft") => true,
+        ("invoice", Some("Draft"), "Draft" | "Submitted for review" | "Archived") => true,
+        ("invoice", Some("Submitted for review"), "Submitted for review" | "Returned") => true,
+        ("invoice", Some("Returned"), "Returned" | "Draft" | "Archived") => true,
+        ("historical_record" | "period", None, "Draft") => true,
+        ("historical_record" | "period", Some("Draft"), "Draft" | "Needs source" | "Ready for review") => true,
+        ("historical_record" | "period", Some("Needs source"), "Needs source" | "Ready for review") => true,
+        ("historical_record" | "period", Some("Ready for review"), "Ready for review") => true,
+        ("staff", None, "Draft") => true,
+        ("staff", Some("Draft"), "Draft" | "Active") => true,
+        ("staff", Some("Active"), "Active" | "Inactive") => true,
+        ("task", None, "Draft") => true,
+        ("task", Some("Draft"), "Draft" | "Assigned" | "Cancelled") => true,
+        ("task", Some("Assigned"), "Assigned" | "In progress" | "Cancelled") => true,
+        ("task", Some("In progress"), "In progress" | "Blocked" | "Submitted" | "Cancelled") => true,
+        ("task", Some("Blocked"), "Blocked" | "In progress" | "Cancelled") => true,
+        ("task", Some("Submitted"), "Submitted" | "Returned" | "Completed") => true,
+        ("task", Some("Returned"), "Returned" | "In progress" | "Cancelled") => true,
+        ("task", Some("Completed" | "Cancelled"), next) if next == "Completed" || next == "Cancelled" => true,
+        ("import_case", None, "Discovery") => true,
+        ("import_case", Some("Discovery"), "Discovery" | "Needs practitioner input" | "Ready for workshop" | "Deferred") => true,
+        ("import_case", Some("Needs practitioner input"), "Needs practitioner input" | "Ready for workshop" | "Deferred") => true,
+        ("import_case", Some("Ready for workshop"), "Ready for workshop" | "Deferred") => true,
+        ("import_case", Some("Deferred"), "Deferred" | "Discovery") => true,
+        _ => false,
+    }
+}
+
 #[tauri::command]
 pub fn activate_client(id: String, state: State<'_, AppState>) -> Result<(), String> {
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
@@ -391,11 +424,14 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
     }
     let id = input.id.unwrap_or_else(|| Uuid::new_v4().to_string());
     let now = now_utc();
-    let exists: Option<(i64,String)> = db.connection.query_row("SELECT row_version,record_type FROM workspace_record WHERE id=?1 AND firm_id=?2",params![id,FIRM_ID],|r|Ok((r.get(0)?,r.get(1)?))).optional().map_err(|e|e.to_string())?;
+    let exists: Option<(i64,String,String)> = db.connection.query_row("SELECT row_version,record_type,status FROM workspace_record WHERE id=?1 AND firm_id=?2",params![id,FIRM_ID],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional().map_err(|e|e.to_string())?;
     let tx = db.connection.unchecked_transaction().map_err(|e|e.to_string())?;
-    if let Some((version, existing_type)) = exists.as_ref() {
+    if let Some((version, existing_type, previous_status)) = exists.as_ref() {
         if existing_type != &input.record_type { return Err("A record cannot be changed into a different record type.".into()); }
         if input.row_version != Some(*version) { return Err("This record changed since it was opened. Reload before saving.".into()); }
+        if !valid_record_transition(&input.record_type, Some(previous_status), &input.status) { return Err("This workflow status transition is not permitted.".into()); }
+    } else if !valid_record_transition(&input.record_type, None, &input.status) {
+        return Err("A new record must start in its initial draft/discovery state.".into());
         tx.execute("UPDATE workspace_record SET client_id=?1,title=?2,status=?3,reference=?4,amount_text=?5,notes=?6,payload_json=?7,row_version=row_version+1,updated_at=?8,updated_by=?9 WHERE id=?10 AND firm_id=?11",
             params![input.client_id,input.title.trim(),input.status,input.reference.unwrap_or_default(),input.amount_text.unwrap_or_default(),input.notes.unwrap_or_default(),input.payload_json.unwrap_or_else(||"{}".into()),now,actor_id,id,FIRM_ID]).map_err(|e|e.to_string())?;
     } else {
