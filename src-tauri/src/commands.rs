@@ -903,6 +903,10 @@ pub fn calculate_import_cost_preview(
                     quantity_micros: read_number(&payload, "quantity_micros", true)?,
                     unit_price_minor: read_number(&payload, "unit_price_minor", true)?,
                     currency_code: read_text(&payload, "currency_code"),
+                    source_reference: read_text(&payload, "source_reference"),
+                    fx_rate_source: read_text(&payload, "fx_rate_source"),
+                    fx_rate_date: read_text(&payload, "fx_rate_date"),
+                    fx_authorized_by: read_text(&payload, "fx_authorized_by"),
                     fx_numerator: read_number(&payload, "fx_numerator", true)?,
                     fx_denominator: read_number(&payload, "fx_denominator", true)?,
                     weight_micros: read_number(&payload, "weight_micros", false)?,
@@ -915,6 +919,10 @@ pub fn calculate_import_cost_preview(
                     category: read_text(&payload, "category"),
                     amount_minor: read_number(&payload, "amount_minor", true)?,
                     currency_code: read_text(&payload, "currency_code"),
+                    source_reference: read_text(&payload, "source_reference"),
+                    fx_rate_source: read_text(&payload, "fx_rate_source"),
+                    fx_rate_date: read_text(&payload, "fx_rate_date"),
+                    fx_authorized_by: read_text(&payload, "fx_authorized_by"),
                     fx_numerator: read_number(&payload, "fx_numerator", true)?,
                     fx_denominator: read_number(&payload, "fx_denominator", true)?,
                     allocation_basis: read_text(&payload, "allocation_basis"),
@@ -1033,6 +1041,13 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
             }
             if read_integer("fx_numerator")? <= 0 || read_integer("fx_denominator")? <= 0 {
                 return Err("Record a positive FX numerator and denominator; use 1 and 1 when source and base currency are the same.".into());
+            }
+            if input.status == "Ready for review" {
+                for key in ["fx_rate_source", "fx_rate_date", "fx_authorized_by"] {
+                    if payload.get(key).and_then(|v| v.as_str()).unwrap_or("").trim().is_empty() {
+                        return Err(format!("Record {key}; for base-currency 1:1 conversion, document that basis explicitly."));
+                    }
+                }
             }
             if entry_kind == "Goods line" {
                 if payload.get("item_reference").and_then(|v| v.as_str()).unwrap_or("").trim().is_empty()
