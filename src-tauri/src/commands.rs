@@ -966,9 +966,9 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
             return Err("Record a cancellation reason of at least 3 characters.".into());
         }
     }
-    if input.record_type == "task" && ["administrator","manager"].contains(&persona.as_str()) {
+    if input.record_type == "task" {
         if let Some((_,_,previous_status,previous_payload,_)) = exists.as_ref() {
-            if previous_status == "Submitted" {
+            if ["Submitted","Completed","Cancelled"].contains(&previous_status.as_str()) {
                 let previous: serde_json::Value = serde_json::from_str(previous_payload).unwrap_or_else(|_|json!({}));
                 let old_values: (String,String,String,String) = db.connection.query_row(
                     "SELECT title,reference,amount_text,notes FROM workspace_record WHERE id=?1 AND firm_id=?2",
@@ -978,7 +978,10 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
                     || old_values.1 != input.reference.as_deref().unwrap_or("")
                     || old_values.2 != input.amount_text.as_deref().unwrap_or("")
                     || old_values.3 != input.notes.as_deref().unwrap_or("") {
-                    return Err("Submitted preparer work is immutable during review. Record a review note and return it for correction instead of editing it.".into());
+                    return Err("Submitted or terminal task content is immutable. Record a review note and return the task for correction instead of editing it.".into());
+                }
+                if previous_status != "Submitted" && input.status != previous_status {
+                    return Err("Completed and cancelled tasks are terminal and cannot be reopened or rewritten.".into());
                 }
             }
         }
