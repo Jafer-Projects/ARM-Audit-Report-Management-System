@@ -356,7 +356,7 @@ fn valid_record_transition(record_type: &str, previous: Option<&str>, next: &str
         ("historical_record" | "period", None, "Draft") => true,
         ("historical_record" | "period", Some("Draft"), "Draft" | "Needs source" | "Ready for review") => true,
         ("historical_record" | "period", Some("Needs source"), "Needs source" | "Ready for review") => true,
-        ("historical_record" | "period", Some("Ready for review"), "Ready for review" | "Reviewed") => true,
+        ("historical_record" | "period", Some("Ready for review"), "Ready for review" | "Needs source" | "Reviewed") => true,
         ("historical_record" | "period", Some("Reviewed"), "Reviewed") => true,
         ("staff", None, "Draft") => true,
         ("staff", Some("Draft"), "Draft" | "Active") => true,
