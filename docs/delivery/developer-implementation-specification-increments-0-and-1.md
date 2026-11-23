@@ -2,11 +2,23 @@
 
 **Status:** Approved for controlled implementation with synthetic data only  
 **Applies to:** Increment 0 (working shell and local workspace), Increment 1 (client/company registration), Increment 2 (product/category register and invoice capture), Increment 3 (historical data and VAT workpaper), Increment 4 (staff tasks and review workflow), and Increment 5 (import-cost worksheet discovery and controlled prototype).  
-**Authority:** This document operationalizes the Phase 0 approval and the Phase 1 delivery plan. If a broad baseline document is less specific, this specification governs the increments described here. The original Increment 0/1 implementation contract remains normative; later increment workflows are subject to the decision gates stated in this document. It does not authorize production, real client data, live posting, tax filing or regulated report issuance.
+**Authority:** This document operationalizes the Phase 0 approval and the Phase 1 delivery plan. If a broad baseline document is less specific, this specification governs the increments described here. The original Increment 0/1 implementation contract remains normative; later increment workflows are subject to the decision gates stated in this document. All Increments 0–5 are one coordinated delivery contract on branch `implementation/increments-0-to-5` and PR #2. No increment may be declared accepted, passed, complete for release or independently signed off; acceptance is assessed once, collectively, only after Increment 5 and the integrated 0–5 system pass the final acceptance gate. This does not authorize production, real client data, live posting, tax filing or regulated report issuance.
 
 ## 1. Purpose and implementation rule
 
 The developer must be able to implement these increments without inventing business rules. Build the smallest complete vertical slice, not a collection of disconnected screens. Every user-visible state must correspond to persisted application state. All unknown or professionally governed behavior must be visibly marked as not verified, deferred or requiring review.
+## 1.1 Binding delivery and collective acceptance contract
+
+- **One implementation branch:** all implementation commits for Increments 0–5 remain on `implementation/increments-0-to-5`.
+- **One pull request:** all implementation commits and supporting contract updates remain in PR #2, targeting `main`. Keep PR #2 open while the six increments are implemented. Do not create increment-specific implementation branches or PRs.
+- **No individual increment acceptance:** criteria and screen checklists for each increment are verification requirements only. An increment may be demonstrated and code-reviewed, but formal test execution is deferred until Increment 5 is implemented. It must never be marked accepted, passed, released or independently signed off.
+- **Verification and test execution are deferred:** do not run the formal Increments 0–5 verification/test program until Increment 5 implementation is complete. During implementation, prepare and maintain test plans, fixtures and acceptance mappings; do not mark any increment accepted or use partial evidence as acceptance. After Increment 5, run the integrated suite and regression program once against the completed prototype. This timing rule never permits deleting tests, weakening assertions or claiming unrun checks passed.
+- **Single collective acceptance gate:** only after Increment 5 is implemented, run the complete cross-increment acceptance suite against the integrated Increments 0–5 application. No earlier increment-level test run or demonstration constitutes acceptance. Evaluate all requirements, roles, workflows, persistence, restart recovery, offline behavior, evidence integrity, failure recovery, Windows compatibility, usability and regression together.
+- **Gate outcomes:** record one overall result only: `NOT READY`, `READY FOR PRACTITIONER ACCEPTANCE`, or `ACCEPTED FOR CONTROLLED SYNTHETIC-DATA USE`. A failed criterion keeps the collective gate at `NOT READY`; fix it and rerun the affected tests plus full regression.
+- **Practitioner-dependent rules:** unresolved professional decisions remain visibly disabled, draft-only or discovery-only. The collective gate may accept the software workflow while explicitly listing capabilities that remain gated; it must not imply unapproved tax, accounting, audit or import-cost outputs are authoritative.
+- **Separate production gates remain in force:** collective acceptance of Increments 0–5 does not authorize real client data, regulated services, live accounting posting, tax filing, public desktop distribution or production deployment. Those require their own legal, security, professional, data-governance and operational approvals.
+- **Traceability:** maintain one consolidated requirement-to-screen-to-service-to-schema-to-test matrix and one collective acceptance evidence report in PR #2.
+- **Change control:** only an explicit product-owner decision recorded in the repository may change the one-branch, one-PR or collective-acceptance arrangement. A demonstration, intermediate test run, commit, milestone or practitioner comment does not change it.
 
 Use synthetic records and fictional identities. Do not load actual client, taxpayer, staff or engagement data.
 
@@ -57,12 +69,36 @@ Encryption is a security gate, not a checkbox. Before any real data or distribut
 Store the database and future document cache in the per-user application-data directory using the platform's supported application path APIs. Do not write business data beside the executable, into the repository, or to arbitrary user-selected paths by default. Restrict filesystem access to the minimum required directory. Exports are out of scope for Increments 0–1.
 
 ### 3.5 Date, number and identity conventions
+
+
 - Persist timestamps as UTC ISO-8601 values; display in the user's local timezone.
 - Store ETB amounts only when a later approved workflow defines amount semantics; no financial amount fields are part of client registration.
 - Generate internal IDs as UUIDs. Do not use TIN, company name or sequential database IDs as primary keys.
 - Preserve entered identity text. Do not normalize away meaningful punctuation or transliteration.
 - English is the initial application UI. Amharic documents/OCR are later capabilities and are not implied by this increment.
 
+
+### 3.6 Windows compatibility target and WebView2 runtime
+
+The product-owner compatibility decision is broad Windows 10 x64 and Windows 11 x64 application compatibility, including ordinary Windows 10 22H2 installations that no longer receive Windows OS security updates. This is an application compatibility target, not a claim that an unsupported Windows installation is secure or vendor-supported.
+
+The selected Tauri architecture uses Microsoft Edge WebView2. Microsoft's current WebView2 documentation lists Windows 10 SAC 1709 and later, Windows 10 LTSC editions and Windows 11 as supported client platforms. Microsoft separately states that Edge and WebView2 Runtime updates continue on Windows 10 22H2 until at least October 2028, even without enrollment in the Windows 10 Extended Security Updates program. Treat these as runtime/platform facts, not a guarantee that every ARM build has been tested.
+
+Required compatibility evidence:
+- Test a clean Windows 10 22H2 x64 installation without ESU as a first-class target.
+- Test representative Windows 10 LTSC editions and Windows 11 x64 builds used by the pilot cohort; record exact edition, build, cumulative update, WebView2 runtime version and device architecture.
+- Test launch when WebView2 is present, missing, damaged or being updated. The installer must handle runtime provisioning without asking users to disable security controls.
+- Test offline installation and first launch. Tauri's default WebView2 bootstrapper requires internet; an offline installer package is larger but supports disconnected installation. Choose and verify the distribution mode before public desktop release.
+- Test display scaling, fonts, file dialogs, application-data permissions, database locking, sleep/resume, restart recovery and Windows Defender interaction.
+- A Windows Server CI build is compile evidence only; it is not a substitute for runtime testing on Windows 10 and Windows 11 devices.
+
+Microsoft references:
+- [WebView2 supported Windows versions](https://learn.microsoft.com/en-us/microsoft-edge/webview2/)
+- [Microsoft Edge and WebView2 support on Windows 10 22H2](https://learn.microsoft.com/en-us/deployedge/microsoft-edge-supported-operating-systems)
+- [Tauri Windows prerequisites](https://v2.tauri.app/start/prerequisites/)
+- [Tauri WebView2 installer modes](https://v2.tauri.app/distribute/windows-installer/)
+
+Do not promise support for a Windows build below the Microsoft WebView2 platform floor without a separately validated architecture decision. Do not disable Windows security features or describe unsupported Windows as secure. Real-client-data production use on unsupported Windows remains blocked pending a documented security risk assessment, compensating controls and explicit approval.
 ## 4. Increment 0 — Screen and behavior specification
 
 ### 4.1 First launch
@@ -206,7 +242,7 @@ For Increments 0–1 the application is intentionally local-only:
 - Simulate process termination after save in automated tests.
 - Do not create an outbox until the actual sync contract is implemented; do not imply sync exists.
 
-## 9. Screen-level acceptance criteria
+## 9. Screen-level verification criteria (evaluated at the collective acceptance gate)
 
 ### Increment 0
 - First launch shows synthetic-data warning and opens the demo workspace without network access.
@@ -265,14 +301,14 @@ These do not block the local synthetic prototype unless stated:
 
 ## 13. Definition of ready for the next increment
 
-Increment 2 may begin detailed design only after Increment 1 is demonstrated and accepted by at least one practitioner, field definitions and exception cases are recorded, all critical acceptance tests pass, and the product owner confirms the next workflow. This does not require closing unrelated tax, licensing or production gates.
+Increment 2 detailed design may proceed after the Increment 1 workflow has been demonstrated and practitioner feedback, field definitions and exception cases have been recorded. This is a sequencing and learning checkpoint only; it is not Increment 1 acceptance, does not create an increment-level pass status, and does not change the single collective acceptance gate after Increment 5. Unrelated tax, licensing and production gates remain separate.
 
 
 ---
 
 # Part II — User-by-user and window-by-window workflow specification for Increments 1–5
 
-This section consolidates the former companion workflow document into this single developer handoff. It supplements, and does not weaken, the normative Increment 0/1 field, persistence, validation, event and acceptance contracts above. For Increments 2–5, any item marked **Practitioner decision required** is a discovery proposal, not an approved business rule; do not code it as authoritative until confirmed by the relevant practitioner and product owner.
+This section consolidates the former companion workflow document into this single developer handoff. It supplements, and does not weaken, the normative Increment 0/1 field, persistence, validation and event contracts above; all criteria are evaluated under the collective acceptance rule in Section 1.1. For Increments 2–5, any item marked **Practitioner decision required** is a discovery proposal, not an approved business rule; do not code it as authoritative until confirmed by the relevant practitioner and product owner.
 
 # 2. Increment 1 — Client and company registration
 
@@ -409,7 +445,7 @@ Clients → Add client → Enter identity → Save draft → Review completeness
 - History must survive application restart.
 - Reset of synthetic demo data must be explicitly identified as a demo reset, not routine deletion.
 
-## 2.2 Increment 1 acceptance walkthrough by user
+## 2.2 Increment 1 verification walkthrough by user
 
 | User | Scenario | Expected result |
 |---|---|---|
@@ -418,7 +454,7 @@ Clients → Add client → Enter identity → Save draft → Review completeness
 | Demo Auditor | Searches for a client by TIN text and acknowledges a possible duplicate | Search is firm-scoped; no automatic merge; acknowledgment event recorded |
 | Demo Read-only Reviewer | Opens profile and activity | Can inspect; all mutation routes are unavailable and command-guarded |
 
-**Increment 1 exit:** all existing normative acceptance criteria pass, including offline restart durability, validation preservation, duplicate handling, event atomicity and stale-row conflict behavior.
+**Increment 1 test cases (not an acceptance or exit gate):** prepare cases for offline restart durability, validation preservation, duplicate handling, event atomicity and stale-row conflict behavior. Execute these cases only during the single collective Increments 0–5 verification program after Increment 5 is implemented. They do not constitute Increment 1 acceptance.
 
 ---
 
@@ -2414,3 +2450,9 @@ Do not ask the product owner to decide every future detail before Increment 1. A
 | Markup vs margin and pricing purpose | Optional I5-W06 | Management/accounting practitioner and product owner |
 
 **No preference question is required to complete this document.** The listed questions are intentionally sequenced to the increment where practitioners can demonstrate the real work. The next immediate implementation can proceed with the already approved Increment 1 contract; Increment 2–5 should be treated as detailed workflow proposals whose explicitly marked business-rule decisions are confirmed before those rules are coded.
+
+## Binding override — prototype build and deferred collective verification
+
+The product owner has issued a later, explicit decision recorded in [PR #2](https://github.com/Jafermenza/ARM-Audit-Report-Management-System/pull/2) and [Prototype Build Binding Contract](prototype-build-binding-contract.md). ARM is a controlled prototype using synthetic data. All implementation remains on `implementation/increments-0-to-5` in PR #2. Close the outstanding Increments 0–5 implementation gaps to the best practical professional standard, preserving existing behavior and avoiding scope expansion.
+
+**This later decision supersedes any earlier wording in this file that requires continuous test execution or increment-level verification.** Formal verification and testing of the integrated Increments 0–5 delivery occur only after Increment 5 implementation is complete. Do not declare any increment accepted, passed, or independently complete. Test plans and fixtures may be prepared during implementation, but partial checks must not be presented as acceptance. This timing decision does not permit test deletion, assertion weakening, or unsupported claims. The one collective gate and separate production/legal/security/professional gates remain mandatory.
