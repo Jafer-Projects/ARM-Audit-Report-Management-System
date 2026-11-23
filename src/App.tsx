@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { desktop } from "./services/desktop";
-import type { Client, ClientChange, EventItem, HistoricalImportBatch, HistoricalImportRow, ImportCostResult, InvoiceLineDraft, SourceDocumentMeta, LocalNote, Persona, TaskReviewNote, WorkspaceInfo, WorkspaceRecord, WorkspaceRecordVersion } from "./types";
+import type { Client, ClientChange, EventItem, HistoricalImportBatch, HistoricalImportRow, ImportCostResult, InvoiceLineDraft, SourceDocumentMeta, LocalNote, Persona, TaskReviewNote, WorkspaceInfo, WorkspaceNotification, WorkspaceRecord, WorkspaceRecordVersion } from "./types";
 
 type Section = "home" | "clients" | "catalogue" | "history" | "work" | "imports" | "activity";
 const nav: { id: Section; label: string; eyebrow: string }[] = [
@@ -320,6 +320,8 @@ export default function App() {
   const [importCostPreview, setImportCostPreview] = useState<ImportCostResult | null>(null);
   const [sourceDocuments, setSourceDocuments] = useState<SourceDocumentMeta[]>([]);
   const [invoiceLines, setInvoiceLines] = useState<InvoiceLineDraft[]>([]);
+  const [notifications, setNotifications] = useState<WorkspaceNotification[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
 
   async function refresh(nextSection = section) {
     try {
@@ -327,6 +329,7 @@ export default function App() {
       const info = await desktop.initialize();
       setWorkspace(info);
       setNotes(await desktop.notes());
+      setNotifications(await desktop.notifications());
       if (nextSection === "clients") setClients(await desktop.clients(includeArchived));
       if (nextSection === "activity") setEvents(await desktop.events());
       if (["catalogue", "history", "work", "imports"].includes(nextSection)) setRecords(await desktop.records(recordType, recordType === "staff" ? undefined : selectedClientId || undefined));
@@ -379,6 +382,30 @@ export default function App() {
   const canMutate = workspace?.persona !== "reviewer";
   const canEditClientProfiles = canMutate;
   const canManageClientLifecycle = canMutate && ["administrator","manager"].includes(workspace?.persona ?? "");
+
+
+  async function openNotification(notification: WorkspaceNotification) {
+    try {
+      setBusy(true); setError("");
+      await desktop.markNotificationRead(notification.id);
+      const nextNotifications = await desktop.notifications();
+      setNotifications(nextNotifications);
+      setShowNotifications(false);
+      const nextSection = notification.record_type === "task" ? "work"
+        : ["invoice","import_case","import_cost_input"].includes(notification.record_type) ? "imports"
+        : ["historical_record","period"].includes(notification.record_type) ? "history" : "catalogue";
+      const nextRecords = await desktop.records(notification.record_type, notification.client_id);
+      setSelectedClientId(notification.client_id);
+      setSection(nextSection);
+      setRecordType(notification.record_type);
+      setRecords(nextRecords);
+      setWorkDashboard(false);
+      const target = nextRecords.find(record => record.id === notification.record_id);
+      if (!target) throw new Error("The linked work item is no longer available in this workspace. Access may have changed.");
+      await openRecord(target);
+    } catch (e) { setError(String(e)); }
+    finally { setBusy(false); }
+  }
 
   async function switchPersona(persona: Persona) {
     try { setBusy(true); setWorkspace(await desktop.setPersona(persona)); if (section === "work" && !["administrator","manager"].includes(persona)) { setRecordType("task"); setWorkDashboard(true); } await refresh(); }
@@ -688,8 +715,10 @@ export default function App() {
     </aside>
     <main className="main">
       <header className="topbar"><div><span className="overline">ARM WORKSPACE / {nav.find(n => n.id === section)?.label.toUpperCase()}</span><h1>{section === "home" ? "Good work starts with a clear next step." : nav.find(n => n.id === section)?.label}</h1></div>
-        <label className="persona-picker"><span>DEMO ROLE</span><select value={workspace?.persona ?? "administrator"} onChange={(e) => void switchPersona(e.target.value as Persona)} disabled={busy}>{Object.entries(personaLabels).map(([key,label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+        <div className="topbar-actions"><button type="button" className="notification-trigger" aria-expanded={showNotifications} onClick={() => setShowNotifications(value => !value)}>Notifications <span>{notifications.filter(item => !item.read_at).length}</span></button>
+        <label className="persona-picker"><span>DEMO ROLE</span><select value={workspace?.persona ?? "administrator"} onChange={(e) => void switchPersona(e.target.value as Persona)} disabled={busy}>{Object.entries(personaLabels).map(([key,label]) => <option key={key} value={key}>{label}</option>)}</select></label></div>
       </header>
+      {showNotifications && <section className="notification-panel"><div className="section-head"><div><span className="overline">CURRENT DEMO USER</span><h3>Workspace notifications</h3></div><button type="button" className="text-button" onClick={() => setShowNotifications(false)}>Close</button></div>{notifications.length === 0 ? <p className="empty">No notifications for this demo user.</p> : notifications.map(item => <button type="button" key={item.id} className={item.read_at ? "notification-item read" : "notification-item unread"} onClick={() => void openNotification(item)}><span className="notification-item-top"><strong>{item.title}</strong>{!item.read_at && <i>NEW</i>}</span><span>{item.body}</span><small>{new Date(item.created_at).toLocaleString()} · {item.event_type.replaceAll("_"," ")}</small></button>)}</section>}
       <div className="notice"><span>i</span><div><strong>Prototype mode — synthetic data only</strong><small>{workspace?.sync_state ?? "Sync is not enabled in this prototype"} · No production data or cloud sync</small></div></div>
       {error && <div className="error-banner" role="alert">{error}<button onClick={() => setError("")}>Dismiss</button></div>}
 
