@@ -1,5 +1,6 @@
 mod db;
 mod commands;
+mod import_cost;
 
 use db::Database;
 use std::sync::Mutex;
@@ -44,6 +45,7 @@ pub fn run() {
             commands::list_records,
             commands::save_record,
             commands::list_events,
+            commands::calculate_import_cost_preview,
             commands::reset_demo_data
         ])
         .run(tauri::generate_context!())
