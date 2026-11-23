@@ -133,14 +133,25 @@ impl Database {
                     updated_at TEXT NOT NULL
                 );
                 CREATE INDEX local_note_firm_updated ON local_note(firm_id, updated_at);
-                CREATE TRIGGER local_event_no_update BEFORE UPDATE ON local_event
-                BEGIN SELECT RAISE(ABORT, 'local_event is append-only'); END;
-                CREATE TRIGGER local_event_no_delete BEFORE DELETE ON local_event
-                BEGIN SELECT RAISE(ABORT, 'local_event is append-only'); END;"
+"
             )?;
             tx.execute(
                 "INSERT INTO schema_migration(version, checksum, applied_at) VALUES(2, ?1, ?2)",
                 rusqlite::params!["arm-local-notes-v2", now_utc()],
+            )?;
+            tx.commit()?;
+        }
+        if applied < 3 {
+            let tx = self.connection.unchecked_transaction()?;
+            tx.execute_batch(
+                "CREATE TRIGGER local_event_no_update BEFORE UPDATE ON local_event
+                 BEGIN SELECT RAISE(ABORT, 'local_event is append-only'); END;
+                 CREATE TRIGGER local_event_no_delete BEFORE DELETE ON local_event
+                 BEGIN SELECT RAISE(ABORT, 'local_event is append-only'); END;"
+            )?;
+            tx.execute(
+                "INSERT INTO schema_migration(version, checksum, applied_at) VALUES(3, ?1, ?2)",
+                rusqlite::params!["arm-append-only-events-v3", now_utc()],
             )?;
             tx.commit()?;
         }
@@ -211,7 +222,7 @@ mod tests {
         let migrations: i64 = db.connection.query_row("SELECT COUNT(*) FROM schema_migration", [], |r| r.get(0)).unwrap();
         assert_eq!(clients, 1);
         assert_eq!(actors, 4);
-        assert_eq!(migrations, 2);
+        assert_eq!(migrations, 3);
     }
 
     #[test]
