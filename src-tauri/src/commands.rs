@@ -1132,14 +1132,18 @@ pub struct WorkspaceRecordVersion {
 pub fn list_workspace_record_versions(record_id: String, state: State<'_, AppState>) -> Result<Vec<WorkspaceRecordVersion>, String> {
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
     let (_, actor_name, persona) = active_actor(&db)?;
-    let (record_type, raw): (String,String) = db.connection.query_row(
-        "SELECT record_type,payload_json FROM workspace_record WHERE id=?1 AND firm_id=?2",
-        params![record_id,FIRM_ID], |r|Ok((r.get(0)?,r.get(1)?))
+    let (record_type, client_id, raw): (String,Option<String>,String) = db.connection.query_row(
+        "SELECT record_type,client_id,payload_json FROM workspace_record WHERE id=?1 AND firm_id=?2",
+        params![record_id,FIRM_ID], |r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))
     ).map_err(|_|"Record not found in this demonstration firm.".to_string())?;
     if record_type == "staff" && !["administrator","manager"].contains(&persona.as_str()) {
         return Err("Firm-level staff history is restricted to the demo administrator and manager.".into());
     }
     if record_type == "task" {
+        let client_id = client_id.as_deref().ok_or_else(||"Task has no client workspace.".to_string())?;
+        if !actor_has_client_access(&db,client_id,&actor_name,&persona)? {
+            return Err("This task history is not assigned to your demo persona.".into());
+        }
         let payload: serde_json::Value = serde_json::from_str(&raw).unwrap_or_else(|_|json!({}));
         let assignee = payload.get("assignee").and_then(|v|v.as_str()).unwrap_or("");
         let reviewer = payload.get("reviewer").and_then(|v|v.as_str()).unwrap_or("");
