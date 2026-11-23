@@ -35,6 +35,8 @@ pub fn run() {
             commands::save_note,
             commands::set_demo_persona,
             commands::find_invoice_duplicates,
+            commands::import_historical_batch,
+            commands::list_historical_import_batches,
             commands::list_records,
             commands::save_record,
             commands::list_events,
