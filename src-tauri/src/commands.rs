@@ -1230,7 +1230,8 @@ pub fn list_events(state: State<'_, AppState>) -> Result<Vec<EventItem>, String>
 #[tauri::command]
 pub fn reset_demo_data(state: State<'_, AppState>) -> Result<(), String> {
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
-    let (actor_id,_,_) = ensure_can_mutate(&db)?;
+    let (actor_id,_,persona) = ensure_can_mutate(&db)?;
+    if persona != "administrator" { return Err("Only the demo firm administrator can reset synthetic workspace data.".into()); }
     let tx = db.connection.unchecked_transaction().map_err(|e|e.to_string())?;
     tx.execute_batch("DROP TRIGGER IF EXISTS task_review_note_no_delete; DROP TRIGGER IF EXISTS task_review_note_content_immutable; DROP TRIGGER IF EXISTS task_review_note_status_transition;
         DROP TRIGGER IF EXISTS client_change_no_update; DROP TRIGGER IF EXISTS client_change_no_delete;
