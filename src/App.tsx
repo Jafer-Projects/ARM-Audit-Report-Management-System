@@ -331,6 +331,14 @@ export default function App() {
       setError("");
       const info = await desktop.initialize();
       setWorkspace(info);
+      if (info.firm_name !== "ARM Demonstration Firm") {
+        setNotes([]);setNotifications([]);setEvents([]);setRecords([]);setStaffRecords([]);
+        setShowNotifications(false);setNoteEditor(undefined);setRecordEditor(null);setClientEditor(undefined);
+        setClients(info.firm_name === "Cloud account — select organization" ? [] : await desktop.clients(includeArchived));
+        setSelectedClientId("");
+        if (!["home","clients"].includes(nextSection)) setSection("home");
+        return;
+      }
       setNotes(await desktop.notes());
       setNotifications(await desktop.notifications());
       if (nextSection === "clients") setClients(await desktop.clients(includeArchived));
