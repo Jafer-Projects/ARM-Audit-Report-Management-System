@@ -7,6 +7,9 @@ import { pool, withTenant } from "./db.js";
 import { authenticate, login, register, revokeSession, rotateRefreshToken, completeMfaLogin, type AuthenticatedRequest } from "./auth.js";
 import { verifyEmailAddress, requestPasswordRecovery, resetPassword, beginMfaEnrollment, confirmMfaEnrollment, disableMfa } from "./security.js";
 import { pushEvents, pullEvents, pushSchema } from "./sync.js";
+import { listRoles, createRole, replaceRolePermissions, assignMemberRole, inviteOrganizationMember } from "./authorization.js";
+import { acceptOrganizationInvitation } from "./organizations.js";
+import { createEngagement, listEngagements, createWorkpaper, transitionWorkpaper, createAuditReport, transitionAuditReport, createJournal, postJournal } from "./domain.js";
 
 const registerSchema = z.object({
   email: z.string().email().max(254),
@@ -134,6 +137,90 @@ export async function buildApp(): Promise<FastifyInstance> {
     const auth = (request as AuthenticatedRequest).auth!;
     await revokeSession(auth.sid, auth.sub);
     return reply.code(204).send();
+  });
+
+  app.get("/v1/tenant/roles", { preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request) => {
+    const auth=(request as AuthenticatedRequest).auth!;
+    return {roles:await listRoles(auth.sub,tenantId(request as AuthenticatedRequest))};
+  });
+
+  app.post("/v1/tenant/roles", { preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request,reply) => {
+    const parsed=z.object({key:z.string().regex(/^[a-z][a-z0-9_.-]{1,63}$/),name:z.string().trim().min(2).max(100),permissions:z.array(z.string()).max(100)}).safeParse(request.body);
+    if(!parsed.success) return reply.code(400).send({error:"validation_error"});
+    const auth=(request as AuthenticatedRequest).auth!;
+    return reply.code(201).send(await createRole(auth.sub,tenantId(request as AuthenticatedRequest),parsed.data));
+  });
+
+  app.put("/v1/tenant/roles/:roleId/permissions", { preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request,reply) => {
+    const parsed=z.object({permissions:z.array(z.string()).max(100)}).safeParse(request.body);
+    if(!parsed.success) return reply.code(400).send({error:"validation_error"});
+    const auth=(request as AuthenticatedRequest).auth!,params=request.params as {roleId:string};
+    return replaceRolePermissions(auth.sub,tenantId(request as AuthenticatedRequest),params.roleId,parsed.data.permissions);
+  });
+
+  app.post("/v1/tenant/memberships/:membershipId/roles", { preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request,reply) => {
+    const parsed=z.object({roleId:z.string().uuid()}).safeParse(request.body);
+    if(!parsed.success) return reply.code(400).send({error:"validation_error"});
+    const auth=(request as AuthenticatedRequest).auth!,params=request.params as {membershipId:string};
+    return assignMemberRole(auth.sub,tenantId(request as AuthenticatedRequest),params.membershipId,parsed.data.roleId);
+  });
+
+  app.post("/v1/tenant/invitations", { preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request,reply) => {
+    const parsed=z.object({email:z.string().email().max(254),roleId:z.string().uuid()}).safeParse(request.body);
+    if(!parsed.success) return reply.code(400).send({error:"validation_error"});
+    const auth=(request as AuthenticatedRequest).auth!;
+    return reply.code(201).send(await inviteOrganizationMember(auth.sub,tenantId(request as AuthenticatedRequest),parsed.data.email,parsed.data.roleId,config.PUBLIC_APP_URL));
+  });
+
+  app.post("/v1/tenant/invitations/accept", { preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request,reply) => {
+    const parsed=z.object({token:z.string().min(32).max(128)}).safeParse(request.body);
+    if(!parsed.success) return reply.code(400).send({error:"validation_error"});
+    return acceptOrganizationInvitation((request as AuthenticatedRequest).auth!.sub,parsed.data.token);
+  });
+
+  app.get("/v1/audit/engagements", { preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request) => {
+    const auth=(request as AuthenticatedRequest).auth!;
+    return {engagements:await listEngagements(auth.sub,tenantId(request as AuthenticatedRequest))};
+  });
+  app.post("/v1/audit/engagements", { preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request,reply) => {
+    const parsed=z.object({clientReference:z.string().min(1).max(100),title:z.string().min(3).max(200),periodStart:z.string().date(),periodEnd:z.string().date(),framework:z.string().min(1).max(80)}).safeParse(request.body);
+    if(!parsed.success) return reply.code(400).send({error:"validation_error"});
+    const auth=(request as AuthenticatedRequest).auth!;
+    return reply.code(201).send(await createEngagement(auth.sub,tenantId(request as AuthenticatedRequest),parsed.data));
+  });
+  app.post("/v1/audit/workpapers", { preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request,reply) => {
+    const parsed=z.object({engagementId:z.string().uuid(),reference:z.string().min(1).max(80),title:z.string().min(1).max(200),procedure:z.string().min(1).max(10000)}).safeParse(request.body);
+    if(!parsed.success) return reply.code(400).send({error:"validation_error"});
+    const auth=(request as AuthenticatedRequest).auth!;
+    return reply.code(201).send(await createWorkpaper(auth.sub,tenantId(request as AuthenticatedRequest),parsed.data));
+  });
+  app.post("/v1/audit/workpapers/:id/transition", { preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request,reply) => {
+    const parsed=z.object({expectedVersion:z.number().int().positive(),action:z.enum(["prepare","review","approve","reopen"]),conclusion:z.string().max(10000).optional()}).safeParse(request.body);
+    if(!parsed.success) return reply.code(400).send({error:"validation_error"});
+    const auth=(request as AuthenticatedRequest).auth!,params=request.params as {id:string};
+    return transitionWorkpaper(auth.sub,tenantId(request as AuthenticatedRequest),params.id,parsed.data.expectedVersion,parsed.data.action,parsed.data.conclusion);
+  });
+  app.post("/v1/audit/reports", { preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request,reply) => {
+    const parsed=z.object({engagementId:z.string().uuid(),reportType:z.enum(["independent_auditor","management_letter","internal_audit","special_purpose"]),title:z.string().min(1).max(200),body:z.record(z.string(),z.unknown())}).safeParse(request.body);
+    if(!parsed.success) return reply.code(400).send({error:"validation_error"});
+    const auth=(request as AuthenticatedRequest).auth!;
+    return reply.code(201).send(await createAuditReport(auth.sub,tenantId(request as AuthenticatedRequest),parsed.data));
+  });
+  app.post("/v1/audit/reports/:id/transition", { preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request,reply) => {
+    const parsed=z.object({expectedVersion:z.number().int().positive(),action:z.enum(["prepare","review","approve","issue","withdraw"])}).safeParse(request.body);
+    if(!parsed.success) return reply.code(400).send({error:"validation_error"});
+    const auth=(request as AuthenticatedRequest).auth!,params=request.params as {id:string};
+    return transitionAuditReport(auth.sub,tenantId(request as AuthenticatedRequest),params.id,parsed.data.expectedVersion,parsed.data.action);
+  });
+  app.post("/v1/accounting/journals", { preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request,reply) => {
+    const parsed=z.object({journalNumber:z.string().min(1).max(80),date:z.string().date(),description:z.string().min(1).max(500),currency:z.string().regex(/^[A-Z]{3}$/),lines:z.array(z.object({accountId:z.string().uuid(),description:z.string().max(500).optional(),debit:z.number().nonnegative(),credit:z.number().nonnegative()})).min(2).max(500)}).safeParse(request.body);
+    if(!parsed.success) return reply.code(400).send({error:"validation_error"});
+    const auth=(request as AuthenticatedRequest).auth!;
+    return reply.code(201).send(await createJournal(auth.sub,tenantId(request as AuthenticatedRequest),parsed.data));
+  });
+  app.post("/v1/accounting/journals/:id/post", { preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request) => {
+    const auth=(request as AuthenticatedRequest).auth!,params=request.params as {id:string};
+    return postJournal(auth.sub,tenantId(request as AuthenticatedRequest),params.id);
   });
 
   app.get("/v1/tenant/context", { preHandler: async (request) => {
