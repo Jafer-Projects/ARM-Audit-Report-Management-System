@@ -161,7 +161,7 @@ test("prototype sync is idempotent, version checked, cursor based and domain typ
 
 test("tenant RLS hides another tenant even when a foreign tenant ID is supplied",async()=>{
  const client=await pool.connect();
- try{await client.query("BEGIN");await client.query("SELECT set_config('app.user_id',$1,true)",[second.user.id]);await client.query("SELECT set_config('app.tenant_id',$1,true)",[first.tenant.id]);const hidden=await client.query("SELECT count(*)::int AS count FROM sync_aggregates");assert.equal(hidden.rows[0].count,0);await client.query("ROLLBACK");}
+ try{await client.query("BEGIN");await client.query("SELECT set_config('app.user_id',$1,true)",[first.user.id]);await client.query("SELECT set_config('app.tenant_id',$1,true)",[second.tenant.id]);const hidden=await client.query("SELECT count(*)::int AS count FROM sync_aggregates");assert.equal(hidden.rows[0].count,0);await client.query("ROLLBACK");}
  finally{client.release();}
 });
 
