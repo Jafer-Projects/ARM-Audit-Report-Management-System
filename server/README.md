@@ -8,8 +8,9 @@ Requirements: Node.js 22.16+, PostgreSQL 16+, and npm.
 
 ```sh
 cp .env.example .env
-# Set separate random POSTGRES_PASSWORD, ARM_RUNTIME_PASSWORD,
-# ARM_WORKER_PASSWORD, ARM_MIGRATOR_PASSWORD and JWT_SECRET values before starting Compose.
+# Generate distinct DB passwords with openssl rand -hex 32; generate JWT_SECRET with openssl rand -base64 48.
+# Set POSTGRES_PASSWORD, ARM_RUNTIME_PASSWORD, ARM_WORKER_PASSWORD,
+# ARM_MIGRATOR_PASSWORD and JWT_SECRET before starting Compose.
 docker compose --env-file .env up --build
 ```
 
