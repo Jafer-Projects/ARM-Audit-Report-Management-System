@@ -44,7 +44,7 @@ export function verifyAccessToken(token: string): AccessClaims {
   if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) throw new Error("Invalid access token");
   const header = JSON.parse(Buffer.from(parts[0], "base64url").toString("utf8")) as { alg?: string };
   const claims = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")) as AccessClaims;
-  if (header.alg !== "HS256" || claims.iss !== "arm-cloud" || !claims.sub || !claims.sid || claims.exp <= Math.floor(Date.now() / 1000)) {
+  if (header.alg !== "HS256" || claims.iss !== "arm-cloud" || typeof claims.sub !== "string" || typeof claims.sid !== "string" || typeof claims.iat !== "number" || typeof claims.exp !== "number" || claims.exp <= Math.floor(Date.now() / 1000) || claims.iat > Math.floor(Date.now() / 1000) + 60) {
     throw new Error("Expired or invalid access token");
   }
   return claims;
