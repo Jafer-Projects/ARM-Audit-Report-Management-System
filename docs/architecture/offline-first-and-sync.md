@@ -187,3 +187,44 @@ Do not make a screen "cloud migrated" merely by adding a sign-in button or by sy
 8. **Verification:** create workflow-level parity tests that exercise the same use cases online, offline, after reconnect, across two devices, after permission revocation, and after partial failure. The desktop and server tests must assert the same state transitions and authorization outcomes.
 
 **Cloud-first acceptance rule:** every desktop business action must be classified as (a) cloud-online authoritative, (b) offline-capable with an explicit domain sync contract, or (c) local-only by design (for example, private draft or demo reset). No unclassified local business write may be treated as production data. A workflow is not migrated until the UI uses the Node API/application service, PostgreSQL owns the canonical state, and the offline contract and migration evidence are tested. This parity gate is separate from the deferred collective acceptance decision for Increments 0–5 and does not pass or accept any increment.
+
+
+## 14. Application identity and client-directory implementation increment (2026-11-24)
+
+This section records implementation progress after the parity audit. It does not declare application-wide identity or client workflow parity complete.
+
+### Implemented in this increment
+
+- Added `server/migrations/003_client_directory.sql` with tenant-owned `clients` and `client_history` tables, composite tenant/client references, row versions, lifecycle status constraints, tenant indexes, RLS policies and a tenant-scoped internal-reference uniqueness constraint.
+- Added `server/src/clients.ts` with tenant-membership enforcement, permission checks, client listing, duplicate candidate search, create/update, optimistic row-version checks, archive/activate/restore transitions and immutable before/after client history plus audit events.
+- Added authenticated Node API routes in `server/src/app.ts`: `GET /v1/clients`, `GET /v1/clients/duplicates`, `POST /v1/clients`, `POST /v1/clients/:id/transition` and `GET /v1/clients/:id/history`.
+- Duplicate matching is tenant-scoped and compares normalized legal names or non-empty TIN values. A possible duplicate blocks save unless the user explicitly acknowledges that a separate record is intended. It never merges records.
+- Updates and lifecycle transitions require the expected row version; stale writes return a conflict instead of overwriting newer data.
+- The migration does not import the seeded SQLite demonstration records.
+
+### Not yet implemented; do not describe as complete
+
+1. **Application-wide identity context:** `CloudConnectionPanel` still owns its own in-memory session and the normal `App` shell still initializes the local demonstration workspace. Cloud identity does not yet gate every route, command or business service. Closing the panel revokes its session. No OS credential vault integration exists yet.
+2. **Tenant context:** the server exposes `GET /v1/tenant/context`, but the desktop does not yet load a selected tenant, memberships, role permissions and device identity into a persistent application context. Tenant selection must be explicit and validated against active membership on every API operation.
+3. **Desktop client-directory adapter:** current `src/services/desktop.ts` client methods still invoke local Tauri commands. They have not yet been replaced with a cloud-first typed application service. The new server API is not yet called by the existing Clients UI.
+4. **Offline client directory:** there is no tenant-bound local client cache, client-specific outbox event contract, server pull/bootstrap, tombstone handling, idempotent replay, rejected-event correction or conflict-resolution UI. Do not enable sync or upload demo rows.
+5. **Client API test evidence:** integration tests for tenant isolation, duplicate acknowledgement, row-version conflicts, lifecycle transitions and history must pass against PostgreSQL before the API is treated as accepted.
+6. **Production security review:** migration role/RLS behavior, cross-tenant negative tests, race behavior, audit immutability, backup/restore and exact-SHA CI remain release gates.
+
+### Required next implementation sequence
+
+A. Establish a single application identity provider/store backed by Tauri native secure credential storage. It must expose authenticated/unauthenticated/loading states, access-token refresh with rotation, logout/revocation, selected tenant, membership and effective permissions. Avoid localStorage, SQLite or React-only memory as durable secret storage. Add expiry, concurrent refresh and revoked-session tests.
+
+B. Change startup so production mode does not call `initialize_workspace` against the seeded demo database. Keep demo mode explicit and isolated. The shell must resolve configuration, restore the secure session, fetch server tenant context and only then load tenant business data. Do not allow persona switching as a production authorization mechanism.
+
+C. Add a typed desktop API client and client application service. In online mode, list/search/create/update/lifecycle/history must use the Node API. Map API errors (including duplicate and version conflicts) into the existing user experience without silently falling back to local writes.
+
+D. Add the tenant-bound SQLite client cache and client outbox/inbox contract. Define event schema/version, stable IDs, base versions, idempotency, dependency ordering, pull cursor, conflict and rejection retention. Only queue allowed draft operations; archive/restore permissions and server-side transitions must be revalidated on replay.
+
+E. Implement a deliberate migration/import wizard for real legacy firms only: preview, mapping, duplicate report, source checksums, client/reference relationship validation, row counts, dry-run, resumable batches, durable acknowledgements and signed-off reconciliation. Exclude seeded demo data by default and retain the source database until approval.
+
+F. Add PostgreSQL integration and desktop tests for owner/member isolation, no cross-tenant reads/writes, duplicate handling, concurrent update conflicts, lifecycle rules, audit history, online/offline/reconnect, two-device edits, expired/revoked session, partial batch retry and migration reconciliation. Run the full validation workflow on the exact resulting branch head.
+
+### Acceptance status
+
+The client-directory cloud persistence/API foundation has been added, but the workflow is **not migrated** until steps A–F are implemented and tested, the existing Clients UI uses the typed cloud application service, and existing real data can be migrated and reconciled. Application-wide cloud identity is also **not complete**. This increment does not pass any of the collective Increments 0–5 acceptance criteria and does not authorize production deployment.
