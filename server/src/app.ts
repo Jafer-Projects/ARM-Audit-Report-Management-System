@@ -110,25 +110,27 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   app.post("/v1/auth/mfa/enroll", { preHandler: async (request) => {
     (request as AuthenticatedRequest).auth = await authenticate(request);
-  } }, async (request) => {
-    const auth = (request as AuthenticatedRequest).auth!;
-    const user = await pool.query("SELECT email FROM users WHERE id=$1",[auth.sub]);
-    return beginMfaEnrollment(auth.sub,user.rows[0].email);
+  } }, async (request,reply) => {
+    const parsed=z.object({password:z.string().min(1).max(128)}).safeParse(request.body);
+    if(!parsed.success) return reply.code(400).send({error:"validation_error"});
+    const auth=(request as AuthenticatedRequest).auth!;
+    const user=await pool.query("SELECT email FROM users WHERE id=$1",[auth.sub]);
+    return beginMfaEnrollment(auth.sub,user.rows[0].email,parsed.data.password);
   });
 
   app.post("/v1/auth/mfa/confirm", { preHandler: async (request) => {
     (request as AuthenticatedRequest).auth = await authenticate(request);
   } }, async (request,reply) => {
-    const parsed = z.object({ code: z.string().regex(/^\\d{6}$/) }).safeParse(request.body);
-    if (!parsed.success) return reply.code(400).send({ error: "validation_error" });
+    const parsed=z.object({code:z.string().regex(/^\\d{6}$/)}).safeParse(request.body);
+    if(!parsed.success) return reply.code(400).send({error:"validation_error"});
     return confirmMfaEnrollment((request as AuthenticatedRequest).auth!.sub,parsed.data.code);
   });
 
   app.post("/v1/auth/mfa/disable", { preHandler: async (request) => {
     (request as AuthenticatedRequest).auth = await authenticate(request);
   } }, async (request,reply) => {
-    const parsed = z.object({ code: z.string().regex(/^\\d{6}$/) }).safeParse(request.body);
-    if (!parsed.success) return reply.code(400).send({ error: "validation_error" });
+    const parsed=z.object({password:z.string().min(1).max(128),code:z.string().regex(/^\\d{6}$/)}).safeParse(request.body);
+    if(!parsed.success) return reply.code(400).send({error:"validation_error"});
     return disableMfa((request as AuthenticatedRequest).auth!.sub,parsed.data.password,parsed.data.code);
   });
 
