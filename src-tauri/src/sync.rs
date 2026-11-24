@@ -29,8 +29,10 @@ pub fn sync_configure(cloud_tenant_id:String,state:State<'_,AppState>)->Result<(
  let id=cloud_tenant_id.trim();
  if uuid::Uuid::parse_str(id).is_err(){return Err("A valid cloud tenant UUID is required.".into());}
  let db=state.database.lock().map_err(|_|"Database lock unavailable".to_string())?;
+ let existing:Option<String>=db.connection.query_row("SELECT cloud_tenant_id FROM cloud_sync_state WHERE firm_id=?1",[FIRM_ID],|r|r.get(0)).optional().map_err(|e|e.to_string())?;
+ if let Some(current)=existing { if current!=id { return Err("This local workspace is already paired with a different cloud tenant. Use a separate local profile to switch tenants.".into()); } }
  db.connection.execute(
-  "INSERT INTO cloud_sync_state(firm_id,cloud_tenant_id,pull_cursor,updated_at) VALUES(?1,?2,'0',?3) ON CONFLICT(firm_id) DO UPDATE SET cloud_tenant_id=excluded.cloud_tenant_id,updated_at=excluded.updated_at",
+  "INSERT INTO cloud_sync_state(firm_id,cloud_tenant_id,pull_cursor,updated_at) VALUES(?1,?2,'0',?3) ON CONFLICT(firm_id) DO UPDATE SET updated_at=excluded.updated_at",
   params![FIRM_ID,id,now_utc()]
  ).map_err(|e|e.to_string())?;
  Ok(())
