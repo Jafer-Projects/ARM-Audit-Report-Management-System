@@ -128,3 +128,14 @@ function clamScan(bytes:Buffer,host:string,port:number):Promise<string> {
   });
 }
 
+
+export async function listDocuments(userId:string,tenantId:string,engagementId?:string) {
+ return withTenant(userId,tenantId,async(client)=>{
+  await assertPermission(client,userId,tenantId,"documents.read");
+  const result=await client.query(
+   "SELECT id,file_name,media_type,size_bytes,sha256,scan_status,scan_detail,engagement_id,workpaper_id,report_id,created_at,scanned_at FROM document_objects WHERE tenant_id=$1 AND ($2::uuid IS NULL OR engagement_id=$2) ORDER BY created_at DESC",
+   [tenantId,engagementId??null]
+  );
+  return result.rows;
+ });
+}
