@@ -49,13 +49,11 @@ CREATE TABLE auth_sessions (
 CREATE INDEX auth_sessions_user_idx ON auth_sessions(user_id, expires_at);
 
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE users FORCE ROW LEVEL SECURITY;
 CREATE POLICY users_self_scope ON users
   USING (id::text = current_setting('app.user_id', true))
   WITH CHECK (id::text = current_setting('app.user_id', true));
 
 ALTER TABLE auth_sessions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE auth_sessions FORCE ROW LEVEL SECURITY;
 CREATE POLICY sessions_self_scope ON auth_sessions
   USING (user_id::text = current_setting('app.user_id', true))
   WITH CHECK (user_id::text = current_setting('app.user_id', true));
