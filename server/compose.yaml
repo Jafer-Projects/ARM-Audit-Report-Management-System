@@ -6,6 +6,7 @@ services:
       POSTGRES_USER: arm_owner
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the deployment environment}
       ARM_WORKER_PASSWORD: ${ARM_WORKER_PASSWORD:?set ARM_WORKER_PASSWORD in the deployment environment}
+      ARM_MIGRATOR_PASSWORD: ${ARM_MIGRATOR_PASSWORD:?set ARM_MIGRATOR_PASSWORD in the deployment environment}
       ARM_RUNTIME_PASSWORD: ${ARM_RUNTIME_PASSWORD:?set ARM_RUNTIME_PASSWORD in the deployment environment}
     volumes:
       - arm-postgres:/var/lib/postgresql/data
@@ -29,7 +30,7 @@ services:
       HOST: 0.0.0.0
       PORT: 3000
       DATABASE_URL: postgres://arm_runtime:${ARM_RUNTIME_PASSWORD}@postgres:5432/arm
-      MIGRATION_DATABASE_URL: postgres://arm_owner:${POSTGRES_PASSWORD}@postgres:5432/arm
+      MIGRATION_DATABASE_URL: postgres://arm_migrator:${ARM_MIGRATOR_PASSWORD}@postgres:5432/arm
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in the deployment environment}
       ACCESS_TOKEN_TTL_SECONDS: 900
       LOG_LEVEL: info
