@@ -110,6 +110,7 @@ CREATE TABLE sync_inbox (
   payload jsonb NOT NULL,
   outcome text NOT NULL CHECK (outcome IN ('accepted', 'conflict', 'rejected')),
   outcome_detail jsonb NOT NULL DEFAULT '{}'::jsonb,
+  occurred_at_device timestamptz NOT NULL,
   received_at timestamptz NOT NULL DEFAULT now(),
   received_seq bigserial NOT NULL UNIQUE,
   UNIQUE (tenant_id, idempotency_key),
