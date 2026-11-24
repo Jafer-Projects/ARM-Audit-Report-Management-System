@@ -116,7 +116,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   } }, async (request) => {
     const auth = (request as AuthenticatedRequest).auth!;
     const parsed = z.object({
-      after: z.string().regex(/^\\d+$/).optional(),
+      after: z.string().regex(/^\d+$/).optional(),
       limit: z.coerce.number().int().min(1).max(100).default(50)
     }).safeParse(request.query);
     if (!parsed.success) throw Object.assign(new Error("Invalid sync cursor or limit"), { statusCode: 400 });
