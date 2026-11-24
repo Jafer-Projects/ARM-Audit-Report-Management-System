@@ -48,6 +48,42 @@ CREATE TABLE auth_sessions (
 );
 CREATE INDEX auth_sessions_user_idx ON auth_sessions(user_id, expires_at);
 
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE users FORCE ROW LEVEL SECURITY;
+CREATE POLICY users_self_scope ON users
+  USING (id::text = current_setting('app.user_id', true))
+  WITH CHECK (id::text = current_setting('app.user_id', true));
+
+ALTER TABLE auth_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE auth_sessions FORCE ROW LEVEL SECURITY;
+CREATE POLICY sessions_self_scope ON auth_sessions
+  USING (user_id::text = current_setting('app.user_id', true))
+  WITH CHECK (user_id::text = current_setting('app.user_id', true));
+
+CREATE OR REPLACE FUNCTION public.arm_lookup_user_for_login(p_email text)
+RETURNS TABLE(user_id uuid, email text, display_name text, password_hash text, status text)
+LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, public AS $fn$
+  SELECT u.id, u.email, u.display_name, u.password_hash, u.status
+  FROM public.users u
+  WHERE u.email_normalized = lower(btrim(p_email))
+  LIMIT 1
+$fn$;
+
+CREATE OR REPLACE FUNCTION public.arm_lookup_session_for_refresh(p_token_hash text)
+RETURNS TABLE(session_id uuid, user_id uuid)
+LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, public AS $fn$
+  SELECT s.id, s.user_id
+  FROM public.auth_sessions s
+  JOIN public.users u ON u.id = s.user_id
+  WHERE s.refresh_token_hash = p_token_hash
+    AND s.revoked_at IS NULL AND s.expires_at > now() AND u.status = 'active'
+  LIMIT 1
+$fn$;
+
+REVOKE ALL ON FUNCTION public.arm_lookup_user_for_login(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.arm_lookup_session_for_refresh(text) FROM PUBLIC;
+
+
 CREATE TABLE sync_aggregates (
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
   aggregate_type text NOT NULL CHECK (length(aggregate_type) BETWEEN 1 AND 80),
@@ -163,6 +199,12 @@ DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'arm_runtime') THEN
     REVOKE ALL ON jobs FROM arm_runtime;
+    REVOKE ALL ON users, auth_sessions FROM arm_runtime;
+    GRANT SELECT, INSERT ON users TO arm_runtime;
+    GRANT SELECT, INSERT, UPDATE ON auth_sessions TO arm_runtime;
+    GRANT EXECUTE ON FUNCTION public.arm_lookup_user_for_login(text) TO arm_runtime;
+    GRANT EXECUTE ON FUNCTION public.arm_lookup_session_for_refresh(text) TO arm_runtime;
+    REVOKE UPDATE, DELETE ON audit_events, sync_inbox FROM arm_runtime;
   END IF;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'arm_worker') THEN
     GRANT SELECT, UPDATE ON jobs TO arm_worker;
