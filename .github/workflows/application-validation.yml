@@ -150,3 +150,42 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Build Windows desktop application without installer
         run: npm run tauri -- build --no-bundle
+
+  cloud-api-integration:
+    name: Cloud API build and PostgreSQL integration tests
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16.8
+        env:
+          POSTGRES_DB: arm_test
+          POSTGRES_USER: arm_test
+          POSTGRES_PASSWORD: arm_test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U arm_test -d arm_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    defaults:
+      run:
+        working-directory: server
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgres://arm_test:arm_test_password@localhost:5432/arm_test
+      JWT_SECRET: ci-only-test-secret-which-is-longer-than-thirty-two-bytes
+      ACCESS_TOKEN_TTL_SECONDS: 900
+      LOG_LEVEL: warn
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.16.0"
+      - name: Install cloud API dependencies
+        run: npm install --no-audit --no-fund
+      - name: Compile cloud API and worker
+        run: npm run build
+      - name: Apply migrations and run PostgreSQL integration tests
+        run: npm test
