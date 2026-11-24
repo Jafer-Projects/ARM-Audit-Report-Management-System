@@ -3,10 +3,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { buildApp } from "../src/app.js";
 import type { FastifyInstance } from "fastify";
+import pg from "pg";
 
 let app: FastifyInstance;
-let first: { accessToken: string; refreshToken: string; tenant: { id: string } };
-let second: { accessToken: string; tenant: { id: string } };
+const workerPool = new pg.Pool({ connectionString: process.env.WORKER_DATABASE_URL });
+let first: { accessToken: string; refreshToken: string; user: { id: string }; tenant: { id: string } };
+let second: { accessToken: string; user: { id: string }; tenant: { id: string } };
 
 before(async () => {
   app = await buildApp();
@@ -26,7 +28,39 @@ before(async () => {
   second = two.json();
 });
 
-after(async () => { await app.close(); });
+after(async () => { await app.close(); await workerPool.end(); });
+
+test("API database role is non-superuser and PostgreSQL RLS independently enforces membership", async () => {
+  const db = await import("../src/db.js");
+  const role = await db.pool.query("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user");
+  assert.equal(role.rows[0].rolsuper, false);
+  assert.equal(role.rows[0].rolbypassrls, false);
+  const client = await db.pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT set_config('app.user_id', $1, true)", [second.user.id]);
+    await client.query("SELECT set_config('app.tenant_id', $1, true)", [first.tenant.id]);
+    const hidden = await client.query("SELECT count(*)::int AS count FROM sync_aggregates");
+    assert.equal(hidden.rows[0].count, 0);
+    await client.query("ROLLBACK");
+  } finally { client.release(); }
+});
+
+test("worker database role can access its queue but cannot read tenant data", async () => {
+  const role = await workerPool.query("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user");
+  assert.equal(role.rows[0].rolsuper, false);
+  assert.equal(role.rows[0].rolbypassrls, false);
+  await workerPool.query("BEGIN");
+  try {
+    await workerPool.query("SELECT set_config('app.worker', 'true', true)");
+    await workerPool.query("SELECT id FROM jobs LIMIT 1");
+    await assert.rejects(workerPool.query("SELECT id FROM tenants"), (error) => error.code === "42501");
+    await workerPool.query("ROLLBACK");
+  } catch (error) {
+    await workerPool.query("ROLLBACK");
+    throw error;
+  }
+});
 
 test("registration creates an owner-scoped tenant and login returns only own memberships", async () => {
   assert.ok(first.tenant.id);
