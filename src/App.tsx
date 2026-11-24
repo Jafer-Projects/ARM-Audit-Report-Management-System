@@ -319,6 +319,7 @@ export default function App() {
   const [importCostBaseCurrency, setImportCostBaseCurrency] = useState("ETB");
   const [importCostPreview, setImportCostPreview] = useState<ImportCostResult | null>(null);
   const [sourceDocuments, setSourceDocuments] = useState<SourceDocumentMeta[]>([]);
+  const [previewRecord, setPreviewRecord] = useState<WorkspaceRecord | null>(null);
   const [invoiceLines, setInvoiceLines] = useState<InvoiceLineDraft[]>([]);
   const [notifications, setNotifications] = useState<WorkspaceNotification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);

@@ -1421,7 +1421,7 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
             return Err("Only the demo administrator or engagement manager can mark historical work reviewed.".into());
         }
         if let Some((_,existing_type,previous_status,previous_payload,_)) = exists.as_ref() {
-            if existing_type != input.record_type { return Err("Workspace record type mismatch.".into()); }
+            if existing_type.as_str() != input.record_type.as_str() { return Err("Workspace record type mismatch.".into()); }
             if ["Ready for review","Reviewed"].contains(&previous_status.as_str()) {
                 let previous: serde_json::Value = serde_json::from_str(previous_payload).unwrap_or_else(|_|json!({}));
                 if previous != payload {
@@ -1572,7 +1572,7 @@ pub fn save_record(input: RecordInput, state: State<'_, AppState>) -> Result<Wor
                     || old_values.3 != input.notes.as_deref().unwrap_or("") {
                     return Err("Submitted or terminal task content is immutable. Record a review note and return the task for correction instead of editing it.".into());
                 }
-                if previous_status != "Submitted" && input.status != previous_status {
+                if previous_status != "Submitted" && input.status.as_str() != previous_status.as_str() {
                     return Err("Completed and cancelled tasks are terminal and cannot be reopened or rewritten.".into());
                 }
             }
@@ -1894,7 +1894,7 @@ pub fn list_source_documents(record_id: String, state: State<'_, AppState>) -> R
 #[tauri::command]
 pub fn read_source_document(id: String, state: State<'_, AppState>) -> Result<SourceDocumentContent, String> {
     let db = state.database.lock().map_err(|_| "Database lock unavailable".to_string())?;
-    let (client_id, record_type, client_status, _) = db.connection.query_row(
+    let (client_id, record_type, client_status, _title): (String, String, String, String) = db.connection.query_row(
         "SELECT d.client_id,r.record_type,c.status,r.title
          FROM source_document d JOIN workspace_record r ON r.id=d.record_id
          JOIN client c ON c.id=d.client_id
