@@ -154,6 +154,8 @@ test("MFA enrollment requires password, recovery code is single-use and login re
  assert.ok(secret);
  const confirmed=await app.inject({method:"POST",url:"/v1/auth/mfa/confirm",headers:headers(),payload:{code:totp(secret)}});
  assert.equal(confirmed.statusCode,200,confirmed.body);
+ const mfaStatus=await app.inject({method:"GET",url:"/v1/auth/mfa/status",headers:headers()});
+ assert.equal(mfaStatus.statusCode,200);assert.equal(mfaStatus.json().enabled,true);
  const recovery=confirmed.json().recoveryCodes[0] as string;
  const loggedIn=await app.inject({method:"POST",url:"/v1/auth/login",payload:{email:firstEmail,password:firstPassword}});
  assert.equal(loggedIn.statusCode,200);assert.equal(loggedIn.json().mfaRequired,true);
