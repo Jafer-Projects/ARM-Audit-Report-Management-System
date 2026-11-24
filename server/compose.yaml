@@ -1,0 +1,60 @@
+services:
+  postgres:
+    image: postgres:16.8-bookworm
+    environment:
+      POSTGRES_DB: arm
+      POSTGRES_USER: arm_api
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the deployment environment}
+    volumes:
+      - arm-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U arm_api -d arm"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["sh", "-c", "node dist/migrate.js && node dist/index.js"]
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3000
+      DATABASE_URL: postgres://arm_api:${POSTGRES_PASSWORD}@postgres:5432/arm
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in the deployment environment}
+      ACCESS_TOKEN_TTL_SECONDS: 900
+      LOG_LEVEL: info
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["node", "dist/worker.js"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://arm_api:${POSTGRES_PASSWORD}@postgres:5432/arm
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in the deployment environment}
+      LOG_LEVEL: info
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  arm-postgres:
