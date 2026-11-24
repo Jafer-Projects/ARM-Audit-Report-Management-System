@@ -53,10 +53,13 @@ export async function register(input: { email: string; displayName: string; pass
     );
     const tenantId = tenant.rows[0].id as string;
     await client.query("SELECT set_config('app.tenant_id',$1,true)", [tenantId]);
-    await client.query(
-      "INSERT INTO tenant_memberships(tenant_id,user_id,role,status) VALUES($1,$2,'owner','active')",
+    const membership = await client.query(
+      "INSERT INTO tenant_memberships(tenant_id,user_id,role,status) VALUES($1,$2,'owner','active') RETURNING id",
       [tenantId,userId]
     );
+    const ownerRole = await client.query("INSERT INTO tenant_roles(tenant_id,role_key,display_name,is_system) VALUES($1,'owner','Owner',true) RETURNING id",[tenantId]);
+    await client.query("INSERT INTO tenant_role_permissions(tenant_id,role_id,permission_key) SELECT $1,$2,permission_key FROM permissions",[tenantId,ownerRole.rows[0].id]);
+    await client.query("INSERT INTO tenant_membership_roles(tenant_id,membership_id,role_id,assigned_by) VALUES($1,$2,$3,$4)",[tenantId,membership.rows[0].id,ownerRole.rows[0].id,userId]);
     const verificationToken = newVerificationToken();
     await enqueueVerificationEmail(client,userId,tenantId,user.rows[0].email,verificationToken);
     return {
