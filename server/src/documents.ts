@@ -19,9 +19,15 @@ export async function uploadDocument(userId:string,tenantId:string,input:{fileNa
   if(bytes.length===0||bytes.length>52_428_800) throw Object.assign(new Error("Document must be between 1 byte and 50 MiB"),{statusCode:400});
   const detected=detectMime(bytes);
   if(!detected||detected!==input.mediaType) throw Object.assign(new Error("File signature does not match an allowed PDF, JPEG or PNG media type"),{statusCode:415});
-  const fileName=input.fileName.replace(/[\\/\\x00-\\x1f]/g,"_").trim().slice(0,180);
+  const fileName=input.fileName.replace(/[\\/]/g,"_").replace(/[\\u0000-\\u001f\\u007f]/g,"_").trim().slice(0,180);
   if(!fileName) throw Object.assign(new Error("A safe filename is required"),{statusCode:400});
   const id=randomUUID(),objectKey=`${tenantId}/${id}`;
+  await withTenant(userId,tenantId,async(client)=>{
+    await assertPermission(client,userId,tenantId,"documents.upload");
+    if(input.engagementId && !(await client.query("SELECT 1 FROM audit_engagements WHERE tenant_id=$1 AND id=$2",[tenantId,input.engagementId])).rowCount) throw Object.assign(new Error("Engagement not found"),{statusCode:404});
+    if(input.workpaperId && !(await client.query("SELECT 1 FROM audit_workpapers WHERE tenant_id=$1 AND id=$2",[tenantId,input.workpaperId])).rowCount) throw Object.assign(new Error("Workpaper not found"),{statusCode:404});
+    if(input.reportId && !(await client.query("SELECT 1 FROM audit_reports WHERE tenant_id=$1 AND id=$2",[tenantId,input.reportId])).rowCount) throw Object.assign(new Error("Report not found"),{statusCode:404});
+  });
   await storeObject(objectKey,bytes);
   try {
     const result=await withTenant(userId,tenantId,async(client)=>{
@@ -71,7 +77,7 @@ export async function scanNextDocument(workerPool: {connect:()=>Promise<any>},cl
   try {
     await client.query("BEGIN");
     await client.query("SELECT set_config('app.worker','true',true)");
-    const found=await client.query("SELECT id,object_key,sha256 FROM document_objects WHERE scan_status='pending' OR (scan_status='scanning' AND scanned_at<now()-interval '5 minutes') ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1");
+    const found=await client.query("SELECT id,object_key,sha256 FROM document_objects WHERE scan_status='pending' OR (scan_status='scanning' AND (scanned_at IS NULL OR scanned_at<now()-interval '5 minutes')) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1");
     document=found.rows[0];
     if(!document) { await client.query("COMMIT"); return false; }
     await client.query("UPDATE document_objects SET scan_status='scanning',scanned_at=now() WHERE id=$1",[document.id]);
