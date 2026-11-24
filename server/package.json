@@ -12,7 +12,7 @@
     "start": "node dist/index.js",
     "start:worker": "node dist/worker.js",
     "migrate": "tsx src/migrate.ts",
-    "test": "npm run migrate && tsx --test tests/*.test.ts",
+    "test": "npm run migrate && npm run migrate && tsx --test tests/*.test.ts",
     "db:bootstrap-runtime": "node scripts/bootstrap-runtime-role.mjs"
   },
   "dependencies": {
