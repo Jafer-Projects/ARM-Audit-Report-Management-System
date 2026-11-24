@@ -258,9 +258,9 @@ test("cloud client directory preserves duplicate acknowledgement, row versions, 
  assert.equal(rejectedDuplicate.statusCode,409);
  const acknowledged=await app.inject({method:"POST",url:"/v1/clients",headers:headers(),payload:{...payload,display_name:"Second profile",duplicate_acknowledged:true}});
  assert.equal(acknowledged.statusCode,201,acknowledged.body);
- const updated=await app.inject({method:"POST",url:"/v1/clients",headers:headers(),payload:{...created.json(),display_name:"Updated Example Client",row_version:1}});
+ const updated=await app.inject({method:"POST",url:"/v1/clients",headers:headers(),payload:{...created.json(),display_name:"Updated Example Client",row_version:1,duplicate_acknowledged:true}});
  assert.equal(updated.statusCode,200,updated.body);assert.equal(updated.json().row_version,2);
- const stale=await app.inject({method:"POST",url:"/v1/clients",headers:headers(),payload:{...created.json(),display_name:"Stale Update",row_version:1}});
+ const stale=await app.inject({method:"POST",url:"/v1/clients",headers:headers(),payload:{...created.json(),display_name:"Stale Update",row_version:1,duplicate_acknowledged:true}});
  assert.equal(stale.statusCode,409);
  const archived=await app.inject({method:"POST",url:"/v1/clients/"+created.json().id+"/transition",headers:headers(),payload:{action:"archive",expectedVersion:2}});
  assert.equal(archived.statusCode,200,archived.body);assert.equal(archived.json().status,"archived");assert.equal(archived.json().row_version,3);
