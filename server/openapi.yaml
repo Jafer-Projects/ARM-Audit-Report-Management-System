@@ -183,6 +183,18 @@ paths:
       responses:
         "200": { description: Email verified }
         "400": { description: Invalid, expired or consumed verification token }
+  /v1/auth/verification/resend:
+    post:
+      tags: [Identity]
+      operationId: resendEmailVerification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [email], properties: { email: { type: string, format: email } } }
+      responses:
+        "200": { description: Non-enumerating verification resend acknowledgement }
+        "429": { description: Rate limit exceeded }
   /v1/auth/recovery/request:
     post:
       tags: [Identity]
