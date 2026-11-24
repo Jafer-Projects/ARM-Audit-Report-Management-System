@@ -78,3 +78,13 @@ test("refresh credentials are held by the native vault and tenant administration
   assert.match(admin, /\/v1\/tenant\/roles/);
   assert.match(admin, /\/v1\/tenant\/memberships/);
 });
+
+
+test("release desktop does not open demo SQLite or register demo and prototype commands", () => {
+  const native = readFileSync(new URL("../src-tauri/src/lib.rs", import.meta.url), "utf8");
+  assert.match(native, /if cfg!\(debug_assertions\)/);
+  assert.match(native, /Database::open\(app_data\.join\("arm-demo\.sqlite3"\)\)/);
+  assert.match(native, /Production binaries expose only native credential-vault operations/);
+  assert.match(native, /credential_vault::load_cloud_session/);
+  assert.match(native, /commands::initialize_workspace/);
+});
