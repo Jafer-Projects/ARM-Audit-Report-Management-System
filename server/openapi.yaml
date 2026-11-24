@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: ARM Cloud API
   version: 1.0.0
-  description: Initial authenticated cloud API and versioned offline synchronization contract.
+  description: Versioned cloud identity, tenant administration, audit/accounting domain, evidence and prototype offline synchronization contract.
 servers:
   - url: http://localhost:3000
     description: Local development only
@@ -11,6 +11,9 @@ tags:
   - name: Identity
   - name: Tenancy
   - name: Synchronization
+  - name: Audit
+  - name: Accounting
+  - name: Evidence
 paths:
   /health/live:
     get:
@@ -45,7 +48,7 @@ paths:
                 password: { type: string, minLength: 12, maxLength: 128 }
                 organizationName: { type: string, minLength: 2, maxLength: 200 }
       responses:
-        "201": { description: User, owner tenant, access token and refresh token created }
+        "201": { description: User and owner tenant created; email verification is required before a session is issued }
         "400": { description: Invalid request }
         "409": { description: Account already exists }
   /v1/auth/login:
@@ -168,6 +171,549 @@ paths:
         "400": { description: Invalid cursor or limit }
         "401": { description: Authentication required }
         "403": { description: Tenant membership denied }
+  /v1/auth/verify-email:
+    post:
+      tags: [Identity]
+      operationId: verifyEmail
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [token], properties: { token: { type: string, minLength: 32, maxLength: 128 } } }
+      responses:
+        "200": { description: Email verified }
+        "400": { description: Invalid, expired or consumed verification token }
+  /v1/auth/recovery/request:
+    post:
+      tags: [Identity]
+      operationId: requestPasswordRecovery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [email], properties: { email: { type: string, format: email } } }
+      responses:
+        "200": { description: Non-enumerating recovery acknowledgement }
+  /v1/auth/recovery/complete:
+    post:
+      tags: [Identity]
+      operationId: completePasswordRecovery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [token, password], properties: { token: { type: string }, password: { type: string, minLength: 12, maxLength: 128 } } }
+      responses:
+        "200": { description: Password reset and active sessions revoked }
+        "400": { description: Invalid or expired recovery token }
+  /v1/auth/mfa/enroll:
+    post:
+      tags: [Identity]
+      security: [{ bearerAuth: [] }]
+      operationId: beginMfaEnrollment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [password], properties: { password: { type: string } } }
+      responses:
+        "200": { description: TOTP enrollment secret and otpauth URI }
+        "401": { description: Current password incorrect }
+  /v1/auth/mfa/confirm:
+    post:
+      tags: [Identity]
+      security: [{ bearerAuth: [] }]
+      operationId: confirmMfaEnrollment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [code], properties: { code: { type: string, pattern: "^[0-9]{6}$" } } }
+      responses:
+        "200": { description: MFA enabled; one-time recovery codes returned once }
+        "400": { description: Invalid TOTP code }
+  /v1/auth/mfa/complete:
+    post:
+      tags: [Identity]
+      operationId: completeMfaLogin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [challengeToken, code], properties: { challengeToken: { type: string }, code: { type: string } } }
+      responses:
+        "200": { description: MFA challenge completed and session issued }
+        "401": { description: Invalid, expired or reused challenge/code }
+  /v1/auth/mfa/disable:
+    post:
+      tags: [Identity]
+      security: [{ bearerAuth: [] }]
+      operationId: disableMfa
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [password, code], properties: { password: { type: string }, code: { type: string, pattern: "^[0-9]{6}$" } } }
+      responses:
+        "200": { description: MFA disabled after password and fresh TOTP verification }
+        "401": { description: Reauthentication failed }
+  /v1/tenant/permissions:
+    get:
+      tags: [Tenancy]
+      security: [{ bearerAuth: [] }]
+      operationId: listPermissionCatalogue
+      parameters:
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Permission catalogue }
+  /v1/tenant/roles:
+    get:
+      tags: [Tenancy]
+      security: [{ bearerAuth: [] }]
+      operationId: listTenantRoles
+      parameters:
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Tenant role definitions and permission assignments }
+    post:
+      tags: [Tenancy]
+      security: [{ bearerAuth: [] }]
+      operationId: createTenantRole
+      parameters:
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [key, name, permissions], properties: { key: { type: string }, name: { type: string }, permissions: { type: array, items: { type: string } } } }
+      responses:
+        "201": { description: Tenant role created }
+        "403": { description: roles.manage permission required }
+  /v1/tenant/roles/{roleId}:
+    put:
+      tags: [Tenancy]
+      security: [{ bearerAuth: [] }]
+      operationId: renameTenantRole
+      parameters:
+        - in: path
+          name: roleId
+          required: true
+          schema: { type: string, format: uuid }
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [name], properties: { name: { type: string, minLength: 2, maxLength: 100 } } }
+      responses:
+        "200": { description: Role renamed }
+    delete:
+      tags: [Tenancy]
+      security: [{ bearerAuth: [] }]
+      operationId: deleteTenantRole
+      parameters:
+        - in: path
+          name: roleId
+          required: true
+          schema: { type: string, format: uuid }
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Unassigned custom role deleted }
+        "409": { description: Role is still assigned }
+  /v1/tenant/roles/{roleId}/permissions:
+    put:
+      tags: [Tenancy]
+      security: [{ bearerAuth: [] }]
+      operationId: replaceTenantRolePermissions
+      parameters:
+        - in: path
+          name: roleId
+          required: true
+          schema: { type: string, format: uuid }
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [permissions], properties: { permissions: { type: array, items: { type: string } } } }
+      responses:
+        "200": { description: Role permissions replaced }
+  /v1/tenant/members:
+    get:
+      tags: [Tenancy]
+      security: [{ bearerAuth: [] }]
+      operationId: listTenantMembers
+      parameters:
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Member directory, roles and membership status }
+  /v1/tenant/invitations:
+    get:
+      tags: [Tenancy]
+      security: [{ bearerAuth: [] }]
+      operationId: listTenantInvitations
+      parameters:
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Invitation status list }
+    post:
+      tags: [Tenancy]
+      security: [{ bearerAuth: [] }]
+      operationId: inviteTenantMember
+      parameters:
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [email, roleId], properties: { email: { type: string, format: email }, roleId: { type: string, format: uuid } } }
+      responses:
+        "201": { description: Invitation created and email queued }
+  /v1/tenant/invitations/accept:
+    post:
+      tags: [Tenancy]
+      security: [{ bearerAuth: [] }]
+      operationId: acceptTenantInvitation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [token], properties: { token: { type: string } } }
+      responses:
+        "200": { description: Invitation accepted by verified matching email }
+        "403": { description: Verified invitation email must match caller }
+  /v1/tenant/invitations/{id}/revoke:
+    post:
+      tags: [Tenancy]
+      security: [{ bearerAuth: [] }]
+      operationId: revokeTenantInvitation
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Pending invitation revoked }
+  /v1/tenant/memberships/{membershipId}/roles:
+    post:
+      tags: [Tenancy]
+      security: [{ bearerAuth: [] }]
+      operationId: assignMemberRole
+      parameters:
+        - in: path
+          name: membershipId
+          required: true
+          schema: { type: string, format: uuid }
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [roleId], properties: { roleId: { type: string, format: uuid } } }
+      responses:
+        "200": { description: Role assigned }
+  /v1/tenant/memberships/{membershipId}/roles/{roleId}:
+    delete:
+      tags: [Tenancy]
+      security: [{ bearerAuth: [] }]
+      operationId: removeMemberRole
+      parameters:
+        - in: path
+          name: membershipId
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: roleId
+          required: true
+          schema: { type: string, format: uuid }
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Role assignment removed }
+  /v1/tenant/memberships/{membershipId}/status:
+    patch:
+      tags: [Tenancy]
+      security: [{ bearerAuth: [] }]
+      operationId: changeMemberStatus
+      parameters:
+        - in: path
+          name: membershipId
+          required: true
+          schema: { type: string, format: uuid }
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [status], properties: { status: { type: string, enum: [active, suspended, revoked] } } }
+      responses:
+        "200": { description: Membership status changed }
+  /v1/audit/engagements:
+    get:
+      tags: [Audit]
+      security: [{ bearerAuth: [] }]
+      operationId: listAuditEngagements
+      parameters:
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Tenant audit engagements }
+    post:
+      tags: [Audit]
+      security: [{ bearerAuth: [] }]
+      operationId: createAuditEngagement
+      parameters:
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [clientReference, title, periodStart, periodEnd, framework], properties: { clientReference: { type: string }, title: { type: string }, periodStart: { type: string, format: date }, periodEnd: { type: string, format: date }, framework: { type: string } } }
+      responses:
+        "201": { description: Engagement created }
+  /v1/audit/workpapers:
+    post:
+      tags: [Audit]
+      security: [{ bearerAuth: [] }]
+      operationId: createAuditWorkpaper
+      parameters:
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [engagementId, reference, title, procedure], properties: { engagementId: { type: string, format: uuid }, reference: { type: string }, title: { type: string }, procedure: { type: string } } }
+      responses:
+        "201": { description: Workpaper created }
+  /v1/audit/workpapers/{id}/transition:
+    post:
+      tags: [Audit]
+      security: [{ bearerAuth: [] }]
+      operationId: transitionAuditWorkpaper
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [expectedVersion, action], properties: { expectedVersion: { type: integer, minimum: 1 }, action: { type: string, enum: [prepare, review, approve, reopen] }, conclusion: { type: string } } }
+      responses:
+        "200": { description: Workpaper transition recorded }
+        "409": { description: Invalid workflow transition or stale version }
+  /v1/audit/reports:
+    post:
+      tags: [Audit]
+      security: [{ bearerAuth: [] }]
+      operationId: createAuditReport
+      parameters:
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [engagementId, reportType, title, body], properties: { engagementId: { type: string, format: uuid }, reportType: { type: string }, title: { type: string }, body: { type: object } } }
+      responses:
+        "201": { description: Audit report draft created }
+  /v1/audit/reports/{id}/transition:
+    post:
+      tags: [Audit]
+      security: [{ bearerAuth: [] }]
+      operationId: transitionAuditReport
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [expectedVersion, action], properties: { expectedVersion: { type: integer, minimum: 1 }, action: { type: string, enum: [prepare, review, approve, issue, withdraw] } } }
+      responses:
+        "200": { description: Independent report workflow transition }
+        "409": { description: Invalid transition or stale version }
+  /v1/accounting/accounts:
+    get:
+      tags: [Accounting]
+      security: [{ bearerAuth: [] }]
+      operationId: listAccounts
+      parameters:
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Tenant chart of accounts }
+    post:
+      tags: [Accounting]
+      security: [{ bearerAuth: [] }]
+      operationId: createAccount
+      parameters:
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [code, name, type, currency], properties: { code: { type: string }, name: { type: string }, type: { type: string, enum: [asset, liability, equity, income, expense] }, currency: { type: string, pattern: "^[A-Z]{3}$" } } }
+      responses:
+        "201": { description: Chart of accounts entry created }
+  /v1/accounting/journals:
+    post:
+      tags: [Accounting]
+      security: [{ bearerAuth: [] }]
+      operationId: createJournal
+      parameters:
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [journalNumber, date, description, currency, lines], properties: { journalNumber: { type: string }, date: { type: string, format: date }, description: { type: string }, currency: { type: string, pattern: "^[A-Z]{3}$" }, lines: { type: array, minItems: 2, maxItems: 500, items: { type: object } } } }
+      responses:
+        "201": { description: Balanced draft journal created }
+        "400": { description: Journal lines do not balance }
+  /v1/accounting/journals/{id}/post:
+    post:
+      tags: [Accounting]
+      security: [{ bearerAuth: [] }]
+      operationId: postJournal
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Journal posted by a different user than preparer }
+        "409": { description: Journal is not a valid draft }
+  /v1/accounting/journals/{id}/reverse:
+    post:
+      tags: [Accounting]
+      security: [{ bearerAuth: [] }]
+      operationId: reverseJournal
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [journalNumber, date, description], properties: { journalNumber: { type: string }, date: { type: string, format: date }, description: { type: string } } }
+      responses:
+        "201": { description: Reversal draft created; it requires a separate posting action }
+        "409": { description: Original is not posted or already reversed }
+  /v1/documents:
+    post:
+      tags: [Evidence]
+      security: [{ bearerAuth: [] }]
+      operationId: uploadEvidenceDocument
+      parameters:
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [fileName, mediaType, contentBase64], properties: { fileName: { type: string }, mediaType: { type: string, enum: [application/pdf, image/jpeg, image/png] }, contentBase64: { type: string }, engagementId: { type: string, format: uuid }, workpaperId: { type: string, format: uuid }, reportId: { type: string, format: uuid } } }
+      responses:
+        "202": { description: Private object stored; malware scan pending }
+        "415": { description: Unsupported or mismatched file signature }
+  /v1/documents/{id}/content:
+    get:
+      tags: [Evidence]
+      security: [{ bearerAuth: [] }]
+      operationId: downloadCleanEvidenceDocument
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Verified clean evidence content }
+        "423": { description: Document is pending or failed malware scan }
+
 components:
   securitySchemes:
     bearerAuth:
