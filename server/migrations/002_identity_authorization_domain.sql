@@ -285,6 +285,58 @@ CREATE POLICY document_objects_worker_access ON document_objects USING(current_s
 GRANT SELECT,UPDATE ON email_outbox TO arm_worker;
 GRANT SELECT,UPDATE ON document_objects TO arm_worker;
 
+
+CREATE TABLE auth_mfa_challenges (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  challenge_hash text NOT NULL UNIQUE,
+  expires_at timestamptz NOT NULL,
+  consumed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE auth_mfa_challenges ENABLE ROW LEVEL SECURITY;
+ALTER TABLE auth_mfa_challenges FORCE ROW LEVEL SECURITY;
+CREATE POLICY mfa_challenges_self ON auth_mfa_challenges USING(user_id::text=current_setting('app.user_id',true)) WITH CHECK(user_id::text=current_setting('app.user_id',true));
+
+CREATE OR REPLACE FUNCTION public.arm_lookup_verification(p_hash text)
+RETURNS TABLE(token_id uuid,user_id uuid,tenant_id uuid,email text)
+LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog,public AS $fn$
+ SELECT v.id,u.id,m.tenant_id,u.email FROM public.email_verification_tokens v
+ JOIN public.users u ON u.id=v.user_id
+ JOIN public.tenant_memberships m ON m.user_id=u.id AND m.status='active'
+ WHERE v.token_hash=p_hash AND v.consumed_at IS NULL AND v.expires_at>now()
+ ORDER BY m.created_at LIMIT 1
+$fn$;
+CREATE OR REPLACE FUNCTION public.arm_lookup_recovery(p_hash text)
+RETURNS TABLE(token_id uuid,user_id uuid)
+LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog,public AS $fn$
+ SELECT r.id,u.id FROM public.password_recovery_tokens r JOIN public.users u ON u.id=r.user_id
+ WHERE r.token_hash=p_hash AND r.consumed_at IS NULL AND r.expires_at>now() AND u.status='active'
+$fn$;
+CREATE OR REPLACE FUNCTION public.arm_lookup_account(p_email text)
+RETURNS TABLE(user_id uuid,tenant_id uuid,email text)
+LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog,public AS $fn$
+ SELECT u.id,m.tenant_id,u.email FROM public.users u JOIN public.tenant_memberships m ON m.user_id=u.id AND m.status='active'
+ WHERE u.email_normalized=lower(btrim(p_email)) AND u.status='active' ORDER BY m.created_at LIMIT 1
+$fn$;
+REVOKE ALL ON FUNCTION public.arm_lookup_verification(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.arm_lookup_recovery(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.arm_lookup_account(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.arm_lookup_verification(text) TO arm_runtime;
+GRANT EXECUTE ON FUNCTION public.arm_lookup_recovery(text) TO arm_runtime;
+GRANT EXECUTE ON FUNCTION public.arm_lookup_account(text) TO arm_runtime;
+
+ALTER TABLE auth_mfa_challenges ENABLE ROW LEVEL SECURITY;
+ALTER TABLE auth_mfa_challenges FORCE ROW LEVEL SECURITY;
+CREATE POLICY auth_mfa_challenge_self ON auth_mfa_challenges USING(user_id::text=current_setting('app.user_id',true)) WITH CHECK(user_id::text=current_setting('app.user_id',true));
+
+DO $arm$
+BEGIN
+ IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='arm_runtime') THEN
+  GRANT SELECT,INSERT,UPDATE ON auth_mfa_challenges TO arm_runtime;
+ END IF;
+END $arm$;
+
 -- Append-only accounting postings and domain history.
 CREATE OR REPLACE FUNCTION arm_prevent_posted_journal_mutation() RETURNS trigger LANGUAGE plpgsql AS $fn$
 BEGIN
