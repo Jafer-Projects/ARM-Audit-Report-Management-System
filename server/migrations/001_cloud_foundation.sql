@@ -181,8 +181,8 @@ BEGIN
 END $arm$;
 
 CREATE POLICY jobs_worker_access ON jobs
-  USING (current_setting('app.worker', true) = 'true')
-  WITH CHECK (current_setting('app.worker', true) = 'true');
+  USING (current_user = 'arm_worker' AND current_setting('app.worker', true) = 'true')
+  WITH CHECK (current_user = 'arm_worker' AND current_setting('app.worker', true) = 'true');
 
 CREATE OR REPLACE FUNCTION reject_immutable_row_mutation() RETURNS trigger
 LANGUAGE plpgsql AS $fn$
