@@ -6,9 +6,11 @@
 
 Build software to help practitioners do familiar work. Do not wait for auditors to write complete software specifications. Observe the work, build a small workflow, demonstrate it, collect corrections, and update the requirements. Keep unresolved assumptions explicit.
 
-A sprint/increment should end with something a practitioner can try, not only an internal technical layer. Foundational technical work may precede the UI where necessary, but each vertical slice should connect user action to stored data, validation, evidence and an observable outcome.
+Each increment should produce a demonstrable vertical slice for practitioner feedback, not only an internal technical layer. Foundational technical work may precede the UI where necessary, but each slice should connect user action to stored data, validation, evidence and an observable outcome. Demonstration and preparation of test cases are progress checkpoints only; formal test execution is deferred until Increment 5 is implemented. No increment is independently accepted or passed. All six increments are delivered on one branch and one PR (#2), and acceptance is decided collectively only after Increment 5 and full-system regression.
 
 ## 2. Initial increments
+
+**Binding delivery rule:** Increments 0–5 are one implementation programme on branch `implementation/increments-0-to-5` and PR #1. Do not split them into separate implementation branches or PRs. Prepare relevant tests, fixtures and acceptance evidence mappings during development, but defer execution of the formal Increments 0–5 verification/test program until Increment 5 implementation is complete. Do not assign individual increment acceptance/pass status. The sole acceptance decision is made after Increment 5, using the integrated Increments 0–5 acceptance gate. A failed criterion blocks the collective gate; fix it and rerun the affected tests plus full regression. This rule does not waive separate professional, security, legal or production-release approvals.
 
 ### Increment 0 — Working shell and safe local workspace
 - Windows desktop shell and simple navigation.
@@ -120,12 +122,19 @@ Every feedback item is classified as:
 
 Prioritize by professional risk, user impact, frequency, effort and dependency. Do not implement a request that weakens authorization, auditability, financial integrity or legal compliance without formal review. Record why a suggestion is accepted, deferred or rejected.
 
-## 7. Exit from initial development
+## 7. Collective acceptance after Increment 5
 
-The first pilot candidate is ready only when:
+There is no individual increment exit/acceptance decision. The first controlled synthetic-data release candidate is assessed only after all six increments (0–5) have been implemented on the same branch and PR. It is ready for collective acceptance only when:
 - A complete chosen workflow passes acceptance tests.
 - Practitioners have demonstrated it and recorded feedback.
 - Role boundaries and audit history are tested.
 - Offline/restart/sync behavior is demonstrated for the workflow.
 - No unresolved critical defect or unsafe tax/accounting assumption remains.
 - Applicable real-data and operational gates are approved before any real client data is introduced.
+
+
+## Binding override — prototype build and deferred collective verification
+
+The product owner has issued a later, explicit decision recorded in [PR #1](https://github.com/Jafer-Projects/ARM-Audit-Report-Management-System/pull/1) and [Prototype Build Binding Contract](prototype-build-binding-contract.md). ARM is a controlled prototype using synthetic data. All implementation remains on `implementation/increments-0-to-5` in PR #1. Close the outstanding Increments 0–5 implementation gaps to the best practical professional standard, preserving existing behavior and avoiding scope expansion.
+
+**This later decision supersedes any earlier wording in this file that requires continuous test execution or increment-level verification.** Formal verification and testing of the integrated Increments 0–5 delivery occur only after Increment 5 implementation is complete. Do not declare any increment accepted, passed, or independently complete. Test plans and fixtures may be prepared during implementation, but partial checks must not be presented as acceptance. This timing decision does not permit test deletion, assertion weakening, or unsupported claims. The one collective gate and separate production/legal/security/professional gates remain mandatory.

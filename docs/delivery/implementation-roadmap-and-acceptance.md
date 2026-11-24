@@ -21,7 +21,7 @@ The first increments are defined in [Phase 1 incremental development and feedbac
 5. Staff tasks and review workflow.
 6. Import-cost worksheet discovery and prototype only after required cost-input brief is obtained.
 
-A vertical slice should be demonstrated to practitioners at the end of each increment. Their corrections update the PRD, workflow specification, acceptance examples and backlog.
+Demonstrate vertical slices for product-owner feedback and prepare their test plans/fixtures during implementation. Do not execute the formal Increments 0–5 verification/test program until Increment 5 implementation is complete. Do not accept or pass increments individually. All Increments 0–5 must be implemented on branch `implementation/increments-0-to-5` and PR #1. The single collective acceptance decision occurs only after Increment 5, when the integrated system is tested against every Increments 0–5 requirement and cross-increment workflow. A failure in any criterion blocks the collective gate. Separate legal, security, professional and production-release gates remain in force.
 
 ## 4. Broader product phases
 
@@ -130,6 +130,8 @@ Synthetic data is required for development and ordinary demos. Real client data 
 
 ## 7. Definition of done
 
+For the initial Increments 0–5 programme, the criteria below are evaluated as one integrated acceptance decision after Increment 5. They are not increment-by-increment release gates.
+
 A feature is complete only when:
 - Requirements and role boundaries are documented.
 - Server and local validation exist where applicable.
@@ -140,3 +142,10 @@ A feature is complete only when:
 - Accessibility and usability are reviewed with practitioners.
 - Documentation, acceptance evidence and operational notes are updated.
 - CI passes and acceptance evidence is attached to the work item.
+
+
+## Binding override — prototype build and deferred collective verification
+
+The product owner has issued a later, explicit decision recorded in [PR #1](https://github.com/Jafer-Projects/ARM-Audit-Report-Management-System/pull/1) and [Prototype Build Binding Contract](prototype-build-binding-contract.md). ARM is a controlled prototype using synthetic data. All implementation remains on `implementation/increments-0-to-5` in PR #1. Close the outstanding Increments 0–5 implementation gaps to the best practical professional standard, preserving existing behavior and avoiding scope expansion.
+
+**This later decision supersedes any earlier wording in this file that requires continuous test execution or increment-level verification.** Formal verification and testing of the integrated Increments 0–5 delivery occur only after Increment 5 implementation is complete. Do not declare any increment accepted, passed, or independently complete. Test plans and fixtures may be prepared during implementation, but partial checks must not be presented as acceptance. This timing decision does not permit test deletion, assertion weakening, or unsupported claims. The one collective gate and separate production/legal/security/professional gates remain mandatory.

@@ -1,0 +1,115 @@
+name: ARM application validation
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - "implementation/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Every independent check is a separate job. GitHub schedules these jobs in
+# parallel; a failure in one job does not cancel or suppress the others.
+# The workflow conclusion remains failure if any required job fails.
+jobs:
+  frontend-typecheck:
+    name: Frontend TypeScript typecheck
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.16.0"
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: TypeScript diagnostics
+        run: npm run typecheck
+
+  frontend-tests:
+    name: Frontend domain contract tests
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.16.0"
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Run domain contract tests
+        run: npm test
+
+  frontend-build:
+    name: Frontend production build
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.16.0"
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Build frontend independently of typecheck
+        run: npm run build:frontend
+
+  rust-format:
+    name: Rust formatting
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.90.0"
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+
+  rust-tests:
+    name: Rust unit and module tests
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.90.0"
+          targets: x86_64-pc-windows-msvc
+      - name: Run Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+  rust-clippy:
+    name: Rust Clippy lint
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.90.0"
+          components: clippy
+          targets: x86_64-pc-windows-msvc
+      - name: Run Clippy for all targets
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+
+  windows-desktop-build:
+    name: Windows Tauri desktop build
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.90.0"
+          targets: x86_64-pc-windows-msvc
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.16.0"
+      - name: Install frontend dependencies
+        run: npm install --no-audit --no-fund
+      - name: Build Windows desktop application without installer
+        run: npm run tauri -- build --no-bundle
