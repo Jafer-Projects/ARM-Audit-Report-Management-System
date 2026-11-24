@@ -35,7 +35,14 @@ before(async () => {
 
 after(async () => { await app.close(); await workerPool.end(); await migrationPool.end(); });
 
-test("migration role is non-superuser and owns the migration ledger", async () => {\n  const role = await migrationPool.query("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user");\n  assert.equal(role.rows[0].rolsuper, false);\n  assert.equal(role.rows[0].rolbypassrls, false);\n  await migrationPool.query("SELECT version FROM schema_migrations");\n});\n\ntest("API role is non-superuser and tenant-scoped tables are protected by RLS", async () => {
+test("migration role is non-superuser and owns the migration ledger", async () => {
+  const role = await migrationPool.query("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user");
+  assert.equal(role.rows[0].rolsuper, false);
+  assert.equal(role.rows[0].rolbypassrls, false);
+  await migrationPool.query("SELECT version FROM schema_migrations");
+});
+
+test("API role is non-superuser and tenant-scoped tables are protected by RLS", async () => {
   const role = await pool.query("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user");
   assert.equal(role.rows[0].rolsuper, false);
   assert.equal(role.rows[0].rolbypassrls, false);
