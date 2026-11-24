@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
-: "\${ARM_RUNTIME_PASSWORD:?ARM_RUNTIME_PASSWORD is required}"
-: "\${ARM_WORKER_PASSWORD:?ARM_WORKER_PASSWORD is required}"
+: "${ARM_RUNTIME_PASSWORD:?ARM_RUNTIME_PASSWORD is required}"
+: "${ARM_WORKER_PASSWORD:?ARM_WORKER_PASSWORD is required}"
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" -v runtime_password="$ARM_RUNTIME_PASSWORD" -v worker_password="$ARM_WORKER_PASSWORD" <<'SQL'
 DO $$
 BEGIN
