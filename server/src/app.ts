@@ -129,7 +129,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   } }, async (request,reply) => {
     const parsed = z.object({ code: z.string().regex(/^\\d{6}$/) }).safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error" });
-    return disableMfa((request as AuthenticatedRequest).auth!.sub,parsed.data.code);
+    return disableMfa((request as AuthenticatedRequest).auth!.sub,parsed.data.password,parsed.data.code);
   });
 
   app.post("/v1/auth/logout", { preHandler: async (request) => {
