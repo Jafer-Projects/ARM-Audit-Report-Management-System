@@ -114,3 +114,10 @@ Test network loss at every stage, duplicate events, process termination, power l
 ## 11. Protocol evolution
 
 Every event and payload is versioned. New desktop releases must handle supported older server responses and migration paths. Define minimum supported desktop version and a safe upgrade gate. Never deploy a server schema change that makes supported offline clients unable to synchronize without a documented compatibility strategy.
+
+
+## Cloud synchronization API implementation status
+
+The first server contract is exposed at `POST /v1/sync/events` and `GET /v1/sync/events`, documented in `server/openapi.yaml`. Push accepts bounded batches of versioned `aggregate.upsert` envelopes, verifies the authenticated user's active membership in the selected tenant, uses tenant-scoped transactions and advisory locking, checks aggregate base versions, and persists idempotency outcomes. Accepted events receive a server-side monotonic sequence used as the pull cursor. Repeated idempotency keys return the recorded result; stale base versions return explicit conflicts.
+
+This is an initial transport and persistence contract, not the complete desktop sync coordinator. The current client does not yet write business changes and outbox rows atomically, manage device identities/offline leases, upload resumable documents, negotiate protocol capabilities, apply pull events locally, or present a conflict-resolution workspace. Domain-specific event validators and authorization must replace generic JSON payload acceptance before authoritative financial or professional records use this path. Never mark a desktop event synchronized until the server acknowledgment is durably received and applied.
