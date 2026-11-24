@@ -123,6 +123,28 @@ test("role administration and organization invitation acceptance are tenant scop
  assert.equal(context.statusCode,200,context.body);
  const assignment=await app.inject({method:"POST",url:"/v1/tenant/memberships/"+accepted.json().membership_id+"/roles",headers:headers(),payload:{roleId:role.json().id}});
  assert.equal(assignment.statusCode,200,assignment.body);
+ const members=await app.inject({method:"GET",url:"/v1/tenant/members",headers:headers()});
+ assert.equal(members.statusCode,200,members.body);
+ assert.equal(members.json().members.length,2);
+ assert.ok(members.json().members.some((member)=>member.email===secondEmail));
+ const permissions=await app.inject({method:"GET",url:"/v1/tenant/permissions",headers:headers()});
+ assert.equal(permissions.statusCode,200);assert.ok(permissions.json().permissions.some((permission)=>permission.permission_key==="accounting.post"));
+ const tempRole=await app.inject({method:"POST",url:"/v1/tenant/roles",headers:headers(),payload:{key:"temporary_role",name:"Temporary Role",permissions:["engagements.read"]}});
+ assert.equal(tempRole.statusCode,201);
+ const renamed=await app.inject({method:"PUT",url:"/v1/tenant/roles/"+tempRole.json().id,headers:headers(),payload:{name:"Renamed Temporary Role"}});
+ assert.equal(renamed.statusCode,200);
+ const deleted=await app.inject({method:"DELETE",url:"/v1/tenant/roles/"+tempRole.json().id,headers:headers()});
+ assert.equal(deleted.statusCode,200);
+ const pendingInvite=await app.inject({method:"POST",url:"/v1/tenant/invitations",headers:headers(),payload:{email:"revoked-"+randomUUID()+"@example.test",roleId:role.json().id}});
+ assert.equal(pendingInvite.statusCode,201);
+ const revoked=await app.inject({method:"POST",url:"/v1/tenant/invitations/"+pendingInvite.json().id+"/revoke",headers:headers()});
+ assert.equal(revoked.statusCode,200);
+ const suspended=await app.inject({method:"PATCH",url:"/v1/tenant/memberships/"+accepted.json().membership_id+"/status",headers:headers(),payload:{status:"suspended"}});
+ assert.equal(suspended.statusCode,200);
+ const blocked=await app.inject({method:"GET",url:"/v1/tenant/context",headers:{authorization:"Bearer "+second.accessToken,"x-tenant-id":first.tenant.id}});
+ assert.equal(blocked.statusCode,403);
+ const reactivated=await app.inject({method:"PATCH",url:"/v1/tenant/memberships/"+accepted.json().membership_id+"/status",headers:headers(),payload:{status:"active"}});
+ assert.equal(reactivated.statusCode,200);
 });
 
 test("MFA enrollment requires password, recovery code is single-use and login requires MFA",async()=>{
