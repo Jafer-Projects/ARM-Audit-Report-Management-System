@@ -86,7 +86,8 @@ export async function login(email: string, password: string) {
     throw Object.assign(new Error("Email or password is incorrect"), { statusCode: 401 });
   }
   return inTransaction(async (client) => {
-    const sessionId = randomBytes(16).toString("hex");
+    await client.query("SELECT set_config('app.user_id', $1, true)", [user.id]);
+    const sessionId = randomUUID();
     const refreshToken = randomBytes(48).toString("base64url");
     await client.query(
       "INSERT INTO auth_sessions(id, user_id, refresh_token_hash, expires_at) VALUES ($1, $2, $3, $4)",
