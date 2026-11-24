@@ -7,7 +7,10 @@ const migrationPool = new pg.Pool({ connectionString: migrationUrl, max: 2 });
 const directory = new URL("../migrations/", import.meta.url);
 const files = (await readdir(directory)).filter((name) => name.endsWith(".sql")).sort();
 const client = await migrationPool.connect();
+let migrationLockAcquired = false;
 try {
+  await client.query("SELECT pg_advisory_lock(hashtext('arm-schema-migrations'))");
+  migrationLockAcquired = true;
   await client.query("CREATE TABLE IF NOT EXISTS schema_migrations (version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())");
   for (const file of files) {
     const exists = await client.query("SELECT 1 FROM schema_migrations WHERE version = $1", [file]);
@@ -25,6 +28,7 @@ try {
     }
   }
 } finally {
+  if (migrationLockAcquired) await client.query("SELECT pg_advisory_unlock(hashtext('arm-schema-migrations'))");
   client.release();
   await migrationPool.end();
 }
