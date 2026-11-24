@@ -63,7 +63,7 @@ mod platform {
         let credential = unsafe { &*pointer };
         let raw = if credential.credential_blob_size as usize > MAX_SECRET_BYTES {
             Err("Stored cloud session exceeds the credential-vault size limit".to_string())
-        } else if credential.credential_blob_size > 0 && credential.credential_blob.is_null() {
+        } else if credential.credential_blob_size == 0 || credential.credential_blob.is_null() {
             Err("Stored cloud session is corrupt".to_string())
         } else {
             let bytes = unsafe { std::slice::from_raw_parts(credential.credential_blob, credential.credential_blob_size as usize) };

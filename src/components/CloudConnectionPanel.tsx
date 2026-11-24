@@ -57,7 +57,7 @@ export function CloudConnectionPanel({onClose}:Props){
    await secureSession.save({apiBaseUrl:api,selectedTenantId,session:result});
    setSession(result);setTenantId(selectedTenantId);
    setMfaEnabled((await cloudAuth.mfaStatus(api,result.accessToken)).enabled);
-   setStatus(await getLocalSyncStatus());setMessage("Cloud session established in memory for this application session.");
+   setStatus(await getLocalSyncStatus());setMessage("Cloud session established and credentials stored in Windows Credential Manager.");
   });
  }
  async function completeMfa(event:FormEvent){
