@@ -64,6 +64,8 @@ async function runOnce(): Promise<boolean> {
       );
     });
     console.error(JSON.stringify({ level: "error", workerId, jobId: job.id, attempts: job.attempts, terminal, error: message }));
+  } finally {
+    clearInterval(heartbeat);
   }
   return true;
 }
