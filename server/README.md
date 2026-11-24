@@ -48,7 +48,8 @@ The OpenAPI contract is in `openapi.yaml`.
 - Passwords are stored using Node's scrypt KDF; refresh tokens are stored only as SHA-256 digests.
 - Access tokens are HMAC-SHA-256 signed, short-lived, and checked against a revocable server-side session on every authenticated request.
 - Tenant context comes from a request header but is never trusted by itself: active membership is checked inside a transaction.
-- Tenant-owned tables enforce PostgreSQL row-level security using transaction-local user and tenant context.
+- Tenant-owned tables enforce PostgreSQL row-level security using transaction-local user and tenant context; active membership is also checked inside the RLS policy.
+- Separate non-superuser roles isolate API runtime table grants, worker queue access and schema migration ownership. The API cannot read the migration ledger or worker queue; the worker cannot read tenant identity or business tables.
 - Sync delivery is at-least-once. Inbox uniqueness, advisory locking and aggregate base versions make retries safe and stale updates explicit.
 - Audit and sync inbox rows are append-only at the database trigger layer.
 
