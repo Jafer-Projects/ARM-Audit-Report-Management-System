@@ -23,6 +23,7 @@ const envSchema=z.object({
  ACCESS_TOKEN_TTL_SECONDS:z.coerce.number().int().min(60).max(3600).default(900),
  LOG_LEVEL:z.enum(["fatal","error","warn","info","debug","trace","silent"]).default("info"),
  PUBLIC_APP_URL:z.string().url().default("http://localhost:1420"),
+ CORS_ORIGINS:z.string().default("tauri://localhost,http://tauri.localhost,https://tauri.localhost,http://localhost:1420"),
  EMAIL_PROVIDER_URL:z.string().url().optional(),
  EMAIL_PROVIDER_API_KEY:z.string().min(1).optional(),
  EMAIL_FROM:z.string().email().default("no-reply@example.invalid"),
