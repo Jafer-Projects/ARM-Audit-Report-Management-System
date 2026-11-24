@@ -63,7 +63,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     }
   });
 
-  app.post("/v1/auth/register", { config: { rateLimit: { max: 8, timeWindow: "1 minute" } } }, async (request, reply) => {
+  app.post("/v1/auth/register", { config: { rateLimit: { max: 5, timeWindow: "15 minutes" } } }, async (request, reply) => {
     const parsed = registerSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
     try {
@@ -86,7 +86,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     return rotateRefreshToken(parsed.data.refreshToken);
   });
 
-  app.post("/v1/auth/verify-email", async (request, reply) => {
+  app.post("/v1/auth/verify-email", { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } }, async (request, reply) => {
     const parsed = z.object({ token: z.string().min(32).max(128) }).safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error" });
     return verifyEmailAddress(parsed.data.token);
@@ -116,7 +116,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     return completeMfaLogin(parsed.data.challengeToken,parsed.data.code);
   });
 
-  app.post("/v1/auth/mfa/enroll", { preHandler: async (request) => {
+  app.post("/v1/auth/mfa/enroll", { config: { rateLimit: { max: 5, timeWindow: "15 minutes" } }, preHandler: async (request) => {
     (request as AuthenticatedRequest).auth = await authenticate(request);
   } }, async (request,reply) => {
     const parsed=z.object({password:z.string().min(1).max(128)}).safeParse(request.body);
@@ -125,7 +125,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     return beginMfaEnrollment(auth.sub,auth.sub,parsed.data.password);
   });
 
-  app.post("/v1/auth/mfa/confirm", { preHandler: async (request) => {
+  app.post("/v1/auth/mfa/confirm", { config: { rateLimit: { max: 8, timeWindow: "1 minute" } }, preHandler: async (request) => {
     (request as AuthenticatedRequest).auth = await authenticate(request);
   } }, async (request,reply) => {
     const parsed=z.object({code:z.string().regex(/^\d{6}$/)}).safeParse(request.body);
@@ -133,7 +133,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     return confirmMfaEnrollment((request as AuthenticatedRequest).auth!.sub,parsed.data.code);
   });
 
-  app.post("/v1/auth/mfa/disable", { preHandler: async (request) => {
+  app.post("/v1/auth/mfa/disable", { config: { rateLimit: { max: 5, timeWindow: "15 minutes" } }, preHandler: async (request) => {
     (request as AuthenticatedRequest).auth = await authenticate(request);
   } }, async (request,reply) => {
     const parsed=z.object({password:z.string().min(1).max(128),code:z.string().regex(/^\d{6}$/)}).safeParse(request.body);
@@ -213,7 +213,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     return assignMemberRole(auth.sub,tenantId(request as AuthenticatedRequest),params.membershipId,parsed.data.roleId);
   });
 
-  app.post("/v1/tenant/invitations", { preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request,reply) => {
+  app.post("/v1/tenant/invitations", { config: { rateLimit: { max: 10, timeWindow: "1 hour" } }, preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request,reply) => {
     const parsed=z.object({email:z.string().email().max(254),roleId:z.string().uuid()}).safeParse(request.body);
     if(!parsed.success) return reply.code(400).send({error:"validation_error"});
     const auth=(request as AuthenticatedRequest).auth!;
