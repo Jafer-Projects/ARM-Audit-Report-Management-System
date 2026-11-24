@@ -75,10 +75,11 @@ CREATE TABLE sync_inbox (
   outcome text NOT NULL CHECK (outcome IN ('accepted', 'conflict', 'rejected')),
   outcome_detail jsonb NOT NULL DEFAULT '{}'::jsonb,
   received_at timestamptz NOT NULL DEFAULT now(),
+  received_seq bigserial NOT NULL UNIQUE,
   UNIQUE (tenant_id, idempotency_key),
   UNIQUE (tenant_id, event_id)
 );
-CREATE INDEX sync_inbox_received_idx ON sync_inbox(tenant_id, received_at);
+CREATE INDEX sync_inbox_received_idx ON sync_inbox(tenant_id, received_seq);
 
 CREATE TABLE audit_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -112,7 +113,7 @@ CREATE INDEX jobs_claim_idx ON jobs(status, available_at, created_at);
 ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tenants FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenants_select ON tenants FOR SELECT
-  USING (id::text = current_setting('app.tenant_id', true));
+  USING (id::text = current_setting('app.tenant_id', true) OR created_by::text = current_setting('app.user_id', true));
 CREATE POLICY tenants_insert ON tenants FOR INSERT
   WITH CHECK (created_by::text = current_setting('app.user_id', true));
 
