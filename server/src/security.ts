@@ -46,8 +46,8 @@ function totp(secret: string, time = Date.now()): string {
   const counter = Math.floor(time / 30_000);
   const message = Buffer.alloc(8); message.writeBigUInt64BE(BigInt(counter));
   const hmac = createHmac("sha1", base32Decode(secret)).update(message).digest();
-  const offset = hmac[hmac.length - 1] & 15;
-  const binary = ((hmac[offset] & 127) << 24) | ((hmac[offset + 1] & 255) << 16) | ((hmac[offset + 2] & 255) << 8) | (hmac[offset + 3] & 255);
+  const offset = hmac[hmac.length - 1]! & 15;
+  const binary = ((hmac[offset]! & 127) << 24) | ((hmac[offset + 1]! & 255) << 16) | ((hmac[offset + 2]! & 255) << 8) | (hmac[offset + 3]! & 255);
   return String(binary % 1_000_000).padStart(6, "0");
 }
 function matchingTotpCounter(secret:string,code:string):number|null {
