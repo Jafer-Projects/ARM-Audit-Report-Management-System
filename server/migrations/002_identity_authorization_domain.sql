@@ -401,6 +401,18 @@ LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog,public AS $fn$
  WHERE v.token_hash=p_hash AND v.consumed_at IS NULL AND v.expires_at>now()
  ORDER BY m.created_at LIMIT 1
 $fn$;
+
+CREATE OR REPLACE FUNCTION public.arm_lookup_pending_account(p_email text)
+RETURNS TABLE(user_id uuid,tenant_id uuid,email text)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,public AS $fn$
+ SELECT u.id,m.tenant_id,u.email FROM public.users u
+ JOIN public.tenant_memberships m ON m.user_id=u.id AND m.status='active'
+ WHERE u.email_normalized=lower(btrim(p_email)) AND u.status='pending_verification'
+ ORDER BY m.created_at LIMIT 1
+$fn$;
+REVOKE ALL ON FUNCTION public.arm_lookup_pending_account(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.arm_lookup_pending_account(text) TO arm_runtime;
+
 CREATE OR REPLACE FUNCTION public.arm_lookup_recovery(p_hash text)
 RETURNS TABLE(token_id uuid,user_id uuid)
 LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog,public AS $fn$
