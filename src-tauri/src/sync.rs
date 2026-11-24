@@ -108,7 +108,8 @@ pub fn sync_apply_pull(events:Vec<PulledSyncEvent>,next_cursor:String,state:Stat
      let client_exists=if let Some(client)=client_id{
       tx.query_row("SELECT 1 FROM client WHERE id=?1 AND firm_id=?2",params![client,FIRM_ID],|_|Ok(())).optional().map_err(|e|e.to_string())?.is_some()
      }else{true};
-     if client_exists {
+     if !client_exists { return Err("Remote workspace record references a client that is not present locally; synchronize the client directory before applying this cursor.".into()); }
+     {
       let reference=record.get("reference").and_then(Value::as_str).unwrap_or("");
       let amount=record.get("amount_text").and_then(Value::as_str).unwrap_or("");
       let notes=record.get("notes").and_then(Value::as_str).unwrap_or("");
