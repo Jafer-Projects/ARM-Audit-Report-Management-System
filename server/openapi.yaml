@@ -158,7 +158,7 @@ paths:
         - in: query
           name: after
           required: false
-          schema: { type: string, pattern: "^[0-9]+$" }
+          schema: { type: string, pattern: "^[0-9]{1,19}$" }
         - in: query
           name: limit
           required: false
