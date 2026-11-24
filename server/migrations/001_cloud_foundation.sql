@@ -158,3 +158,13 @@ CREATE TRIGGER sync_inbox_append_only
 
 -- Runtime writes to the audit log are append-only by application contract.
 -- Production database roles must not be granted UPDATE/DELETE on audit_events.
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'arm_runtime') THEN
+    REVOKE ALL ON jobs FROM arm_runtime;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'arm_worker') THEN
+    GRANT SELECT, UPDATE ON jobs TO arm_worker;
+  END IF;
+END $$;
