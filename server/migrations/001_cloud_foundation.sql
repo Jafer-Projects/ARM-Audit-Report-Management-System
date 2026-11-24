@@ -119,23 +119,13 @@ CREATE POLICY tenants_insert ON tenants FOR INSERT
 ALTER TABLE tenant_memberships ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tenant_memberships FORCE ROW LEVEL SECURITY;
 CREATE POLICY memberships_tenant_scope ON tenant_memberships
-  USING (
-    tenant_id::text = current_setting('app.tenant_id', true)
-    AND (user_id::text = current_setting('app.user_id', true)
-      OR EXISTS (
-        SELECT 1 FROM tenant_memberships own
-        WHERE own.tenant_id = tenant_memberships.tenant_id
-          AND own.user_id::text = current_setting('app.user_id', true)
-          AND own.status = 'active'
-          AND own.role IN ('owner', 'firm_admin')
-      ))
-  )
+  USING (user_id::text = current_setting('app.user_id', true))
   WITH CHECK (
     tenant_id::text = current_setting('app.tenant_id', true)
     AND user_id::text = current_setting('app.user_id', true)
   );
 
-DO $$
+DO $
 DECLARE table_name text;
 BEGIN
   FOREACH table_name IN ARRAY ARRAY['sync_aggregates','sync_inbox','audit_events','jobs'] LOOP
@@ -146,7 +136,24 @@ BEGIN
       table_name || '_tenant_scope', table_name
     );
   END LOOP;
-END $$;
+END $;
+
+CREATE POLICY jobs_worker_access ON jobs
+  USING (current_setting('app.worker', true) = 'true')
+  WITH CHECK (current_setting('app.worker', true) = 'true');
+
+CREATE OR REPLACE FUNCTION reject_immutable_row_mutation() RETURNS trigger
+LANGUAGE plpgsql AS $
+BEGIN
+  RAISE EXCEPTION 'table % is append-only', TG_TABLE_NAME USING ERRCODE = '55000';
+END;
+$;
+CREATE TRIGGER audit_events_append_only
+  BEFORE UPDATE OR DELETE ON audit_events
+  FOR EACH ROW EXECUTE FUNCTION reject_immutable_row_mutation();
+CREATE TRIGGER sync_inbox_append_only
+  BEFORE UPDATE OR DELETE ON sync_inbox
+  FOR EACH ROW EXECUTE FUNCTION reject_immutable_row_mutation();
 
 -- Runtime writes to the audit log are append-only by application contract.
 -- Production database roles must not be granted UPDATE/DELETE on audit_events.
