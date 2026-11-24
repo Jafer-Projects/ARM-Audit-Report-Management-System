@@ -16,12 +16,12 @@ docker compose --env-file .env up --build
 Run the API integration suite against a disposable PostgreSQL database:
 
 ```sh
-# Use a disposable PostgreSQL database. Bootstrap roles as its owner/admin first.
-ADMIN_DATABASE_URL=postgres://owner:...@localhost:5432/arm_test \
-MIGRATION_DATABASE_URL=postgres://owner:...@localhost:5432/arm_test \
-DATABASE_URL=postgres://arm_runtime:...@localhost:5432/arm_test \
-WORKER_DATABASE_URL=postgres://arm_worker:...@localhost:5432/arm_test \
-ARM_RUNTIME_PASSWORD=... ARM_WORKER_PASSWORD=... JWT_SECRET=... \
+# Use a disposable PostgreSQL database only.
+export ADMIN_DATABASE_URL=postgres://owner:...@localhost:5432/arm_test
+export MIGRATION_DATABASE_URL=postgres://owner:...@localhost:5432/arm_test
+export DATABASE_URL=postgres://arm_runtime:...@localhost:5432/arm_test
+export WORKER_DATABASE_URL=postgres://arm_worker:...@localhost:5432/arm_test
+export ARM_RUNTIME_PASSWORD=... ARM_WORKER_PASSWORD=... JWT_SECRET=...
 npm run db:bootstrap-runtime
 npm run build
 npm test
