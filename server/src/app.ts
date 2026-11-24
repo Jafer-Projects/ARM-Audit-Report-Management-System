@@ -53,7 +53,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     }
   });
 
-  app.post("/v1/auth/register", async (request, reply) => {
+  app.post("/v1/auth/register", { config: { rateLimit: { max: 8, timeWindow: "1 minute" } } }, async (request, reply) => {
     const parsed = registerSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
     try {
@@ -64,13 +64,13 @@ export async function buildApp(): Promise<FastifyInstance> {
     }
   });
 
-  app.post("/v1/auth/login", async (request, reply) => {
+  app.post("/v1/auth/login", { config: { rateLimit: { max: 8, timeWindow: "1 minute" } } }, async (request, reply) => {
     const parsed = loginSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
     return login(parsed.data.email, parsed.data.password);
   });
 
-  app.post("/v1/auth/refresh", async (request, reply) => {
+  app.post("/v1/auth/refresh", { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } }, async (request, reply) => {
     const parsed = refreshSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
     return rotateRefreshToken(parsed.data.refreshToken);
@@ -113,12 +113,13 @@ export async function buildApp(): Promise<FastifyInstance> {
     (request as AuthenticatedRequest).auth = await authenticate(request);
   } }, async (request) => {
     const auth = (request as AuthenticatedRequest).auth!;
-    const query = z.object({
-      after: z.string().datetime({ offset: true }).optional(),
+    const parsed = z.object({
+      after: z.string().regex(/^\\d+$/).optional(),
       limit: z.coerce.number().int().min(1).max(100).default(50)
-    }).parse(request.query);
-    const events = await pullEvents(auth.sub, tenantId(request as AuthenticatedRequest), query.after, query.limit);
-    return { events, nextCursor: events.length ? new Date(events[events.length - 1].received_at).toISOString() : query.after ?? null };
+    }).safeParse(request.query);
+    if (!parsed.success) throw Object.assign(new Error("Invalid sync cursor or limit"), { statusCode: 400 });
+    const events = await pullEvents(auth.sub, tenantId(request as AuthenticatedRequest), parsed.data.after, parsed.data.limit);
+    return { events, nextCursor: events.length ? String(events[events.length - 1].received_seq) : parsed.data.after ?? null };
   });
 
   app.addHook("onClose", async () => { await pool.end(); });
