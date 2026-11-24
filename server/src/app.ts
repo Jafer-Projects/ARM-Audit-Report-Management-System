@@ -378,7 +378,18 @@ export async function buildApp(): Promise<FastifyInstance> {
     const id = tenantId(request as AuthenticatedRequest);
     return withTenant(auth.sub, id, async (client) => {
       const result = await client.query(
-        "SELECT t.id, t.name, t.slug, m.role FROM tenants t JOIN tenant_memberships m ON m.tenant_id = t.id WHERE t.id = $1 AND m.user_id = $2 AND m.status = 'active'",
+        `SELECT t.id, t.name, t.slug, m.role,
+          CASE WHEN m.role='owner'
+            THEN COALESCE((SELECT array_agg(permission_key) FROM permissions),'{}'::text[])
+            ELSE COALESCE((
+              SELECT array_agg(DISTINCT rp.permission_key)
+              FROM tenant_membership_roles mr
+              JOIN tenant_role_permissions rp ON rp.tenant_id=mr.tenant_id AND rp.role_id=mr.role_id
+              WHERE mr.tenant_id=t.id AND mr.membership_id=m.id
+            ),'{}'::text[])
+          END AS permissions
+         FROM tenants t JOIN tenant_memberships m ON m.tenant_id=t.id
+         WHERE t.id=$1 AND m.user_id=$2 AND m.status='active'`,
         [id, auth.sub]
       );
       return result.rows[0];

@@ -393,9 +393,11 @@ export default function App() {
 
   const filteredClients = useMemo(() => clients.filter((c) =>
     [c.legal_name, c.display_name, c.tin_raw].join(" ").toLowerCase().includes(search.toLowerCase())), [clients, search]);
-  const canMutate = Boolean(workspace) && workspace?.persona !== "reviewer";
+  const cloudWorkspace = Boolean(workspace && workspace.firm_name !== "ARM Demonstration Firm");
+  const effectivePermissions = new Set(workspace?.permissions ?? []);
+  const canMutate = Boolean(workspace) && (cloudWorkspace ? effectivePermissions.has("clients.write") : workspace?.persona !== "reviewer");
   const canEditClientProfiles = canMutate;
-  const canManageClientLifecycle = canMutate && ["administrator","manager"].includes(workspace?.persona ?? "");
+  const canManageClientLifecycle = cloudWorkspace ? effectivePermissions.has("clients.archive") || effectivePermissions.has("clients.write") : canMutate && ["administrator","manager"].includes(workspace?.persona ?? "");
 
 
   async function openNotification(notification: WorkspaceNotification) {
