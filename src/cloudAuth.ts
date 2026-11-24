@@ -31,6 +31,7 @@ export const cloudAuth={
  beginMfa:(api:string,accessToken:string,tenantId:string,password:string)=>request<{secret:string;otpauthUri:string}>(api,"/v1/auth/mfa/enroll",{password},accessToken,tenantId),
  confirmMfa:(api:string,accessToken:string,tenantId:string,code:string)=>request<{enabled:boolean;recoveryCodes:string[]}>(api,"/v1/auth/mfa/confirm",{code},accessToken,tenantId),
  disableMfa:(api:string,accessToken:string,tenantId:string,password:string,code:string)=>request<{disabled:boolean}>(api,"/v1/auth/mfa/disable",{password,code},accessToken,tenantId),
+ mfaStatus:(api:string,accessToken:string)=>request<{enabled:boolean}>(api,"/v1/auth/mfa/status",undefined,accessToken),
  tenantContext:(api:string,accessToken:string,tenantId:string)=>request<Record<string,unknown>>(api,"/v1/tenant/context",undefined,accessToken,tenantId),
  acceptInvitation:(api:string,accessToken:string,token:string)=>request<{accepted:boolean;tenant_id:string;membership_id:string}>(api,"/v1/tenant/invitations/accept",{token},accessToken)
 };
