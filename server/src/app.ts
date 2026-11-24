@@ -4,7 +4,8 @@ import rateLimit from "@fastify/rate-limit";
 import { z } from "zod";
 import { config } from "./config.js";
 import { pool, withTenant } from "./db.js";
-import { authenticate, login, register, revokeSession, rotateRefreshToken, type AuthenticatedRequest } from "./auth.js";
+import { authenticate, login, register, revokeSession, rotateRefreshToken, completeMfaLogin, type AuthenticatedRequest } from "./auth.js";
+import { verifyEmailAddress, requestPasswordRecovery, resetPassword, beginMfaEnrollment, confirmMfaEnrollment, disableMfa } from "./security.js";
 import { pushEvents, pullEvents, pushSchema } from "./sync.js";
 
 const registerSchema = z.object({
@@ -77,6 +78,54 @@ export async function buildApp(): Promise<FastifyInstance> {
     const parsed = refreshSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
     return rotateRefreshToken(parsed.data.refreshToken);
+  });
+
+  app.post("/v1/auth/verify-email", async (request, reply) => {
+    const parsed = z.object({ token: z.string().min(32).max(128) }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "validation_error" });
+    return verifyEmailAddress(parsed.data.token);
+  });
+
+  app.post("/v1/auth/recovery/request", { config: { rateLimit: { max: 5, timeWindow: "15 minutes" } } }, async (request, reply) => {
+    const parsed = z.object({ email: z.string().email().max(254) }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "validation_error" });
+    return requestPasswordRecovery(parsed.data.email);
+  });
+
+  app.post("/v1/auth/recovery/complete", { config: { rateLimit: { max: 5, timeWindow: "15 minutes" } } }, async (request, reply) => {
+    const parsed = z.object({ token: z.string().min(32).max(128), password: z.string().min(12).max(128) }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "validation_error" });
+    return resetPassword(parsed.data.token,parsed.data.password);
+  });
+
+  app.post("/v1/auth/mfa/complete", { config: { rateLimit: { max: 8, timeWindow: "1 minute" } } }, async (request, reply) => {
+    const parsed = z.object({ challengeToken: z.string().min(32).max(128), code: z.string().regex(/^(?:\\d{6}|[a-f0-9]{16})$/i) }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "validation_error" });
+    return completeMfaLogin(parsed.data.challengeToken,parsed.data.code);
+  });
+
+  app.post("/v1/auth/mfa/enroll", { preHandler: async (request) => {
+    (request as AuthenticatedRequest).auth = await authenticate(request);
+  } }, async (request) => {
+    const auth = (request as AuthenticatedRequest).auth!;
+    const user = await pool.query("SELECT email FROM users WHERE id=$1",[auth.sub]);
+    return beginMfaEnrollment(auth.sub,user.rows[0].email);
+  });
+
+  app.post("/v1/auth/mfa/confirm", { preHandler: async (request) => {
+    (request as AuthenticatedRequest).auth = await authenticate(request);
+  } }, async (request,reply) => {
+    const parsed = z.object({ code: z.string().regex(/^\\d{6}$/) }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "validation_error" });
+    return confirmMfaEnrollment((request as AuthenticatedRequest).auth!.sub,parsed.data.code);
+  });
+
+  app.post("/v1/auth/mfa/disable", { preHandler: async (request) => {
+    (request as AuthenticatedRequest).auth = await authenticate(request);
+  } }, async (request,reply) => {
+    const parsed = z.object({ code: z.string().regex(/^\\d{6}$/) }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "validation_error" });
+    return disableMfa((request as AuthenticatedRequest).auth!.sub,parsed.data.code);
   });
 
   app.post("/v1/auth/logout", { preHandler: async (request) => {
