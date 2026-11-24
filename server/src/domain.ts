@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
+import type { PoolClient } from "pg";
 import { withTenant } from "./db.js";
 import { assertPermission } from "./authorization.js";
 
 type EngagementInput = { clientReference:string; title:string; periodStart:string; periodEnd:string; framework:string };
-async function history(client: any,tenantId:string,userId:string,type:string,id:string,action:string,before:unknown,after:unknown) {
+async function history(client: PoolClient,tenantId:string,userId:string,type:string,id:string,action:string,before:unknown,after:unknown) {
   await client.query("INSERT INTO audit_domain_history(tenant_id,actor_id,entity_type,entity_id,action,before_data,after_data) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb)",[tenantId,userId,type,id,action,before?JSON.stringify(before):null,after?JSON.stringify(after):null]);
   await client.query("INSERT INTO audit_events(tenant_id,actor_id,action,target_type,target_id,metadata) VALUES($1,$2,$3,$4,$5,$6::jsonb)",[tenantId,userId,`domain.${type}.${action}`,type,id,JSON.stringify({before,after})]);
 }
@@ -50,6 +51,7 @@ export async function transitionWorkpaper(userId:string,tenantId:string,id:strin
     if(Number(row.version)!==expectedVersion) throw Object.assign(new Error("Workpaper version conflict"),{statusCode:409});
     const before={...row};
     if(action==="prepare" && !["draft","reopened"].includes(row.status)) throw Object.assign(new Error("Only draft or reopened workpapers can be prepared"),{statusCode:409});
+    if(action==="review" && row.prepared_by===userId) throw Object.assign(new Error("The preparer cannot independently review their own workpaper"),{statusCode:403});
     if(action==="review" && row.status!=="prepared") throw Object.assign(new Error("Only prepared workpapers can be reviewed"),{statusCode:409});
     if(action==="approve" && (row.status!=="reviewed" || row.prepared_by===userId || row.reviewed_by===userId)) throw Object.assign(new Error("Approval requires independent preparation and review"),{statusCode:403});
     if(action==="reopen" && !["reviewed","approved"].includes(row.status)) throw Object.assign(new Error("Only reviewed or approved workpapers can be reopened"),{statusCode:409});
@@ -102,6 +104,23 @@ export async function transitionAuditReport(userId:string,tenantId:string,id:str
     await history(client,tenantId,userId,"audit_report",id,action,before,updated.rows[0]);
     return updated.rows[0];
   });
+}
+
+
+export async function createAccount(userId:string,tenantId:string,input:{code:string;name:string;type:"asset"|"liability"|"equity"|"income"|"expense";currency:string}) {
+ return withTenant(userId,tenantId,async(client)=>{
+  await assertPermission(client,userId,tenantId,"accounting.post");
+  const result=await client.query("INSERT INTO accounting_accounts(tenant_id,account_code,account_name,account_type,currency) VALUES($1,$2,$3,$4,$5) RETURNING *",[tenantId,input.code,input.name,input.type,input.currency]);
+  await history(client,tenantId,userId,"accounting_account",result.rows[0].id,"created",null,result.rows[0]);
+  return result.rows[0];
+ });
+}
+export async function listAccounts(userId:string,tenantId:string) {
+ return withTenant(userId,tenantId,async(client)=>{
+  await assertPermission(client,userId,tenantId,"accounting.read");
+  const result=await client.query("SELECT * FROM accounting_accounts WHERE tenant_id=$1 ORDER BY account_code",[tenantId]);
+  return result.rows;
+ });
 }
 
 export async function createJournal(userId:string,tenantId:string,input:{journalNumber:string;date:string;description:string;currency:string;lines:Array<{accountId:string;description?:string;debit:number;credit:number}>}) {
