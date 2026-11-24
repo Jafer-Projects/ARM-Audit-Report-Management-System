@@ -144,11 +144,11 @@ CREATE POLICY jobs_worker_access ON jobs
   WITH CHECK (current_setting('app.worker', true) = 'true');
 
 CREATE OR REPLACE FUNCTION reject_immutable_row_mutation() RETURNS trigger
-LANGUAGE plpgsql AS $
+LANGUAGE plpgsql AS $fn$
 BEGIN
   RAISE EXCEPTION 'table % is append-only', TG_TABLE_NAME USING ERRCODE = '55000';
 END;
-$;
+$fn$;
 CREATE TRIGGER audit_events_append_only
   BEFORE UPDATE OR DELETE ON audit_events
   FOR EACH ROW EXECUTE FUNCTION reject_immutable_row_mutation();
