@@ -38,6 +38,8 @@ test("API role is non-superuser and tenant-scoped tables are protected by RLS", 
   const role = await pool.query("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user");
   assert.equal(role.rows[0].rolsuper, false);
   assert.equal(role.rows[0].rolbypassrls, false);
+  await assert.rejects(pool.query("SELECT version FROM schema_migrations"), (error) => error.code === "42501");
+  await assert.rejects(pool.query("SELECT id FROM jobs"), (error) => error.code === "42501");
 });
 
 test("worker role is non-superuser and cannot read tenant identity tables", async () => {
