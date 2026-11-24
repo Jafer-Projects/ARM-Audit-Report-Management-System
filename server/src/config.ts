@@ -39,6 +39,7 @@ const envSchema=z.object({
  CLAMAV_PORT:z.coerce.number().int().min(1).max(65535).default(3310)
 });
 export const config=envSchema.superRefine((value,ctx)=>{
+ if(value.NODE_ENV==="production" && value.OBJECT_STORAGE_MODE!=="s3") ctx.addIssue({code:"custom",path:["OBJECT_STORAGE_MODE"],message:"Production requires private S3-compatible object storage"});
  if(value.OBJECT_STORAGE_MODE==="s3"){
   for(const key of ["S3_ENDPOINT","S3_BUCKET","S3_ACCESS_KEY_ID","S3_SECRET_ACCESS_KEY"] as const){if(!value[key]) ctx.addIssue({code:"custom",path:[key],message:"Required when OBJECT_STORAGE_MODE=s3"});}
  }
