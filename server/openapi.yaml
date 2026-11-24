@@ -528,6 +528,20 @@ paths:
       responses:
         "201": { description: Engagement created }
   /v1/audit/workpapers:
+    get:
+      tags: [Audit]
+      security: [{ bearerAuth: [] }]
+      operationId: listAuditWorkpapers
+      parameters:
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: engagementId
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Tenant-scoped workpapers }
     post:
       tags: [Audit]
       security: [{ bearerAuth: [] }]
@@ -567,6 +581,20 @@ paths:
         "200": { description: Workpaper transition recorded }
         "409": { description: Invalid workflow transition or stale version }
   /v1/audit/reports:
+    get:
+      tags: [Audit]
+      security: [{ bearerAuth: [] }]
+      operationId: listAuditReports
+      parameters:
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: engagementId
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Tenant-scoped report metadata }
     post:
       tags: [Audit]
       security: [{ bearerAuth: [] }]
@@ -634,6 +662,17 @@ paths:
       responses:
         "201": { description: Chart of accounts entry created }
   /v1/accounting/journals:
+    get:
+      tags: [Accounting]
+      security: [{ bearerAuth: [] }]
+      operationId: listAccountingJournals
+      parameters:
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Tenant-scoped journal summaries }
     post:
       tags: [Accounting]
       security: [{ bearerAuth: [] }]
@@ -651,6 +690,23 @@ paths:
       responses:
         "201": { description: Balanced draft journal created }
         "400": { description: Journal lines do not balance }
+  /v1/accounting/journals/{id}:
+    get:
+      tags: [Accounting]
+      security: [{ bearerAuth: [] }]
+      operationId: getAccountingJournal
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Journal and ordered line details }
+        "404": { description: Journal not found }
   /v1/accounting/journals/{id}/post:
     post:
       tags: [Accounting]
@@ -691,6 +747,20 @@ paths:
         "201": { description: Reversal draft created; it requires a separate posting action }
         "409": { description: Original is not posted or already reversed }
   /v1/documents:
+    get:
+      tags: [Evidence]
+      security: [{ bearerAuth: [] }]
+      operationId: listEvidenceDocuments
+      parameters:
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: engagementId
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Tenant-scoped evidence metadata and scan states }
     post:
       tags: [Evidence]
       security: [{ bearerAuth: [] }]
