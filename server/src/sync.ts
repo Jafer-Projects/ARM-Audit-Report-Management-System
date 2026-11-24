@@ -64,8 +64,8 @@ async function applyEvent(client: PoolClient, userId: string, tenantId: string, 
   }
 
   await client.query(
-    `INSERT INTO sync_inbox(tenant_id, actor_id, event_id, idempotency_key, aggregate_type, aggregate_id, base_version, resulting_version, event_type, schema_version, payload, outcome, outcome_detail)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13::jsonb)`,
+    `INSERT INTO sync_inbox(tenant_id, actor_id, event_id, idempotency_key, aggregate_type, aggregate_id, base_version, resulting_version, event_type, schema_version, payload, outcome, outcome_detail, occurred_at_device)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13::jsonb,$14)`,
     [tenantId, userId, event.eventId, event.idempotencyKey, event.aggregateType, event.aggregateId, event.baseVersion,
       resultingVersion, event.eventType, event.schemaVersion, JSON.stringify(event.payload), outcome, JSON.stringify(detail), event.occurredAt]
   );
