@@ -455,7 +455,8 @@ impl Database {
             (8_i64, "arm-immutable-history-artifacts-v8"),
             (9_i64, "arm-review-note-transition-guards-v9"),
             (10_i64, "arm-source-documents-v10"),
-            (11_i64, "arm-workspace-notifications-v11"),\n            (12_i64, "arm-cloud-sync-outbox-v12"),
+            (11_i64, "arm-workspace-notifications-v11"),
+            (12_i64, "arm-cloud-sync-outbox-v12"),
         ] {
             let actual: String = self.connection.query_row(
                 "SELECT checksum FROM schema_migration WHERE version=?1",
