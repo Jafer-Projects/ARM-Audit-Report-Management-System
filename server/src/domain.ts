@@ -144,7 +144,7 @@ export async function createJournal(userId:string,tenantId:string,input:{journal
       [id,tenantId,input.journalNumber,input.date,input.description,input.currency,debit,credit,userId]
     );
     for(let i=0;i<input.lines.length;i++){
-      const line=input.lines[i];
+      const line=input.lines[i]!;
       await client.query("INSERT INTO accounting_journal_lines(tenant_id,journal_id,account_id,line_number,description,debit,credit) VALUES($1,$2,$3,$4,$5,$6,$7)",[tenantId,id,line.accountId,i+1,line.description??"",line.debit,line.credit]);
     }
     await history(client,tenantId,userId,"accounting_journal",id,"draft_created",null,journal.rows[0]);
