@@ -354,7 +354,7 @@ GRANT EXECUTE ON FUNCTION public.arm_lookup_account(text) TO arm_runtime;
 
 ALTER TABLE auth_mfa_challenges ENABLE ROW LEVEL SECURITY;
 ALTER TABLE auth_mfa_challenges FORCE ROW LEVEL SECURITY;
-CREATE POLICY auth_mfa_challenge_self ON auth_mfa_challenges USING(user_id::text=current_setting('app.user_id',true)) WITH CHECK(user_id::text=current_setting('app.user_id',true));
+-- SECURITY DEFINER lookup/acceptance functions require table-owner access; direct API access remains RLS-scoped.\nALTER TABLE email_verification_tokens NO FORCE ROW LEVEL SECURITY;\nALTER TABLE password_recovery_tokens NO FORCE ROW LEVEL SECURITY;\nALTER TABLE auth_mfa_challenges NO FORCE ROW LEVEL SECURITY;\nALTER TABLE tenant_memberships NO FORCE ROW LEVEL SECURITY;\nALTER TABLE tenant_membership_roles NO FORCE ROW LEVEL SECURITY;\nALTER TABLE organization_invitations NO FORCE ROW LEVEL SECURITY;
 
 DO $arm$
 BEGIN
