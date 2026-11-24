@@ -18,6 +18,11 @@ export function CloudConnectionPanel({onClose}:Props){
  const [session,setSession]=useState<CloudSession|null>(null);
  const [tenantId,setTenantId]=useState("");
  const [status,setStatus]=useState<LocalStatus|null>(null);
+ const [mfaEnabled,setMfaEnabled]=useState(false);
+ const [mfaEnrollment,setMfaEnrollment]=useState<{secret:string;otpauthUri:string}|null>(null);
+ const [mfaPassword,setMfaPassword]=useState("");
+ const [mfaManagementCode,setMfaManagementCode]=useState("");
+ const [recoveryCodes,setRecoveryCodes]=useState<string[]>([]);
  const [message,setMessage]=useState("");
  const [error,setError]=useState("");
  const [busy,setBusy]=useState(false);
@@ -35,6 +40,7 @@ export function CloudConnectionPanel({onClose}:Props){
    const result=await cloudAuth.login(api,email,password);
    if("mfaRequired" in result){setChallenge(result.challengeToken);setMessage("Enter the authenticator code or a single-use recovery code.");return;}
    setSession(result);setTenantId(result.memberships?.[0]?.tenant_id??"");
+   setMfaEnabled((await cloudAuth.mfaStatus(api,result.accessToken)).enabled);
    setStatus(await getLocalSyncStatus());setMessage("Cloud session established in memory for this application session.");
   });
  }
@@ -43,6 +49,7 @@ export function CloudConnectionPanel({onClose}:Props){
   await run(async()=>{
    const result=await cloudAuth.completeMfa(api,challenge,mfaCode);
    setSession(result);setTenantId(result.memberships?.[0]?.tenant_id??"");
+   setMfaEnabled((await cloudAuth.mfaStatus(api,result.accessToken)).enabled);
    setChallenge("");setMfaCode("");setStatus(await getLocalSyncStatus());setMessage("Multi-factor authentication completed.");
   });
  }
@@ -84,6 +91,27 @@ export function CloudConnectionPanel({onClose}:Props){
  async function closePanel(){
   if(session){try{await cloudAuth.logout(api,session.accessToken);}catch(value){setError(value instanceof Error?value.message:String(value));return;}}
   onClose();
+ }
+
+ async function beginMfa(){
+  if(!session||!tenantId) return;
+  await run(async()=>{setMfaEnrollment(await cloudAuth.beginMfa(api,session.accessToken,tenantId,mfaPassword));setMfaPassword("");setMessage("Scan the otpauth URI in your authenticator app, then enter the current six-digit code.");});
+ }
+ async function confirmMfa(){
+  if(!session||!tenantId) return;
+  await run(async()=>{
+   const result=await cloudAuth.confirmMfa(api,session.accessToken,tenantId,mfaManagementCode);
+   setMfaEnabled(true);setMfaEnrollment(null);setMfaManagementCode("");setRecoveryCodes(result.recoveryCodes);
+   setMessage("MFA enabled. Copy and store these recovery codes securely; they are shown only once.");
+  });
+ }
+ async function disableMfa(){
+  if(!session||!tenantId) return;
+  await run(async()=>{
+   await cloudAuth.disableMfa(api,session.accessToken,tenantId,mfaPassword,mfaManagementCode);
+   setMfaEnabled(false);setMfaManagementCode("");setMfaPassword("");setRecoveryCodes([]);
+   setMessage("MFA disabled after password and fresh authenticator verification.");
+  });
  }
  async function logout(){
   if(!session)return;
@@ -131,6 +159,15 @@ export function CloudConnectionPanel({onClose}:Props){
      <span>Pending local events: <strong>{status?.pending??"—"}</strong></span>
      <span>Conflicts: <strong>{status?.conflicts??"—"}</strong></span>
      <span>Pull cursor: <strong>{status?.cursor??"—"}</strong></span>
+    </div>
+
+    <div className="cloud-mfa-section">
+     <h3>Multi-factor authentication</h3>
+     <p>Status: <strong>{mfaEnabled?"Enabled":"Not enabled"}</strong></p>
+     {!mfaEnabled&&!mfaEnrollment&&<><label>Confirm current password<input type="password" value={mfaPassword} onChange={event=>setMfaPassword(event.target.value)}/></label><button type="button" disabled={busy||!mfaPassword||!tenantId} onClick={()=>void beginMfa()}>Set up authenticator MFA</button></>}
+     {mfaEnrollment&&<><p>Secret: <code>{mfaEnrollment.secret}</code></p><p className="cloud-panel-note">Authenticator URI: <code>{mfaEnrollment.otpauthUri}</code></p><label>Six-digit authenticator code<input inputMode="numeric" autoComplete="one-time-code" value={mfaManagementCode} onChange={event=>setMfaManagementCode(event.target.value)}/></label><button type="button" disabled={busy||!/^\d{6}$/.test(mfaManagementCode)} onClick={()=>void confirmMfa()}>Confirm and enable MFA</button></>}
+     {mfaEnabled&&<><label>Current password<input type="password" value={mfaPassword} onChange={event=>setMfaPassword(event.target.value)}/></label><label>Fresh authenticator code<input inputMode="numeric" autoComplete="one-time-code" value={mfaManagementCode} onChange={event=>setMfaManagementCode(event.target.value)}/></label><button type="button" disabled={busy||!mfaPassword||!/^\d{6}$/.test(mfaManagementCode)} onClick={()=>void disableMfa()}>Disable MFA</button></>}
+     {recoveryCodes.length>0&&<div className="cloud-recovery-codes"><strong>One-time recovery codes</strong><ul>{recoveryCodes.map(code=><li key={code}><code>{code}</code></li>)}</ul><button type="button" className="text-button" onClick={()=>setRecoveryCodes([])}>I stored these codes</button></div>}
     </div>
     <button type="button" disabled={busy||!tenantId} onClick={()=>void syncNow()}>Synchronize now</button>
     <button type="button" className="text-button" disabled={busy} onClick={()=>void refreshSession()}>Refresh session</button>
