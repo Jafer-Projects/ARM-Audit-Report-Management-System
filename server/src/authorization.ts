@@ -126,3 +126,44 @@ export async function listPermissionCatalogue(userId:string,tenantId:string) {
   return result.rows;
  });
 }
+
+export async function updateRoleName(userId:string,tenantId:string,roleId:string,name:string) {
+ return withTenant(userId,tenantId,async(client)=>{
+  await assertPermission(client,userId,tenantId,"roles.manage");
+  const result=await client.query("UPDATE tenant_roles SET display_name=$3 WHERE tenant_id=$1 AND id=$2 AND is_system=false RETURNING id,role_key,display_name",[tenantId,roleId,name]);
+  if(!result.rowCount) throw Object.assign(new Error("Custom role not found or is immutable"),{statusCode:404});
+  await client.query("INSERT INTO audit_events(tenant_id,actor_id,action,target_type,target_id,metadata) VALUES($1,$2,'authorization.role.renamed','tenant_role',$3,$4::jsonb)",[tenantId,userId,roleId,JSON.stringify({displayName:name})]);
+  return result.rows[0];
+ });
+}
+export async function deleteRole(userId:string,tenantId:string,roleId:string) {
+ return withTenant(userId,tenantId,async(client)=>{
+  await assertPermission(client,userId,tenantId,"roles.manage");
+  const role=await client.query("SELECT role_key,is_system FROM tenant_roles WHERE tenant_id=$1 AND id=$2 FOR UPDATE",[tenantId,roleId]);
+  if(!role.rowCount||role.rows[0].is_system||role.rows[0].role_key==="owner") throw Object.assign(new Error("System role cannot be deleted"),{statusCode:403});
+  const assigned=await client.query("SELECT 1 FROM tenant_membership_roles WHERE tenant_id=$1 AND role_id=$2 LIMIT 1",[tenantId,roleId]);
+  if(assigned.rowCount) throw Object.assign(new Error("Remove this role from all members before deleting it"),{statusCode:409});
+  await client.query("DELETE FROM tenant_roles WHERE tenant_id=$1 AND id=$2",[tenantId,roleId]);
+  await client.query("INSERT INTO audit_events(tenant_id,actor_id,action,target_type,target_id,metadata) VALUES($1,$2,'authorization.role.deleted','tenant_role',$3,$4::jsonb)",[tenantId,userId,roleId,JSON.stringify({roleKey:role.rows[0].role_key})]);
+  return {deleted:true,roleId};
+ });
+}
+export async function removeMemberRole(userId:string,tenantId:string,membershipId:string,roleId:string) {
+ return withTenant(userId,tenantId,async(client)=>{
+  await assertPermission(client,userId,tenantId,"roles.manage");
+  const role=await client.query("SELECT role_key,is_system FROM tenant_roles WHERE tenant_id=$1 AND id=$2",[tenantId,roleId]);
+  if(!role.rowCount||role.rows[0].role_key==="owner") throw Object.assign(new Error("Owner role cannot be removed"),{statusCode:403});
+  const result=await client.query("DELETE FROM tenant_membership_roles WHERE tenant_id=$1 AND membership_id=$2 AND role_id=$3 RETURNING membership_id",[tenantId,membershipId,roleId]);
+  if(!result.rowCount) throw Object.assign(new Error("Role assignment not found"),{statusCode:404});
+  await client.query("INSERT INTO audit_events(tenant_id,actor_id,action,target_type,target_id,metadata) VALUES($1,$2,'authorization.member.role_removed','membership',$3,$4::jsonb)",[tenantId,userId,membershipId,JSON.stringify({roleId})]);
+  return {removed:true,membershipId,roleId};
+ });
+}
+export async function changeMemberStatus(userId:string,tenantId:string,membershipId:string,status:"active"|"suspended"|"revoked") {
+ return withTenant(userId,tenantId,async(client)=>{
+  await assertPermission(client,userId,tenantId,"tenant.manage");
+  const result=await client.query("SELECT membership_id,status FROM public.arm_set_member_status($1,$2,$3,$4)",[tenantId,userId,membershipId,status]);
+  await client.query("INSERT INTO audit_events(tenant_id,actor_id,action,target_type,target_id,metadata) VALUES($1,$2,'tenant.membership.status_changed','membership',$3,$4::jsonb)",[tenantId,userId,membershipId,JSON.stringify({status})]);
+  return result.rows[0];
+ });
+}
