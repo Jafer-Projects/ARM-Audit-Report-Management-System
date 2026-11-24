@@ -9,7 +9,7 @@ import { verifyEmailAddress, requestPasswordRecovery, resetPassword, beginMfaEnr
 import { pushEvents, pullEvents, pushSchema } from "./sync.js";
 import { listRoles, createRole, replaceRolePermissions, assignMemberRole, inviteOrganizationMember } from "./authorization.js";
 import { acceptOrganizationInvitation } from "./organizations.js";
-import { createEngagement, listEngagements, createWorkpaper, transitionWorkpaper, createAuditReport, transitionAuditReport, createJournal, postJournal } from "./domain.js";
+import { createEngagement, listEngagements, createWorkpaper, transitionWorkpaper, createAuditReport, transitionAuditReport, createJournal, postJournal, createAccount, listAccounts } from "./domain.js";
 import { uploadDocument, readCleanDocument } from "./documents.js";
 
 const registerSchema = z.object({
@@ -214,6 +214,17 @@ export async function buildApp(): Promise<FastifyInstance> {
     const auth=(request as AuthenticatedRequest).auth!,params=request.params as {id:string};
     return transitionAuditReport(auth.sub,tenantId(request as AuthenticatedRequest),params.id,parsed.data.expectedVersion,parsed.data.action);
   });
+  app.get("/v1/accounting/accounts", { preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request) => {
+    const auth=(request as AuthenticatedRequest).auth!;
+    return {accounts:await listAccounts(auth.sub,tenantId(request as AuthenticatedRequest))};
+  });
+  app.post("/v1/accounting/accounts", { preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request,reply) => {
+    const parsed=z.object({code:z.string().min(1).max(40),name:z.string().min(1).max(160),type:z.enum(["asset","liability","equity","income","expense"]),currency:z.string().regex(/^[A-Z]{3}$/)}).safeParse(request.body);
+    if(!parsed.success) return reply.code(400).send({error:"validation_error"});
+    const auth=(request as AuthenticatedRequest).auth!;
+    return reply.code(201).send(await createAccount(auth.sub,tenantId(request as AuthenticatedRequest),parsed.data));
+  });
+
   app.post("/v1/accounting/journals", { preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request,reply) => {
     const parsed=z.object({journalNumber:z.string().min(1).max(80),date:z.string().date(),description:z.string().min(1).max(500),currency:z.string().regex(/^[A-Z]{3}$/),lines:z.array(z.object({accountId:z.string().uuid(),description:z.string().max(500).optional(),debit:z.number().nonnegative(),credit:z.number().nonnegative()})).min(2).max(500)}).safeParse(request.body);
     if(!parsed.success) return reply.code(400).send({error:"validation_error"});
