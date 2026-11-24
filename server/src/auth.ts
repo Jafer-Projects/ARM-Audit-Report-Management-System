@@ -30,7 +30,7 @@ export async function authenticate(request: FastifyRequest): Promise<AccessClaim
 async function membershipsFor(client: PoolClient, userId: string) {
   await client.query("SELECT set_config('app.user_id', $1, true)", [userId]);
   const result = await client.query(
-    "SELECT m.tenant_id, t.name AS tenant_name, m.role FROM tenant_memberships m JOIN tenants t ON t.id = m.tenant_id WHERE m.user_id = $1 AND m.status = 'active' AND t.status = 'active' ORDER BY t.name",
+    "SELECT tenant_id, role FROM tenant_memberships WHERE user_id = $1 AND status = 'active' ORDER BY tenant_id",
     [userId]
   );
   return result.rows;
