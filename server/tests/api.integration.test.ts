@@ -8,6 +8,7 @@ import { pool } from "../src/db.js";
 
 let app: FastifyInstance;
 const workerPool = new pg.Pool({ connectionString: process.env.WORKER_DATABASE_URL });
+const migrationPool = new pg.Pool({ connectionString: process.env.MIGRATION_DATABASE_URL });
 const firstPassword = "correct-horse-battery-staple-1";
 let firstEmail = "";
 let first: { accessToken: string; refreshToken: string; user: { id: string }; tenant: { id: string } };
@@ -32,9 +33,9 @@ before(async () => {
   second = two.json();
 });
 
-after(async () => { await app.close(); await workerPool.end(); });
+after(async () => { await app.close(); await workerPool.end(); await migrationPool.end(); });
 
-test("API role is non-superuser and tenant-scoped tables are protected by RLS", async () => {
+test("migration role is non-superuser and owns the migration ledger", async () => {\n  const role = await migrationPool.query("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user");\n  assert.equal(role.rows[0].rolsuper, false);\n  assert.equal(role.rows[0].rolbypassrls, false);\n  await migrationPool.query("SELECT version FROM schema_migrations");\n});\n\ntest("API role is non-superuser and tenant-scoped tables are protected by RLS", async () => {
   const role = await pool.query("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user");
   assert.equal(role.rows[0].rolsuper, false);
   assert.equal(role.rows[0].rolbypassrls, false);
