@@ -218,6 +218,13 @@ paths:
       responses:
         "200": { description: Password reset and active sessions revoked }
         "400": { description: Invalid or expired recovery token }
+  /v1/auth/mfa/status:
+    get:
+      tags: [Identity]
+      security: [{ bearerAuth: [] }]
+      operationId: getMfaStatus
+      responses:
+        "200": { description: Current account MFA enabled state }
   /v1/auth/mfa/enroll:
     post:
       tags: [Identity]
