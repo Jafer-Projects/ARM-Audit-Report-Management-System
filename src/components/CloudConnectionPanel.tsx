@@ -2,6 +2,7 @@ import { useEffect, useState,type FormEvent } from "react";
 import { cloudAuth,type CloudSession } from "../cloudAuth";
 import { getLocalSyncStatus } from "../cloudSync";
 import { secureSession } from "../secureSession";
+import { TenantAdministration } from "./TenantAdministration";
 
 type Props={onClose:()=>void};
 type LocalStatus={configured:boolean;cursor:string;pending:number;conflicts:number};
@@ -125,7 +126,7 @@ export function CloudConnectionPanel({onClose}:Props){
  }
  async function logout(){
   if(!session)return;
-  await run(async()=>{let revoked=false;try{await cloudAuth.logout(api,session.accessToken);revoked=true;}finally{await secureSession.clear();setSession(null);setTenantId("");setStatus(null);}setMessage(revoked?"Cloud session revoked and secure credentials cleared.":"Local credentials cleared; server-side revocation could not be confirmed while offline.");});
+  await run(async()=>{let revoked=false;const latest=await secureSession.load();try{await cloudAuth.logout(api,(latest?.session??session).accessToken);revoked=true;}finally{await secureSession.clear();setSession(null);setTenantId("");setStatus(null);}setMessage(revoked?"Cloud session revoked and secure credentials cleared.":"Local credentials cleared; server-side revocation could not be confirmed while offline.");});
  }
  return <div className="cloud-panel-backdrop" role="presentation">
   <section className="cloud-panel" role="dialog" aria-modal="true" aria-labelledby="cloud-panel-title">
@@ -181,6 +182,7 @@ export function CloudConnectionPanel({onClose}:Props){
     </div>
     <div className="cloud-sync-consent"><p><strong>Synchronization remains disabled.</strong> The tenant client directory is cloud-backed, but the local client cache/outbox, device identity and offline lease, dependency-safe pull, conflict workspace and domain-specific event contracts are not implemented. The prototype outbox remains isolated and is never sent to this tenant.</p></div>
     <button type="button" disabled>Synchronization unavailable until tenant-bound offline contracts are implemented</button>
+    {tenantId&&<TenantAdministration/>}
     <button type="button" className="text-button" disabled={busy} onClick={()=>void refreshSession()}>Refresh session</button>
     <button type="button" className="text-button" disabled={busy} onClick={()=>void logout()}>Sign out</button>
    </div>}
