@@ -6,6 +6,12 @@ use tauri::State;
 
 const FIRM_ID:&str="00000000-0000-4000-8000-000000000001";
 
+fn ensure_non_demo_firm(firm_name:&str)->Result<(),String>{
+ if firm_name=="ARM Demonstration Firm" { return Err("The seeded demonstration workspace cannot be paired with a cloud tenant. Provision a separate tenant-owned production workspace and complete domain-specific migration before enabling synchronization.".into()); }
+ Ok(())
+}
+
+
 #[derive(Serialize)]
 #[serde(rename_all="camelCase")]
 pub struct SyncOutboxEvent {
@@ -30,7 +36,7 @@ pub fn sync_configure(cloud_tenant_id:String,state:State<'_,AppState>)->Result<(
  if uuid::Uuid::parse_str(id).is_err(){return Err("A valid cloud tenant UUID is required.".into());}
  let db=state.database.lock().map_err(|_|"Database lock unavailable".to_string())?;
  let firm_name:String=db.connection.query_row("SELECT name FROM demo_firm WHERE id=?1",[FIRM_ID],|r|r.get(0)).map_err(|e|e.to_string())?;
- if firm_name=="ARM Demonstration Firm" { return Err("The seeded demonstration workspace cannot be paired with a cloud tenant. Provision a separate tenant-owned production workspace and complete domain-specific migration before enabling synchronization.".into()); }
+ ensure_non_demo_firm(&firm_name)?;
  let existing:Option<String>=db.connection.query_row("SELECT cloud_tenant_id FROM cloud_sync_state WHERE firm_id=?1",[FIRM_ID],|r|r.get(0)).optional().map_err(|e|e.to_string())?;
  if let Some(current)=existing { if current!=id { return Err("This local workspace is already paired with a different cloud tenant. Use a separate local profile to switch tenants.".into()); } }
  db.connection.execute(
@@ -150,4 +156,17 @@ pub fn sync_status(state:State<'_,AppState>)->Result<Value,String>{
  let conflicts:i64=db.connection.query_row("SELECT count(*) FROM sync_outbox WHERE status='conflict'",[],|r|r.get(0)).map_err(|e|e.to_string())?;
  let state:Option<(String,String)>=db.connection.query_row("SELECT cloud_tenant_id,pull_cursor FROM cloud_sync_state WHERE firm_id=?1",[FIRM_ID],|r|Ok((r.get(0)?,r.get(1)?))).optional().map_err(|e|e.to_string())?;
  Ok(serde_json::json!({"configured":state.is_some(),"cloudTenantId":state.as_ref().map(|x|x.0.clone()),"cursor":state.as_ref().map(|x|x.1.clone()).unwrap_or_else(||"0".into()),"pending":pending,"conflicts":conflicts}))
+}
+
+#[cfg(test)]
+mod tests {
+ use super::ensure_non_demo_firm;
+ #[test]
+ fn seeded_demo_firm_cannot_be_paired_with_cloud(){
+  assert!(ensure_non_demo_firm("ARM Demonstration Firm").is_err());
+ }
+ #[test]
+ fn non_demo_firm_can_pass_pairing_guard(){
+  assert!(ensure_non_demo_firm("Example Audit Partners").is_ok());
+ }
 }
