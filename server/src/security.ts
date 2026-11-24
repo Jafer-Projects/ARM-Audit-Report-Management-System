@@ -82,6 +82,21 @@ export async function verifyEmailAddress(rawToken: string) {
   });
 }
 
+
+export async function resendEmailVerification(email:string) {
+ const lookup=await pool.query("SELECT user_id,tenant_id,email FROM public.arm_lookup_pending_account($1)",[email]);
+ const row=lookup.rows[0];
+ if(row) {
+  const raw=token();
+  await inTransaction(async(client)=>{
+   await client.query("SELECT set_config('app.user_id',$1,true)",[row.user_id]);
+   await client.query("SELECT set_config('app.tenant_id',$1,true)",[row.tenant_id]);
+   await enqueueVerificationEmail(client,row.user_id,row.tenant_id,row.email,raw);
+  });
+ }
+ return {accepted:true};
+}
+
 export async function requestPasswordRecovery(email: string) {
   const lookup = await pool.query("SELECT user_id,tenant_id,email FROM public.arm_lookup_account($1)", [email]);
   const row = lookup.rows[0];
