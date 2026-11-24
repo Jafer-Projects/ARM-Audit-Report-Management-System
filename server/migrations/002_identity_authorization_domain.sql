@@ -98,6 +98,30 @@ CREATE TABLE organization_invitations (
 );
 CREATE INDEX organization_invitations_tenant_idx ON organization_invitations(tenant_id,email_normalized,status);
 
+
+CREATE OR REPLACE FUNCTION public.arm_accept_invitation(p_hash text,p_user uuid)
+RETURNS TABLE(tenant_id uuid,membership_id uuid)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $fn$
+DECLARE inv public.organization_invitations%ROWTYPE; new_membership uuid;
+BEGIN
+ IF current_setting('app.user_id',true) IS DISTINCT FROM p_user::text THEN RAISE EXCEPTION 'caller identity mismatch' USING ERRCODE='42501'; END IF;
+ SELECT * INTO inv FROM public.organization_invitations
+ WHERE token_hash=p_hash AND status='pending' AND expires_at>now() FOR UPDATE;
+ IF NOT FOUND THEN RAISE EXCEPTION 'invitation invalid or expired' USING ERRCODE='P0002'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM public.users u WHERE u.id=p_user AND u.status='active' AND u.email_normalized=inv.email_normalized) THEN RAISE EXCEPTION 'verified invitee email required' USING ERRCODE='42501'; END IF;
+ INSERT INTO public.tenant_memberships(tenant_id,user_id,role,status)
+ VALUES(inv.tenant_id,p_user,'professional','active')
+ ON CONFLICT(tenant_id,user_id) DO UPDATE SET status='active'
+ RETURNING id INTO new_membership;
+ INSERT INTO public.tenant_membership_roles(tenant_id,membership_id,role_id,assigned_by)
+ VALUES(inv.tenant_id,new_membership,inv.role_id,inv.invited_by)
+ ON CONFLICT DO NOTHING;
+ UPDATE public.organization_invitations SET status='accepted',accepted_by=p_user,accepted_at=now() WHERE id=inv.id;
+ RETURN QUERY SELECT inv.tenant_id,new_membership;
+END $fn$;
+REVOKE ALL ON FUNCTION public.arm_accept_invitation(text,uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.arm_accept_invitation(text,uuid) TO arm_runtime;
+
 CREATE TABLE audit_engagements (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
