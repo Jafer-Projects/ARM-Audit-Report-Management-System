@@ -178,6 +178,7 @@ jobs:
       MIGRATION_DATABASE_URL: postgres://arm_test:arm_test_password@localhost:5432/arm_test
       ADMIN_DATABASE_URL: postgres://arm_test:arm_test_password@localhost:5432/arm_test
       ARM_RUNTIME_PASSWORD: arm_runtime_test_password
+      ARM_WORKER_PASSWORD: arm_worker_test_password
       JWT_SECRET: ci-only-test-secret-which-is-longer-than-thirty-two-bytes
       ACCESS_TOKEN_TTL_SECONDS: 900
       LOG_LEVEL: warn
