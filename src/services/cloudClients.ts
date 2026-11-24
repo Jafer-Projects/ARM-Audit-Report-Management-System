@@ -74,6 +74,6 @@ export const cloudClients={
   const persona=(role==="owner"||role==="admin"||role==="administrator"?"administrator":role==="manager"?"manager":role==="auditor"?"auditor":"reviewer") as "administrator"|"manager"|"auditor"|"reviewer";
   const permissions=tenant.permissions??[];
   const clients=permissions.includes("clients.read")?await cloudClients.list(false):[];
-  return {firm_name:tenant.name??"Cloud organization",actor_name:saved.session.user?.displayName??saved.session.user?.email??"Authenticated user",persona,clients_count:clients.length,sync_state:"Cloud authoritative; client offline cache and outbox are not enabled",permissions,workspace_mode:"cloud" as const,tenant_selected:true};
+  return {firm_name:tenant.name??"Cloud organization",actor_name:saved.session.user?.displayName??saved.session.user?.email??"Authenticated user",persona,clients_count:clients.length,sync_state:"Cloud authoritative; client offline cache and outbox are not enabled",permissions,workspace_mode:"cloud" as const,tenant_selected:true,authenticated:true};
  }
 };

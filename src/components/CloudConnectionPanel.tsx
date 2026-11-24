@@ -57,7 +57,7 @@ export function CloudConnectionPanel({onClose}:Props){
   await run(async()=>{
    const result=await cloudAuth.login(api,email,password);
    if("mfaRequired" in result){setChallenge(result.challengeToken);setMessage("Enter the authenticator code or a single-use recovery code.");return;}
-   const selectedTenantId=result.memberships?.length===1?result.memberships[0].tenant_id:"";
+   const selectedTenantId="";
    await secureSession.save({apiBaseUrl:api,selectedTenantId,session:result});
    setSession(result);setTenantId(selectedTenantId);
    setMfaEnabled((await cloudAuth.mfaStatus(api,result.accessToken)).enabled);
