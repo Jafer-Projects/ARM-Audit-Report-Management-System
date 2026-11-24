@@ -83,7 +83,7 @@ export async function createAuditReport(userId:string,tenantId:string,input:{eng
 
 export async function transitionAuditReport(userId:string,tenantId:string,id:string,expectedVersion:number,action:"prepare"|"review"|"approve"|"issue"|"withdraw") {
   return withTenant(userId,tenantId,async(client)=>{
-    await assertPermission(client,userId,tenantId,action==="review"||action==="approve"||action==="issue"?"reports.approve":"reports.prepare");
+    await assertPermission(client,userId,tenantId,action==="review"||action==="approve"||action==="issue"||action==="withdraw"?"reports.approve":"reports.prepare");
     const found=await client.query("SELECT * FROM audit_reports WHERE tenant_id=$1 AND id=$2 FOR UPDATE",[tenantId,id]);
     const row=found.rows[0];
     if(!row) throw Object.assign(new Error("Audit report not found"),{statusCode:404});
