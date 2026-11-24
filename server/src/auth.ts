@@ -124,7 +124,7 @@ export async function completeMfaLogin(challengeToken: string,code: string) {
     const consumed = await client.query("UPDATE auth_mfa_challenges SET consumed_at=now() WHERE id=$1 AND consumed_at IS NULL AND expires_at>now()",[challenge.challenge_id]);
     if (consumed.rowCount!==1) throw Object.assign(new Error("MFA challenge has already been used"),{statusCode:401});
   });
-  const user = await pool.query("SELECT email,display_name FROM users WHERE id=$1",[challenge.user_id]);
+  const user = await inTransaction(async(client)=>{ await client.query("SELECT set_config('app.user_id',$1,true)",[challenge.user_id]); return client.query("SELECT email,display_name FROM users WHERE id=$1",[challenge.user_id]); });
   if (!user.rowCount) throw Object.assign(new Error("Account is unavailable"),{statusCode:401});
   return createSession(challenge.user_id,user.rows[0].email,user.rows[0].display_name);
 }
