@@ -9,7 +9,7 @@ Requirements: Node.js 22.16+, PostgreSQL 16+, and npm.
 ```sh
 cp .env.example .env
 # Set separate random POSTGRES_PASSWORD, ARM_RUNTIME_PASSWORD,
-# ARM_WORKER_PASSWORD and JWT_SECRET values before starting Compose.
+# ARM_WORKER_PASSWORD, ARM_MIGRATOR_PASSWORD and JWT_SECRET values before starting Compose.
 docker compose --env-file .env up --build
 ```
 
@@ -18,10 +18,10 @@ Run the API integration suite against a disposable PostgreSQL database:
 ```sh
 # Use a disposable PostgreSQL database only.
 export ADMIN_DATABASE_URL=postgres://owner:...@localhost:5432/arm_test
-export MIGRATION_DATABASE_URL=postgres://owner:...@localhost:5432/arm_test
+export MIGRATION_DATABASE_URL=postgres://arm_migrator:...@localhost:5432/arm_test
 export DATABASE_URL=postgres://arm_runtime:...@localhost:5432/arm_test
 export WORKER_DATABASE_URL=postgres://arm_worker:...@localhost:5432/arm_test
-export ARM_RUNTIME_PASSWORD=... ARM_WORKER_PASSWORD=... JWT_SECRET=...
+export ARM_RUNTIME_PASSWORD=... ARM_WORKER_PASSWORD=... ARM_MIGRATOR_PASSWORD=... JWT_SECRET=...
 npm run db:bootstrap-runtime
 npm run build
 npm test
