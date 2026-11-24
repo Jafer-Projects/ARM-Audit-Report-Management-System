@@ -8,16 +8,23 @@ Requirements: Node.js 22.16+, PostgreSQL 16+, and npm.
 
 ```sh
 cp .env.example .env
-# Set DATABASE_URL and a random JWT_SECRET (at least 32 bytes).
-npm install
-npm run migrate
-npm run dev
+# Set separate random POSTGRES_PASSWORD, ARM_RUNTIME_PASSWORD,
+# ARM_WORKER_PASSWORD and JWT_SECRET values before starting Compose.
+docker compose --env-file .env up --build
 ```
 
 Run the API integration suite against a disposable PostgreSQL database:
 
 ```sh
-NODE_ENV=test DATABASE_URL=postgres://... JWT_SECRET=... npm test
+# Use a disposable PostgreSQL database. Bootstrap roles as its owner/admin first.
+ADMIN_DATABASE_URL=postgres://owner:...@localhost:5432/arm_test \
+MIGRATION_DATABASE_URL=postgres://owner:...@localhost:5432/arm_test \
+DATABASE_URL=postgres://arm_runtime:...@localhost:5432/arm_test \
+WORKER_DATABASE_URL=postgres://arm_worker:...@localhost:5432/arm_test \
+ARM_RUNTIME_PASSWORD=... ARM_WORKER_PASSWORD=... JWT_SECRET=... \
+npm run db:bootstrap-runtime
+npm run build
+npm test
 ```
 
 The test command applies pending migrations before running the PostgreSQL-backed tests. Never point it at a production database.
