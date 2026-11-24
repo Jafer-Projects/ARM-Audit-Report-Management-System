@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import helmet from "@fastify/helmet";
+import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import { z } from "zod";
 import { config } from "./config.js";
@@ -36,6 +37,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     bodyLimit: 72_000_000
   });
   await app.register(helmet);
+  await app.register(cors,{origin:config.CORS_ORIGINS.split(",").map((value)=>value.trim()).filter(Boolean),methods:["GET","POST","PUT","OPTIONS"],allowedHeaders:["authorization","content-type","x-tenant-id","x-correlation-id"],credentials:false,maxAge:600});
   await app.register(rateLimit, { max: 120, timeWindow: "1 minute" });
 
   app.setErrorHandler((error, request, reply) => {
