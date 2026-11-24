@@ -26,7 +26,6 @@ export function CloudConnectionPanel({onClose}:Props){
  const [message,setMessage]=useState("");
  const [error,setError]=useState("");
  const [busy,setBusy]=useState(false);
- const [confirmSync,setConfirmSync]=useState(false);
  const [showRegister,setShowRegister]=useState(false);
  const [showRecovery,setShowRecovery]=useState(false);
 
@@ -83,7 +82,6 @@ export function CloudConnectionPanel({onClose}:Props){
  }
  async function syncNow(){
   if(!session||!tenantId)throw new Error("Sign in and select an organization first.");
-  if(!confirmSync)throw new Error("Confirm that this local workspace is approved for cloud upload.");
   await run(async()=>{
    const result=await synchronizeDesktop({apiBaseUrl:api,tenantId,accessToken:session.accessToken});
    setStatus(result.status);
@@ -171,8 +169,8 @@ export function CloudConnectionPanel({onClose}:Props){
      {mfaEnabled&&<><label>Current password<input type="password" value={mfaPassword} onChange={event=>setMfaPassword(event.target.value)}/></label><label>Fresh authenticator code<input inputMode="numeric" autoComplete="one-time-code" value={mfaManagementCode} onChange={event=>setMfaManagementCode(event.target.value)}/></label><button type="button" disabled={busy||!mfaPassword||!/^\d{6}$/.test(mfaManagementCode)} onClick={()=>void disableMfa()}>Disable MFA</button></>}
      {recoveryCodes.length>0&&<div className="cloud-recovery-codes"><strong>One-time recovery codes</strong><ul>{recoveryCodes.map(code=><li key={code}><code>{code}</code></li>)}</ul><button type="button" className="text-button" onClick={()=>setRecoveryCodes([])}>I stored these codes</button></div>}
     </div>
-    <div className="cloud-sync-consent"><p><strong>Before uploading:</strong> the local outbox includes existing workspace records and seeded demonstration records. Do not synchronize demo or unapproved client data into a production tenant.</p><label><input type="checkbox" checked={confirmSync} onChange={event=>setConfirmSync(event.target.checked)}/> I have reviewed this local workspace and authorize these records to synchronize to the selected cloud organization.</label></div>
-    <button type="button" disabled={busy||!tenantId||!confirmSync} onClick={()=>void syncNow()}>Synchronize now</button>
+    <div className="cloud-sync-consent"><p><strong>Synchronization is disabled in this build.</strong> This desktop still opens the seeded ARM Demonstration Firm and its initial outbox contains synthetic sample records. The native sync layer rejects this demo workspace. A separate tenant-owned workspace, complete domain API integration and migration controls are required before enabling production synchronization.</p></div>
+    <button type="button" disabled>Synchronization unavailable for demonstration workspace</button>
     <button type="button" className="text-button" disabled={busy} onClick={()=>void refreshSession()}>Refresh session</button>
     <button type="button" className="text-button" disabled={busy} onClick={()=>void logout()}>Sign out</button>
    </div>}
