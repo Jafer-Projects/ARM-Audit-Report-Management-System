@@ -126,3 +126,10 @@ Before production, document lawful purpose, data minimization, notice/consent wh
 ## 10. Threat modelling
 
 Maintain a threat model covering lost/stolen laptops, malicious insiders, compromised firm accounts, cross-tenant access, malware in uploads, malicious documents, sync replay, credential theft, compromised update channel, ransomware, VPS compromise, backup compromise and government connector credential exposure. Reassess after material architecture changes.
+
+
+## Cloud data/security implementation status
+
+The initial cloud migration creates identity, tenant membership, session, synchronization, append-only audit and worker-job tables. RLS is enabled with FORCE on tenant-owned tables. The API sets `app.user_id` and `app.tenant_id` using transaction-local settings and performs an active-membership check before tenant operations. Tenant identifiers in headers are selectors only, never authorization evidence.
+
+The first integration suite exercises registration, tenant context, cross-tenant denial, idempotent synchronization, stale-version conflict, pull visibility, refresh rotation and session revocation. It does not yet constitute a complete tenant-isolation assessment. Before production, add direct SQL/RLS bypass-boundary tests using separate least-privilege roles, organization invitation and role-administration tests, device/revocation tests, privileged support controls, MFA/email verification, secrets rotation and an independent security review. Audit and sync inbox rows have append-only triggers; production grants must additionally deny mutation privileges to application roles.
