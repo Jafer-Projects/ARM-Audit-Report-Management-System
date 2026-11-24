@@ -93,33 +93,38 @@ pub fn sync_apply_pull(events:Vec<PulledSyncEvent>,next_cursor:String,state:Stat
  for event in events{
   if !["accepted","conflict","rejected"].contains(&event.outcome.as_str()){return Err("Unsupported pulled event outcome.".into());}
   tx.execute("INSERT OR IGNORE INTO cloud_sync_inbox(received_seq,event_id,aggregate_id,outcome,resulting_version,payload_json,received_at) VALUES(?1,?2,?3,?4,?5,?6,?7)",
-   params![event.received_seq,event.event_id,event.aggregate_id,event.outcome,event.resulting_version,event.payload.to_string(),event.received_at.unwrap_or_else(now_utc)]
+   params![event.received_seq,event.event_id,event.aggregate_id,event.outcome,event.resulting_version,event.payload.to_string(),event.received_at.clone().unwrap_or_else(now_utc)]
   ).map_err(|e|e.to_string())?;
   if event.outcome=="accepted"{
-   if let Some(version)=event.resulting_version {
-    tx.execute("INSERT INTO cloud_sync_aggregate_state(aggregate_id,server_version,updated_at) VALUES(?1,?2,?3) ON CONFLICT(aggregate_id) DO UPDATE SET server_version=MAX(server_version,excluded.server_version),updated_at=excluded.updated_at",[&event.aggregate_id,version,now_utc()]).map_err(|e|e.to_string())?;
-   }
    if let (Some(record),Some(version))=(event.payload.get("record"),event.resulting_version){
-    let id=record.get("id").and_then(Value::as_str).unwrap_or(&event.aggregate_id);
-    let record_type=record.get("record_type").and_then(Value::as_str).unwrap_or("historical_record");
-    let title=record.get("title").and_then(Value::as_str).unwrap_or("Synced record");
-    let status=record.get("status").and_then(Value::as_str).unwrap_or("Draft");
-    let client_id=record.get("client_id").and_then(Value::as_str);
-    let client_exists=if let Some(client)=client_id{
-     tx.query_row("SELECT 1 FROM client WHERE id=?1 AND firm_id=?2",params![client,FIRM_ID],|_|Ok(())).optional().map_err(|e|e.to_string())?.is_some()
-    }else{true};
-    if client_exists{
-     let reference=record.get("reference").and_then(Value::as_str).unwrap_or("");
-     let amount=record.get("amount_text").and_then(Value::as_str).unwrap_or("");
-     let notes=record.get("notes").and_then(Value::as_str).unwrap_or("");
-     let payload_json=record.get("payload_json").and_then(Value::as_str).unwrap_or("{}");
-     let updated=record.get("updated_at").and_then(Value::as_str).unwrap_or(event.received_at.as_deref().unwrap_or("1970-01-01T00:00:00Z"));
-     tx.execute(
-      "INSERT INTO workspace_record(id,firm_id,client_id,record_type,title,status,reference,amount_text,notes,payload_json,row_version,created_at,updated_at,created_by,updated_by) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?12,?13,?13) ON CONFLICT(id) DO UPDATE SET title=excluded.title,status=excluded.status,reference=excluded.reference,amount_text=excluded.amount_text,notes=excluded.notes,payload_json=excluded.payload_json,row_version=excluded.row_version,updated_at=excluded.updated_at,updated_by=excluded.updated_by WHERE workspace_record.firm_id=excluded.firm_id AND workspace_record.row_version<excluded.row_version",
-      params![id,FIRM_ID,client_id,record_type,title,status,reference,amount,notes,payload_json,version,updated,actor]
-     ).map_err(|e|e.to_string())?;
-     applied+=1;
+    let current_cloud_version:Option<i64>=tx.query_row("SELECT server_version FROM cloud_sync_aggregate_state WHERE aggregate_id=?1",[&event.aggregate_id],|r|r.get(0)).optional().map_err(|e|e.to_string())?;
+    let has_pending:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM sync_outbox WHERE aggregate_id=?1 AND status='pending')",[&event.aggregate_id],|r|r.get(0)).map_err(|e|e.to_string())?;
+    if version>current_cloud_version.unwrap_or(0) && !has_pending {
+     let record_id=record.get("id").and_then(Value::as_str).unwrap_or(&event.aggregate_id);
+     let record_type=record.get("record_type").and_then(Value::as_str).unwrap_or("historical_record");
+     let title=record.get("title").and_then(Value::as_str).unwrap_or("Synced record");
+     let status=record.get("status").and_then(Value::as_str).unwrap_or("Draft");
+     let client_id=record.get("client_id").and_then(Value::as_str);
+     let client_exists=if let Some(client)=client_id{
+      tx.query_row("SELECT 1 FROM client WHERE id=?1 AND firm_id=?2",params![client,FIRM_ID],|_|Ok(())).optional().map_err(|e|e.to_string())?.is_some()
+     }else{true};
+     if client_exists {
+      let reference=record.get("reference").and_then(Value::as_str).unwrap_or("");
+      let amount=record.get("amount_text").and_then(Value::as_str).unwrap_or("");
+      let notes=record.get("notes").and_then(Value::as_str).unwrap_or("");
+      let payload_json=record.get("payload_json").and_then(Value::as_str).unwrap_or("{}");
+      let updated=record.get("updated_at").and_then(Value::as_str).unwrap_or(event.received_at.as_deref().unwrap_or("1970-01-01T00:00:00Z"));
+      let source_version=record.get("row_version").and_then(Value::as_i64).unwrap_or(1).max(1);
+      let existing_version:Option<i64>=tx.query_row("SELECT row_version FROM workspace_record WHERE id=?1 AND firm_id=?2",params![record_id,FIRM_ID],|r|r.get(0)).optional().map_err(|e|e.to_string())?;
+      let local_version=existing_version.map(|v|v.saturating_add(1)).unwrap_or(source_version);
+      tx.execute(
+       "INSERT INTO workspace_record(id,firm_id,client_id,record_type,title,status,reference,amount_text,notes,payload_json,row_version,created_at,updated_at,created_by,updated_by) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?12,?13,?13) ON CONFLICT(id) DO UPDATE SET title=excluded.title,status=excluded.status,reference=excluded.reference,amount_text=excluded.amount_text,notes=excluded.notes,payload_json=excluded.payload_json,row_version=excluded.row_version,updated_at=excluded.updated_at,updated_by=excluded.updated_by WHERE workspace_record.firm_id=excluded.firm_id",
+       params![record_id,FIRM_ID,client_id,record_type,title,status,reference,amount,notes,payload_json,local_version,updated,actor]
+      ).map_err(|e|e.to_string())?;
+      applied+=1;
+     }
     }
+    tx.execute("INSERT INTO cloud_sync_aggregate_state(aggregate_id,server_version,updated_at) VALUES(?1,?2,?3) ON CONFLICT(aggregate_id) DO UPDATE SET server_version=MAX(server_version,excluded.server_version),updated_at=excluded.updated_at",[&event.aggregate_id,version,now_utc()]).map_err(|e|e.to_string())?;
    }
   }
  }
