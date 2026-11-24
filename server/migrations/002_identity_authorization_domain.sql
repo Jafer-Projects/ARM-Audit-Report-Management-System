@@ -22,6 +22,7 @@ CREATE TABLE password_recovery_tokens (
 CREATE TABLE mfa_credentials (
   user_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   secret_ciphertext text NOT NULL,
+  last_totp_counter bigint NOT NULL DEFAULT 0,
   enabled_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
