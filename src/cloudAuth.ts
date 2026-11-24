@@ -1,7 +1,7 @@
 export type CloudSession={
  accessToken:string;refreshToken:string;expiresIn:number;
- user:{id:string;email:string;displayName:string};
- memberships:Array<{tenantId:string;tenantName:string;role:string;status:string}>;
+ user?:{id:string;email:string;displayName:string};
+ memberships?:Array<{tenantId:string;tenantName:string;role:string;status:string}>;
 };
 export type CloudLoginResult=CloudSession|{mfaRequired:true;challengeToken:string;expiresIn:number};
 function baseUrl(value:string){
@@ -26,7 +26,7 @@ export const cloudAuth={
  completeRecovery:(api:string,token:string,password:string)=>request<{reset:boolean;sessionsRevoked:boolean}>(api,"/v1/auth/recovery/complete",{token,password}),
  login:(api:string,email:string,password:string)=>request<CloudLoginResult>(api,"/v1/auth/login",{email,password}),
  completeMfa:(api:string,challengeToken:string,code:string)=>request<CloudSession>(api,"/v1/auth/mfa/complete",{challengeToken,code}),
- refresh:(api:string,refreshToken:string)=>request<CloudSession>(api,"/v1/auth/refresh",{refreshToken}),
+ refresh:(api:string,refreshToken:string)=>request<{accessToken:string;refreshToken:string;expiresIn:number}>(api,"/v1/auth/refresh",{refreshToken}),
  logout:(api:string,accessToken:string)=>request<{revoked:boolean}>(api,"/v1/auth/logout",{},accessToken),
  beginMfa:(api:string,accessToken:string,tenantId:string,password:string)=>request<{secret:string;otpauthUri:string}>(api,"/v1/auth/mfa/enroll",{password},accessToken,tenantId),
  confirmMfa:(api:string,accessToken:string,tenantId:string,code:string)=>request<{enabled:boolean;recoveryCodes:string[]}>(api,"/v1/auth/mfa/confirm",{code},accessToken,tenantId),
