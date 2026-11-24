@@ -46,7 +46,7 @@ function renderEmail(row:Email){
 async function sendEmail(row:Email){
  if(!config.EMAIL_PROVIDER_URL||!config.EMAIL_PROVIDER_API_KEY) throw new Error("Email provider URL and API key are not configured");
  const message=renderEmail(row);
- const response=await fetch(config.EMAIL_PROVIDER_URL,{method:"POST",headers:{"authorization":`Bearer ${config.EMAIL_PROVIDER_API_KEY}`,"content-type":"application/json"},body:JSON.stringify({from:config.EMAIL_FROM,to:[row.recipient],subject:message.subject,html:message.html,text:message.text}),signal:AbortSignal.timeout(15_000)});
+ const response=await fetch(config.EMAIL_PROVIDER_URL,{method:"POST",headers:{"authorization":`Bearer ${config.EMAIL_PROVIDER_API_KEY}`,"content-type":"application/json","idempotency-key":row.id},body:JSON.stringify({from:config.EMAIL_FROM,to:[row.recipient],subject:message.subject,html:message.html,text:message.text}),signal:AbortSignal.timeout(15_000)});
  if(!response.ok) throw new Error(`Email provider rejected request (${response.status})`);
 }
 async function processEmail():Promise<boolean>{
@@ -56,13 +56,13 @@ async function processEmail():Promise<boolean>{
   await sendEmail(email);
   await inTransaction(async(client)=>{
    await client.query("SELECT set_config('app.worker','true',true)");
-   await client.query("UPDATE email_outbox SET status='sent',sent_at=now(),last_error=NULL WHERE id=$1",[email.id]);
+   await client.query("UPDATE email_outbox SET status='sent',sent_at=now(),last_error=NULL,payload='{}'::jsonb WHERE id=$1",[email.id]);
   });
  }catch(error){
   const message=error instanceof Error?error.message.slice(0,500):"Email delivery failed";
   await inTransaction(async(client)=>{
    await client.query("SELECT set_config('app.worker','true',true)");
-   await client.query("UPDATE email_outbox SET status=CASE WHEN attempts>=8 THEN 'failed' ELSE 'queued' END,available_at=now()+($2::text||' seconds')::interval,last_error=$3 WHERE id=$1",[email.id,String(Math.min(3600,2**email.attempts*15)),message]);
+   await client.query("UPDATE email_outbox SET status=CASE WHEN attempts>=8 THEN 'failed' ELSE 'queued' END,available_at=now()+($2::text||' seconds')::interval,last_error=$3,payload=CASE WHEN attempts>=8 THEN '{}'::jsonb ELSE payload END WHERE id=$1",[email.id,String(Math.min(3600,2**email.attempts*15)),message]);
   });
   console.error(JSON.stringify({level:"error",workerId,event:"email_delivery_failed",outboxId:email.id,attempts:email.attempts,error:message}));
  }
