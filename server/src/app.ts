@@ -12,6 +12,7 @@ import { listRoles, createRole, replaceRolePermissions, assignMemberRole, invite
 import { acceptOrganizationInvitation } from "./organizations.js";
 import { createEngagement, listEngagements, createWorkpaper, transitionWorkpaper, createAuditReport, transitionAuditReport, createJournal, postJournal, createAccount, listAccounts, reverseJournal, listWorkpapers, listAuditReports, listJournals, getJournal } from "./domain.js";
 import { uploadDocument, readCleanDocument, listDocuments } from "./documents.js";
+import { listClients, findClientDuplicates, saveClient, transitionClient, listClientHistory } from "./clients.js";
 
 const registerSchema = z.object({
   email: z.string().email().max(254),
@@ -333,6 +334,41 @@ export async function buildApp(): Promise<FastifyInstance> {
   app.get("/v1/documents/:id/content", { preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request) => {
     const auth=(request as AuthenticatedRequest).auth!,params=request.params as {id:string};
     return readCleanDocument(auth.sub,tenantId(request as AuthenticatedRequest),params.id);
+  });
+
+
+  // Tenant-owned client directory. The tenant is selected by authenticated header
+  // and independently verified against the user's active membership in withTenant.
+  app.get("/v1/clients", { preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request,reply) => {
+    const parsed=z.object({includeArchived:z.coerce.boolean().default(false)}).safeParse(request.query);
+    if(!parsed.success) return reply.code(400).send({error:"validation_error"});
+    const auth=(request as AuthenticatedRequest).auth!;
+    return {clients:await listClients(auth.sub,tenantId(request as AuthenticatedRequest),parsed.data.includeArchived)};
+  });
+  app.get("/v1/clients/duplicates", { preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request,reply) => {
+    const parsed=z.object({legalName:z.string().min(2).max(240),tinRaw:z.string().max(100).default(""),excludeId:z.string().uuid().optional()}).safeParse(request.query);
+    if(!parsed.success) return reply.code(400).send({error:"validation_error"});
+    const auth=(request as AuthenticatedRequest).auth!;
+    return {candidates:await findClientDuplicates(auth.sub,tenantId(request as AuthenticatedRequest),parsed.data.legalName,parsed.data.tinRaw,parsed.data.excludeId)};
+  });
+  app.post("/v1/clients", { preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request,reply) => {
+    const parsed=z.object({id:z.string().uuid().optional(),row_version:z.number().int().positive().optional(),record_kind:z.enum(["business","individual","other"]),legal_name:z.string().trim().min(2).max(240),display_name:z.string().trim().min(1).max(240),tin_raw:z.string().max(100).optional(),sector:z.string().max(160).optional(),contact_name:z.string().max(160).optional(),contact_email:z.string().max(254).optional(),contact_phone:z.string().max(80).optional(),address_text:z.string().max(2000).optional(),internal_reference:z.string().max(100).optional(),notes:z.string().max(10000).optional(),duplicate_acknowledged:z.boolean().optional()}).safeParse(request.body);
+    if(!parsed.success) return reply.code(400).send({error:"validation_error",issues:parsed.error.issues});
+    const auth=(request as AuthenticatedRequest).auth!;
+    return reply.code(parsed.data.id?200:201).send(await saveClient(auth.sub,tenantId(request as AuthenticatedRequest),parsed.data));
+  });
+  app.post("/v1/clients/:id/transition", { preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request,reply) => {
+    const parsed=z.object({expectedVersion:z.number().int().positive(),action:z.enum(["archive","activate","restore"])}).safeParse(request.body);
+    const params=request.params as {id:string};
+    if(!parsed.success||!z.string().uuid().safeParse(params.id).success) return reply.code(400).send({error:"validation_error"});
+    const auth=(request as AuthenticatedRequest).auth!;
+    return transitionClient(auth.sub,tenantId(request as AuthenticatedRequest),params.id,parsed.data.action,parsed.data.expectedVersion);
+  });
+  app.get("/v1/clients/:id/history", { preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request,reply) => {
+    const params=request.params as {id:string};
+    if(!z.string().uuid().safeParse(params.id).success) return reply.code(400).send({error:"validation_error"});
+    const auth=(request as AuthenticatedRequest).auth!;
+    return {history:await listClientHistory(auth.sub,tenantId(request as AuthenticatedRequest),params.id)};
   });
 
   app.get("/v1/tenant/context", { preHandler: async (request) => {
