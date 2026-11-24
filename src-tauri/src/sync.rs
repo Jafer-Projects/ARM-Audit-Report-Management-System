@@ -1,7 +1,7 @@
 use crate::{db::{now_utc,Database},AppState};
 use rusqlite::{params,OptionalExtension};
 use serde::{Deserialize,Serialize};
-use serde_json::Value;
+use serde_json::{json,Value};
 use tauri::State;
 
 const FIRM_ID:&str="00000000-0000-4000-8000-000000000001";
@@ -120,6 +120,11 @@ pub fn sync_apply_pull(events:Vec<PulledSyncEvent>,next_cursor:String,state:Stat
       tx.execute(
        "INSERT INTO workspace_record(id,firm_id,client_id,record_type,title,status,reference,amount_text,notes,payload_json,row_version,created_at,updated_at,created_by,updated_by) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?12,?13,?13) ON CONFLICT(id) DO UPDATE SET title=excluded.title,status=excluded.status,reference=excluded.reference,amount_text=excluded.amount_text,notes=excluded.notes,payload_json=excluded.payload_json,row_version=excluded.row_version,updated_at=excluded.updated_at,updated_by=excluded.updated_by WHERE workspace_record.firm_id=excluded.firm_id",
        params![record_id,FIRM_ID,client_id,record_type,title,status,reference,amount,notes,payload_json,local_version,updated,actor]
+      ).map_err(|e|e.to_string())?;
+      let snapshot=json!({"recordType":record_type,"title":title,"status":status,"reference":reference,"amountText":amount,"notes":notes,"payload":payload_json,"updatedAt":updated,"sourceEventId":event.event_id});
+      tx.execute(
+       "INSERT OR IGNORE INTO workspace_record_version(id,firm_id,record_id,row_version,actor_id,changed_at,snapshot_json,correlation_id) VALUES(?1,?2,?3,?4,?5,?6,?7,?8)",
+       params![uuid::Uuid::new_v4().to_string(),FIRM_ID,record_id,local_version,actor,updated,snapshot.to_string(),event.event_id]
       ).map_err(|e|e.to_string())?;
       applied+=1;
      }
