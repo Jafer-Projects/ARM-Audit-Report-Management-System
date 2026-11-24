@@ -1,7 +1,7 @@
 export type CloudSession={
  accessToken:string;refreshToken:string;expiresIn:number;
  user?:{id:string;email:string;displayName:string};
- memberships?:Array<{tenant_id:string;tenant_name:string;role:string;status:string}>;
+ memberships?:Array<{tenant_id:string;role:string}>;
 };
 export type CloudLoginResult=CloudSession|{mfaRequired:true;challengeToken:string;expiresIn:number};
 function baseUrl(value:string){
