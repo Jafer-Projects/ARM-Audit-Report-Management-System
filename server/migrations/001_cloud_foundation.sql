@@ -160,6 +160,13 @@ CREATE POLICY memberships_tenant_scope ON tenant_memberships
   WITH CHECK (
     tenant_id::text = current_setting('app.tenant_id', true)
     AND user_id::text = current_setting('app.user_id', true)
+    AND role = 'owner'
+    AND status = 'active'
+    AND EXISTS (
+      SELECT 1 FROM tenants t
+      WHERE t.id = tenant_memberships.tenant_id
+        AND t.created_by = tenant_memberships.user_id
+    )
   );
 
 DO $arm$
@@ -204,7 +211,8 @@ BEGIN
     GRANT SELECT, INSERT, UPDATE ON auth_sessions TO arm_runtime;
     GRANT EXECUTE ON FUNCTION public.arm_lookup_user_for_login(text) TO arm_runtime;
     GRANT EXECUTE ON FUNCTION public.arm_lookup_session_for_refresh(text) TO arm_runtime;
-    REVOKE UPDATE, DELETE ON audit_events, sync_inbox FROM arm_runtime;
+    REVOKE UPDATE, DELETE ON tenants, tenant_memberships, audit_events, sync_inbox FROM arm_runtime;
+    REVOKE DELETE ON sync_aggregates FROM arm_runtime;
   END IF;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'arm_worker') THEN
     GRANT SELECT, UPDATE ON jobs TO arm_worker;
