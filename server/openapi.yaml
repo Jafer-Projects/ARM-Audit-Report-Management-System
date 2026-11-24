@@ -133,7 +133,7 @@ paths:
                     properties:
                       eventId: { type: string, format: uuid }
                       idempotencyKey: { type: string, minLength: 8, maxLength: 160 }
-                      aggregateType: { type: string, minLength: 1, maxLength: 80 }
+                      aggregateType: { type: string, const: prototype.workspace_record }
                       aggregateId: { type: string, format: uuid }
                       baseVersion: { type: integer, minimum: 0 }
                       eventType: { type: string, const: aggregate.upsert }
