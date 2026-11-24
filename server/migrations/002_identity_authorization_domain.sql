@@ -154,6 +154,31 @@ END $fn$;
 REVOKE ALL ON FUNCTION public.arm_list_tenant_members(uuid,uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.arm_list_tenant_members(uuid,uuid) TO arm_runtime;
 
+
+CREATE OR REPLACE FUNCTION public.arm_set_member_status(p_tenant uuid,p_actor uuid,p_membership uuid,p_status text)
+RETURNS TABLE(membership_id uuid,status text)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $fn$
+DECLARE target public.tenant_memberships%ROWTYPE;
+BEGIN
+ IF current_setting('app.user_id',true) IS DISTINCT FROM p_actor::text THEN RAISE EXCEPTION 'caller identity mismatch' USING ERRCODE='42501'; END IF;
+ IF p_status NOT IN ('active','suspended','revoked') THEN RAISE EXCEPTION 'invalid membership status' USING ERRCODE='22023'; END IF;
+ IF NOT EXISTS(
+  SELECT 1 FROM public.tenant_memberships m
+  WHERE m.tenant_id=p_tenant AND m.user_id=p_actor AND m.status='active'
+   AND (m.role='owner' OR EXISTS(
+    SELECT 1 FROM public.tenant_membership_roles mr JOIN public.tenant_role_permissions rp ON rp.tenant_id=mr.tenant_id AND rp.role_id=mr.role_id
+    WHERE mr.tenant_id=p_tenant AND mr.membership_id=m.id AND rp.permission_key='tenant.manage'
+   ))
+ ) THEN RAISE EXCEPTION 'tenant.manage permission required' USING ERRCODE='42501'; END IF;
+ SELECT * INTO target FROM public.tenant_memberships WHERE tenant_id=p_tenant AND id=p_membership FOR UPDATE;
+ IF NOT FOUND THEN RAISE EXCEPTION 'membership not found' USING ERRCODE='P0002'; END IF;
+ IF target.role='owner' OR target.user_id=p_actor THEN RAISE EXCEPTION 'cannot change owner or own membership status' USING ERRCODE='42501'; END IF;
+ UPDATE public.tenant_memberships SET status=p_status WHERE tenant_id=p_tenant AND id=p_membership;
+ RETURN QUERY SELECT p_membership,p_status;
+END $fn$;
+REVOKE ALL ON FUNCTION public.arm_set_member_status(uuid,uuid,uuid,text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.arm_set_member_status(uuid,uuid,uuid,text) TO arm_runtime;
+
 CREATE TABLE audit_engagements (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
@@ -435,7 +460,8 @@ BEGIN
  IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='arm_runtime') THEN
   GRANT SELECT,INSERT,UPDATE ON email_verification_tokens,password_recovery_tokens,mfa_credentials,mfa_recovery_codes TO arm_runtime;
   GRANT DELETE ON mfa_credentials,mfa_recovery_codes TO arm_runtime;
-  GRANT SELECT,INSERT,UPDATE ON tenant_roles,tenant_role_permissions,tenant_membership_roles,organization_invitations TO arm_runtime;
+  GRANT SELECT,INSERT,UPDATE,DELETE ON tenant_roles,tenant_role_permissions,tenant_membership_roles TO arm_runtime;
+  GRANT SELECT,INSERT,UPDATE ON organization_invitations TO arm_runtime;
   GRANT SELECT ON permissions TO arm_runtime;
   GRANT SELECT,INSERT,UPDATE ON audit_engagements,audit_workpapers,audit_reports,accounting_accounts,accounting_journals TO arm_runtime;
   GRANT SELECT,INSERT ON accounting_journal_lines TO arm_runtime;
