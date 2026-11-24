@@ -77,7 +77,7 @@ export async function scanNextDocument(workerPool: {connect:()=>Promise<any>},cl
   try {
     await client.query("BEGIN");
     await client.query("SELECT set_config('app.worker','true',true)");
-    const found=await client.query("SELECT id,object_key,sha256 FROM document_objects WHERE scan_status='pending' OR (scan_status='scanning' AND (scanned_at IS NULL OR scanned_at<now()-interval '5 minutes')) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1");
+    const found=await client.query("SELECT id,object_key,sha256 FROM document_objects WHERE (scan_status='pending' AND (scanned_at IS NULL OR scanned_at<now()-interval '30 seconds')) OR (scan_status='scanning' AND (scanned_at IS NULL OR scanned_at<now()-interval '5 minutes')) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1");
     document=found.rows[0];
     if(!document) { await client.query("COMMIT"); return false; }
     await client.query("UPDATE document_objects SET scan_status='scanning',scanned_at=now() WHERE id=$1",[document.id]);
@@ -89,9 +89,14 @@ export async function scanNextDocument(workerPool: {connect:()=>Promise<any>},cl
     const bytes=await loadObject(document.object_key);
     if(sha(bytes)!==document.sha256) throw new Error("SHA-256 mismatch before scanning");
     const verdict=await clamScan(bytes,clamHost,clamPort);
-    status=verdict==="OK"?"clean":"infected";
+    if(verdict==="OK") status="clean";
+    else if(/FOUND$/.test(verdict)) status="infected";
+    else throw new Error("ClamAV did not return a clean verdict: "+verdict);
     detail=verdict;
-  } catch(error) { detail=error instanceof Error?error.message.slice(0,500):"Scanner error"; }
+  } catch(error) {
+    detail=error instanceof Error?error.message.slice(0,500):"Scanner error";
+    status=detail.includes("SHA-256 mismatch")?"quarantined":"pending";
+  }
   const update=await workerPool.connect();
   try {
     await update.query("BEGIN");
