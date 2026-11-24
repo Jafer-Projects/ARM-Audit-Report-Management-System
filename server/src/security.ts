@@ -113,7 +113,7 @@ export async function resetPassword(rawToken: string, password: string) {
 }
 
 export async function beginMfaEnrollment(userId:string,email:string,password:string) {
-  const account=await pool.query("SELECT password_hash FROM users WHERE id=$1 AND status='active'",[userId]);
+  const account=await inTransaction(async(client)=>{ await client.query("SELECT set_config('app.user_id',$1,true)",[userId]); return client.query("SELECT password_hash FROM users WHERE id=$1 AND status='active'",[userId]); });
   if(!account.rowCount || !(await verifyPassword(password,account.rows[0].password_hash))) throw Object.assign(new Error("Current password is incorrect"),{statusCode:401});
   const secret=base32Encode(randomBytes(20));
   await inTransaction(async(client)=>{
@@ -143,7 +143,7 @@ export async function confirmMfaEnrollment(userId:string,code:string) {
 }
 
 export async function disableMfa(userId:string,password:string,code:string) {
-  const account=await pool.query("SELECT password_hash FROM users WHERE id=$1 AND status='active'",[userId]);
+  const account=await inTransaction(async(client)=>{ await client.query("SELECT set_config('app.user_id',$1,true)",[userId]); return client.query("SELECT password_hash FROM users WHERE id=$1 AND status='active'",[userId]); });
   if(!account.rowCount || !(await verifyPassword(password,account.rows[0].password_hash))) throw Object.assign(new Error("Current password is incorrect"),{statusCode:401});
   await inTransaction(async(client)=>{
     await client.query("SELECT set_config('app.user_id',$1,true)",[userId]);
