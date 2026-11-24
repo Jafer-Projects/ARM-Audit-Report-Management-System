@@ -10,6 +10,7 @@ import { pushEvents, pullEvents, pushSchema } from "./sync.js";
 import { listRoles, createRole, replaceRolePermissions, assignMemberRole, inviteOrganizationMember } from "./authorization.js";
 import { acceptOrganizationInvitation } from "./organizations.js";
 import { createEngagement, listEngagements, createWorkpaper, transitionWorkpaper, createAuditReport, transitionAuditReport, createJournal, postJournal } from "./domain.js";
+import { uploadDocument, readCleanDocument } from "./documents.js";
 
 const registerSchema = z.object({
   email: z.string().email().max(254),
@@ -32,7 +33,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
     logger: { level: config.LOG_LEVEL, redact: ["req.headers.authorization", "req.headers.cookie"] },
     requestIdHeader: "x-correlation-id",
-    bodyLimit: 1_048_576
+    bodyLimit: 72_000_000
   });
   await app.register(helmet);
   await app.register(rateLimit, { max: 120, timeWindow: "1 minute" });
@@ -221,6 +222,17 @@ export async function buildApp(): Promise<FastifyInstance> {
   app.post("/v1/accounting/journals/:id/post", { preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request) => {
     const auth=(request as AuthenticatedRequest).auth!,params=request.params as {id:string};
     return postJournal(auth.sub,tenantId(request as AuthenticatedRequest),params.id);
+  });
+
+  app.post("/v1/documents", { preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request,reply) => {
+    const parsed=z.object({fileName:z.string().min(1).max(255),mediaType:z.enum(["application/pdf","image/jpeg","image/png"]),contentBase64:z.string().min(8).max(70_000_000),engagementId:z.string().uuid().optional(),workpaperId:z.string().uuid().optional(),reportId:z.string().uuid().optional()}).safeParse(request.body);
+    if(!parsed.success) return reply.code(400).send({error:"validation_error"});
+    const auth=(request as AuthenticatedRequest).auth!;
+    return reply.code(202).send(await uploadDocument(auth.sub,tenantId(request as AuthenticatedRequest),parsed.data));
+  });
+  app.get("/v1/documents/:id/content", { preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request) => {
+    const auth=(request as AuthenticatedRequest).auth!,params=request.params as {id:string};
+    return readCleanDocument(auth.sub,tenantId(request as AuthenticatedRequest),params.id);
   });
 
   app.get("/v1/tenant/context", { preHandler: async (request) => {
