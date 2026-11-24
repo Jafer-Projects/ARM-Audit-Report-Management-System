@@ -1,6 +1,6 @@
 import { useState,type FormEvent } from "react";
 import { cloudAuth,type CloudSession } from "../cloudAuth";
-import { getLocalSyncStatus,synchronizeDesktop } from "../cloudSync";
+import { getLocalSyncStatus } from "../cloudSync";
 
 type Props={onClose:()=>void};
 type LocalStatus={configured:boolean;cursor:string;pending:number;conflicts:number};
@@ -80,14 +80,7 @@ export function CloudConnectionPanel({onClose}:Props){
    setMessage("Cloud session refreshed. The refresh token was rotated.");
   });
  }
- async function syncNow(){
-  if(!session||!tenantId)throw new Error("Sign in and select an organization first.");
-  await run(async()=>{
-   const result=await synchronizeDesktop({apiBaseUrl:api,tenantId,accessToken:session.accessToken});
-   setStatus(result.status);
-   setMessage("Sync cycle completed: "+result.pushed+" event(s) submitted and "+result.pulled+" event(s) received.");
-  });
- }
+
  async function closePanel(){
   if(session) await cloudAuth.logout(api,session.accessToken).catch(()=>undefined);
   onClose();
