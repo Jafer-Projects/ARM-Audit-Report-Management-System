@@ -70,6 +70,24 @@ jobs:
       - name: Check Rust formatting
         run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 
+  backend-build:
+    name: Rust backend build check
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.90.0"
+          targets: x86_64-pc-windows-msvc
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          shared-key: arm-rust-1.90-windows
+      - name: Check backend and all targets
+        run: cargo check --manifest-path src-tauri/Cargo.toml --all-targets --target x86_64-pc-windows-msvc
+
   rust-tests:
     name: Rust unit and module tests
     runs-on: windows-2022
@@ -80,8 +98,13 @@ jobs:
         with:
           toolchain: "1.90.0"
           targets: x86_64-pc-windows-msvc
-      - name: Run Rust tests
-        run: cargo test --manifest-path src-tauri/Cargo.toml
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          shared-key: arm-rust-1.90-windows
+      - name: Run every Rust unit and module test
+        run: cargo test --manifest-path src-tauri/Cargo.toml --no-fail-fast
 
   rust-clippy:
     name: Rust Clippy lint
@@ -94,6 +117,11 @@ jobs:
           toolchain: "1.90.0"
           components: clippy
           targets: x86_64-pc-windows-msvc
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          shared-key: arm-rust-1.90-windows
       - name: Run Clippy for all targets
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 
@@ -107,6 +135,11 @@ jobs:
         with:
           toolchain: "1.90.0"
           targets: x86_64-pc-windows-msvc
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          shared-key: arm-rust-1.90-windows
       - uses: actions/setup-node@v4
         with:
           node-version: "22.16.0"
