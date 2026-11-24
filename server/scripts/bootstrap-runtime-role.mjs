@@ -27,10 +27,6 @@ try {
   }
   await pool.query("GRANT CONNECT ON DATABASE " + databaseIdentifier + " TO arm_runtime, arm_worker");
   await pool.query("GRANT USAGE ON SCHEMA public TO arm_runtime, arm_worker");
-  await pool.query("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO arm_runtime");
-  await pool.query("GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO arm_runtime");
-  await pool.query("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO arm_runtime");
-  await pool.query("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO arm_runtime");
   console.log("Configured non-owner, non-superuser, NOBYPASSRLS runtime and worker roles");
 } finally {
   await pool.end();
