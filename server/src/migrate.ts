@@ -1,14 +1,14 @@
 import { readdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
-import { pool } from "./db.js";
+import pg from "pg";
 
+const migrationUrl = process.env.MIGRATION_DATABASE_URL ?? process.env.DATABASE_URL;
+if (!migrationUrl) throw new Error("MIGRATION_DATABASE_URL or DATABASE_URL is required");
+const migrationPool = new pg.Pool({ connectionString: migrationUrl, max: 2 });
 const directory = new URL("../migrations/", import.meta.url);
 const files = (await readdir(directory)).filter((name) => name.endsWith(".sql")).sort();
-const client = await pool.connect();
+const client = await migrationPool.connect();
 try {
-  await client.query("BEGIN");
   await client.query("CREATE TABLE IF NOT EXISTS schema_migrations (version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())");
-  await client.query("COMMIT");
   for (const file of files) {
     const exists = await client.query("SELECT 1 FROM schema_migrations WHERE version = $1", [file]);
     if (exists.rowCount) continue;
@@ -26,5 +26,5 @@ try {
   }
 } finally {
   client.release();
-  await pool.end();
+  await migrationPool.end();
 }
