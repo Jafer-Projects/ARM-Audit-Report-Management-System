@@ -1,7 +1,9 @@
 import { readdir, readFile } from "node:fs/promises";
 import pg from "pg";
+import { readFileSync } from "node:fs";
 
-const migrationUrl = process.env.MIGRATION_DATABASE_URL ?? process.env.DATABASE_URL;
+const migrationUrlFile=process.env.MIGRATION_DATABASE_URL_FILE;
+const migrationUrl=(migrationUrlFile?readFileSync(migrationUrlFile,"utf8").trim():process.env.MIGRATION_DATABASE_URL) ?? (process.env.DATABASE_URL_FILE?readFileSync(process.env.DATABASE_URL_FILE,"utf8").trim():process.env.DATABASE_URL);
 if (!migrationUrl) throw new Error("MIGRATION_DATABASE_URL or DATABASE_URL is required");
 const migrationPool = new pg.Pool({ connectionString: migrationUrl, max: 2 });
 const directory = new URL("../migrations/", import.meta.url);
