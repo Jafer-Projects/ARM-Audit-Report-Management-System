@@ -123,6 +123,37 @@ END $fn$;
 REVOKE ALL ON FUNCTION public.arm_accept_invitation(text,uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.arm_accept_invitation(text,uuid) TO arm_runtime;
 
+
+ALTER TABLE tenant_roles NO FORCE ROW LEVEL SECURITY;
+ALTER TABLE tenant_role_permissions NO FORCE ROW LEVEL SECURITY;
+ALTER TABLE tenant_membership_roles NO FORCE ROW LEVEL SECURITY;
+
+CREATE OR REPLACE FUNCTION public.arm_list_tenant_members(p_tenant uuid,p_user uuid)
+RETURNS TABLE(membership_id uuid,user_id uuid,email text,display_name text,legacy_role text,status text,created_at timestamptz,assigned_roles text[])
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $fn$
+BEGIN
+ IF current_setting('app.user_id',true) IS DISTINCT FROM p_user::text THEN RAISE EXCEPTION 'caller identity mismatch' USING ERRCODE='42501'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM public.tenant_memberships m JOIN public.tenants t ON t.id=m.tenant_id WHERE m.tenant_id=p_tenant AND m.user_id=p_user AND m.status='active' AND t.status='active') THEN RAISE EXCEPTION 'tenant membership required' USING ERRCODE='42501'; END IF;
+ IF NOT EXISTS(
+   SELECT 1 FROM public.tenant_memberships m
+   WHERE m.tenant_id=p_tenant AND m.user_id=p_user AND m.status='active' AND
+    (m.role='owner' OR EXISTS(
+      SELECT 1 FROM public.tenant_membership_roles mr
+      JOIN public.tenant_role_permissions rp ON rp.tenant_id=mr.tenant_id AND rp.role_id=mr.role_id
+      WHERE mr.tenant_id=p_tenant AND mr.membership_id=m.id AND rp.permission_key='members.read'
+    ))
+ ) THEN RAISE EXCEPTION 'members.read permission required' USING ERRCODE='42501'; END IF;
+ RETURN QUERY
+ SELECT m.id,u.id,u.email,u.display_name,m.role,m.status,m.created_at,
+  COALESCE(array_agg(DISTINCT r.display_name) FILTER(WHERE r.id IS NOT NULL),'{}')
+ FROM public.tenant_memberships m JOIN public.users u ON u.id=m.user_id
+ LEFT JOIN public.tenant_membership_roles mr ON mr.tenant_id=m.tenant_id AND mr.membership_id=m.id
+ LEFT JOIN public.tenant_roles r ON r.tenant_id=mr.tenant_id AND r.id=mr.role_id
+ WHERE m.tenant_id=p_tenant GROUP BY m.id,u.id;
+END $fn$;
+REVOKE ALL ON FUNCTION public.arm_list_tenant_members(uuid,uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.arm_list_tenant_members(uuid,uuid) TO arm_runtime;
+
 CREATE TABLE audit_engagements (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
