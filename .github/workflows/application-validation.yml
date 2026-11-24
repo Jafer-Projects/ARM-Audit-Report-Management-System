@@ -175,6 +175,7 @@ jobs:
     env:
       NODE_ENV: test
       DATABASE_URL: postgres://arm_runtime:arm_runtime_test_password@localhost:5432/arm_test
+      WORKER_DATABASE_URL: postgres://arm_worker:arm_worker_test_password@localhost:5432/arm_test
       MIGRATION_DATABASE_URL: postgres://arm_test:arm_test_password@localhost:5432/arm_test
       ADMIN_DATABASE_URL: postgres://arm_test:arm_test_password@localhost:5432/arm_test
       ARM_RUNTIME_PASSWORD: arm_runtime_test_password
