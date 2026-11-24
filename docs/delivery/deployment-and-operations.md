@@ -73,3 +73,12 @@ Begin with one appropriately sized VPS and independent object storage/backup. Tr
 The initial API includes a multi-stage non-root container build and a development/pilot-oriented Docker Compose definition for PostgreSQL, API and worker. The Compose database port is bound to loopback; API readiness checks PostgreSQL. The API applies versioned SQL migrations before startup. The Compose file is not a complete production topology: it does not configure a public reverse proxy/TLS, external S3-compatible object storage, independent backup destination, monitoring/alerting, hardened database role separation, image scanning, or tested restore/rollback automation.
 
 Do not expose the Compose database port publicly. Set unique environment-specific secrets outside source control. Before real client data or production, introduce a private database network/least-privilege runtime role, verified TLS ingress, encrypted off-host backups and restore drills, object storage, operational runbooks, security scanning, and approved RPO/RTO. Migrations are additive and should be applied forward; do not assume destructive down-migrations are safe for offline clients.
+
+
+### Cloud-first implementation increment — current source status
+
+The cloud foundation is implemented under `server/`: Node.js/TypeScript API, PostgreSQL migrations, isolated runtime/worker/migrator roles, email/MFA/recovery, organization invitations, tenant RBAC, audit/accounting APIs, S3-compatible object storage, ClamAV scanning, TLS reverse proxy and encrypted backup/restore scripts. Production Compose expects externally provisioned secret files, TLS certificates, an email provider and a private S3-compatible bucket. The application container does not publish its API port; only the TLS gateway publishes 443.
+
+The deployment scripts are operational source, not proof of a production environment. The backup/restore drill must be run with a dedicated isolated restore bucket and database. Certificate issuance/renewal, bucket policy, key rotation, monitoring, alerting, off-provider replication and incident-response ownership must be provisioned and verified by the operator. The security review checklist remains open until an independent reviewer signs it.
+
+The cloud Dockerfile uses `npm ci` and requires `server/package-lock.json`. A CI job generates and commits that lockfile on the cloud implementation branch and validates the clean install. Do not build a release image until the committed lockfile exists and the exact branch head passes validation.
