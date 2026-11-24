@@ -142,6 +142,7 @@ CREATE TABLE jobs (
   completed_at timestamptz
 );
 CREATE INDEX jobs_claim_idx ON jobs(status, available_at, created_at);
+CREATE INDEX jobs_stale_lease_idx ON jobs(locked_at) WHERE status = 'running';
 
 ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tenants FORCE ROW LEVEL SECURITY;
