@@ -113,12 +113,18 @@ export async function resetPassword(rawToken: string, password: string) {
 }
 
 export async function beginMfaEnrollment(userId:string,email:string,password:string) {
-  const account=await inTransaction(async(client)=>{ await client.query("SELECT set_config('app.user_id',$1,true)",[userId]); return client.query("SELECT password_hash FROM users WHERE id=$1 AND status='active'",[userId]); });
+  const account=await inTransaction(async(client)=>{
+    await client.query("SELECT set_config('app.user_id',$1,true)",[userId]);
+    const found=await client.query("SELECT password_hash FROM users WHERE id=$1 AND status='active'",[userId]);
+    const existing=await client.query("SELECT enabled_at FROM mfa_credentials WHERE user_id=$1",[userId]);
+    if(existing.rows[0]?.enabled_at) throw Object.assign(new Error("MFA is already enabled. Verify with MFA before disabling it."),{statusCode:409});
+    return found;
+  });
   if(!account.rowCount || !(await verifyPassword(password,account.rows[0].password_hash))) throw Object.assign(new Error("Current password is incorrect"),{statusCode:401});
   const secret=base32Encode(randomBytes(20));
   await inTransaction(async(client)=>{
     await client.query("SELECT set_config('app.user_id',$1,true)",[userId]);
-    await client.query("INSERT INTO mfa_credentials(user_id,secret_ciphertext,enabled_at) VALUES($1,$2,NULL) ON CONFLICT(user_id) DO UPDATE SET secret_ciphertext=EXCLUDED.secret_ciphertext,enabled_at=NULL,updated_at=now()",[userId,encrypt(secret)]);
+    await client.query("INSERT INTO mfa_credentials(user_id,secret_ciphertext,enabled_at,last_totp_counter) VALUES($1,$2,NULL,0) ON CONFLICT(user_id) DO UPDATE SET secret_ciphertext=EXCLUDED.secret_ciphertext,enabled_at=NULL,last_totp_counter=0,updated_at=now()",[userId,encrypt(secret)]);
     await client.query("DELETE FROM mfa_recovery_codes WHERE user_id=$1",[userId]);
   });
   const label=encodeURIComponent(`ARM:${email}`);
@@ -148,7 +154,11 @@ export async function disableMfa(userId:string,password:string,code:string) {
   await inTransaction(async(client)=>{
     await client.query("SELECT set_config('app.user_id',$1,true)",[userId]);
     const found=await client.query("SELECT secret_ciphertext,enabled_at,last_totp_counter FROM mfa_credentials WHERE user_id=$1 FOR UPDATE",[userId]);
-    if(!found.rowCount || !found.rows[0].enabled_at || !verifyTotp(decrypt(found.rows[0].secret_ciphertext),code)) throw Object.assign(new Error("Authenticator code is invalid"),{statusCode:401});
+    if(!found.rowCount || !found.rows[0].enabled_at) throw Object.assign(new Error("Authenticator code is invalid"),{statusCode:401});
+    const counter=matchingTotpCounter(decrypt(found.rows[0].secret_ciphertext),code);
+    if(counter===null) throw Object.assign(new Error("Authenticator code is invalid"),{statusCode:401});
+    const advanced=await client.query("UPDATE mfa_credentials SET last_totp_counter=$2,updated_at=now() WHERE user_id=$1 AND last_totp_counter<$2",[userId,counter]);
+    if(advanced.rowCount!==1) throw Object.assign(new Error("Authenticator code has already been used"),{statusCode:401});
     await client.query("DELETE FROM mfa_recovery_codes WHERE user_id=$1",[userId]);
     await client.query("DELETE FROM mfa_credentials WHERE user_id=$1",[userId]);
   });
