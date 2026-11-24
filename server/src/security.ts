@@ -76,8 +76,10 @@ export async function verifyEmailAddress(rawToken: string) {
     if (!row) throw Object.assign(new Error("Verification link is invalid or expired"), { statusCode: 400 });
     await client.query("SELECT set_config('app.user_id',$1,true)", [row.user_id]);
     await client.query("SELECT set_config('app.tenant_id',$1,true)", [row.tenant_id]);
-    await client.query("UPDATE email_verification_tokens SET consumed_at=now() WHERE id=$1 AND consumed_at IS NULL", [row.token_id]);
-    await client.query("UPDATE users SET status='active',updated_at=now() WHERE id=$1 AND status='pending_verification'", [row.user_id]);
+    const consumed=await client.query("UPDATE email_verification_tokens SET consumed_at=now() WHERE id=$1 AND consumed_at IS NULL AND expires_at>now() RETURNING id",[row.token_id]);
+    if(consumed.rowCount!==1) throw Object.assign(new Error("Verification link is invalid or already used"),{statusCode:400});
+    const activated=await client.query("UPDATE users SET status='active',updated_at=now() WHERE id=$1 AND status='pending_verification' RETURNING id",[row.user_id]);
+    if(activated.rowCount!==1) throw Object.assign(new Error("Account is not awaiting verification"),{statusCode:409});
     return { verified: true };
   });
 }
@@ -121,7 +123,8 @@ export async function resetPassword(rawToken: string, password: string) {
     const row = found.rows[0];
     if (!row) throw Object.assign(new Error("Recovery link is invalid or expired"), { statusCode: 400 });
     await client.query("SELECT set_config('app.user_id',$1,true)", [row.user_id]);
-    await client.query("UPDATE password_recovery_tokens SET consumed_at=now() WHERE id=$1 AND consumed_at IS NULL", [row.token_id]);
+    const consumed=await client.query("UPDATE password_recovery_tokens SET consumed_at=now() WHERE id=$1 AND consumed_at IS NULL AND expires_at>now() RETURNING id",[row.token_id]);
+    if(consumed.rowCount!==1) throw Object.assign(new Error("Recovery link is invalid or already used"),{statusCode:400});
     await client.query("UPDATE users SET password_hash=$1,updated_at=now() WHERE id=$2", [encoded,row.user_id]);
     await client.query("UPDATE auth_sessions SET revoked_at=now() WHERE user_id=$1 AND revoked_at IS NULL", [row.user_id]);
   });
