@@ -386,6 +386,7 @@ BEGIN
  IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='arm_runtime') THEN
   GRANT SELECT,INSERT,UPDATE ON email_verification_tokens,password_recovery_tokens,mfa_credentials,mfa_recovery_codes TO arm_runtime;
   GRANT SELECT,INSERT,UPDATE ON tenant_roles,tenant_role_permissions,tenant_membership_roles,organization_invitations TO arm_runtime;
+  GRANT SELECT ON permissions TO arm_runtime;
   GRANT SELECT,INSERT,UPDATE ON audit_engagements,audit_workpapers,audit_reports,accounting_accounts,accounting_journals,accounting_journal_lines TO arm_runtime;
   GRANT SELECT,INSERT,UPDATE ON document_objects,email_outbox,audit_domain_history TO arm_runtime;
  END IF;
