@@ -4,9 +4,12 @@ import { randomUUID } from "node:crypto";
 import { buildApp } from "../src/app.js";
 import type { FastifyInstance } from "fastify";
 import pg from "pg";
+import { pool } from "../src/db.js";
 
 let app: FastifyInstance;
 const workerPool = new pg.Pool({ connectionString: process.env.WORKER_DATABASE_URL });
+const firstPassword = "correct-horse-battery-staple-1";
+let firstEmail = "";
 let first: { accessToken: string; refreshToken: string; user: { id: string }; tenant: { id: string } };
 let second: { accessToken: string; user: { id: string }; tenant: { id: string } };
 
@@ -14,9 +17,10 @@ before(async () => {
   app = await buildApp();
   await app.ready();
   const suffix = randomUUID();
+  firstEmail = `owner-${suffix}@example.test`;
   const one = await app.inject({
     method: "POST", url: "/v1/auth/register",
-    payload: { email: `owner-${suffix}@example.test`, displayName: "First Owner", password: "correct-horse-battery-staple-1", organizationName: "First Firm" }
+    payload: { email: firstEmail, displayName: "First Owner", password: firstPassword, organizationName: "First Firm" }
   });
   assert.equal(one.statusCode, 201, one.body);
   first = one.json();
@@ -30,23 +34,13 @@ before(async () => {
 
 after(async () => { await app.close(); await workerPool.end(); });
 
-test("API database role is non-superuser and PostgreSQL RLS independently enforces membership", async () => {
-  const db = await import("../src/db.js");
-  const role = await db.pool.query("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user");
+test("API role is non-superuser and tenant-scoped tables are protected by RLS", async () => {
+  const role = await pool.query("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user");
   assert.equal(role.rows[0].rolsuper, false);
   assert.equal(role.rows[0].rolbypassrls, false);
-  const client = await db.pool.connect();
-  try {
-    await client.query("BEGIN");
-    await client.query("SELECT set_config('app.user_id', $1, true)", [second.user.id]);
-    await client.query("SELECT set_config('app.tenant_id', $1, true)", [first.tenant.id]);
-    const hidden = await client.query("SELECT count(*)::int AS count FROM sync_aggregates");
-    assert.equal(hidden.rows[0].count, 0);
-    await client.query("ROLLBACK");
-  } finally { client.release(); }
 });
 
-test("worker database role can access its queue but cannot read tenant data", async () => {
+test("worker role is non-superuser and cannot read tenant identity tables", async () => {
   const role = await workerPool.query("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user");
   assert.equal(role.rows[0].rolsuper, false);
   assert.equal(role.rows[0].rolbypassrls, false);
@@ -62,7 +56,7 @@ test("worker database role can access its queue but cannot read tenant data", as
   }
 });
 
-test("registration creates an owner-scoped tenant and login returns only own memberships", async () => {
+test("registration creates an owner-scoped tenant and tenant context resolves the role", async () => {
   assert.ok(first.tenant.id);
   const context = await app.inject({
     method: "GET", url: "/v1/tenant/context",
@@ -70,6 +64,21 @@ test("registration creates an owner-scoped tenant and login returns only own mem
   });
   assert.equal(context.statusCode, 200, context.body);
   assert.equal(context.json().role, "owner");
+});
+
+test("login verifies credentials and returns only the caller's active memberships", async () => {
+  const response = await app.inject({
+    method: "POST", url: "/v1/auth/login",
+    payload: { email: firstEmail, password: firstPassword }
+  });
+  assert.equal(response.statusCode, 200, response.body);
+  assert.equal(response.json().memberships.length, 1);
+  assert.equal(response.json().memberships[0].tenant_id, first.tenant.id);
+  const rejected = await app.inject({
+    method: "POST", url: "/v1/auth/login",
+    payload: { email: firstEmail, password: "incorrect-password" }
+  });
+  assert.equal(rejected.statusCode, 401);
 });
 
 test("sync push is version-checked, idempotent, and pull returns accepted events", async () => {
@@ -99,6 +108,19 @@ test("sync push is version-checked, idempotent, and pull returns accepted events
   const pulled = await app.inject({ method: "GET", url: "/v1/sync/events", headers });
   assert.equal(pulled.statusCode, 200, pulled.body);
   assert.equal(pulled.json().events.length, 1);
+  assert.ok(pulled.json().nextCursor);
+});
+
+test("PostgreSQL RLS hides another tenant even when the tenant context is supplied directly", async () => {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT set_config('app.user_id', $1, true)", [second.user.id]);
+    await client.query("SELECT set_config('app.tenant_id', $1, true)", [first.tenant.id]);
+    const hidden = await client.query("SELECT count(*)::int AS count FROM sync_aggregates");
+    assert.equal(hidden.rows[0].count, 0);
+    await client.query("ROLLBACK");
+  } finally { client.release(); }
 });
 
 test("tenant identifiers supplied by another user do not grant access", async () => {
