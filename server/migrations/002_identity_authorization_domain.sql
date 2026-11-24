@@ -109,6 +109,7 @@ BEGIN
  SELECT * INTO inv FROM public.organization_invitations
  WHERE token_hash=p_hash AND status='pending' AND expires_at>now() FOR UPDATE;
  IF NOT FOUND THEN RAISE EXCEPTION 'invitation invalid or expired' USING ERRCODE='P0002'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM public.tenants t WHERE t.id=inv.tenant_id AND t.status='active') THEN RAISE EXCEPTION 'tenant is not active' USING ERRCODE='42501'; END IF;
  IF NOT EXISTS(SELECT 1 FROM public.users u WHERE u.id=p_user AND u.status='active' AND u.email_normalized=inv.email_normalized) THEN RAISE EXCEPTION 'verified invitee email required' USING ERRCODE='42501'; END IF;
  INSERT INTO public.tenant_memberships(tenant_id,user_id,role,status)
  VALUES(inv.tenant_id,p_user,'professional','active')
