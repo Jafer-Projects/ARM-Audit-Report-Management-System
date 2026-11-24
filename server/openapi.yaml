@@ -1,0 +1,176 @@
+openapi: 3.1.0
+info:
+  title: ARM Cloud API
+  version: 1.0.0
+  description: Initial authenticated cloud API and versioned offline synchronization contract.
+servers:
+  - url: http://localhost:3000
+    description: Local development only
+tags:
+  - name: Health
+  - name: Identity
+  - name: Tenancy
+  - name: Synchronization
+paths:
+  /health/live:
+    get:
+      tags: [Health]
+      operationId: live
+      responses:
+        "200":
+          description: Process is running
+  /health/ready:
+    get:
+      tags: [Health]
+      operationId: ready
+      responses:
+        "200":
+          description: Database is reachable
+        "503":
+          description: Database is unavailable
+  /v1/auth/register:
+    post:
+      tags: [Identity]
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, displayName, password, organizationName]
+              properties:
+                email: { type: string, format: email, maxLength: 254 }
+                displayName: { type: string, minLength: 1, maxLength: 160 }
+                password: { type: string, minLength: 12, maxLength: 128 }
+                organizationName: { type: string, minLength: 2, maxLength: 200 }
+      responses:
+        "201": { description: User, owner tenant, access token and refresh token created }
+        "400": { description: Invalid request }
+        "409": { description: Account already exists }
+  /v1/auth/login:
+    post:
+      tags: [Identity]
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 1, maxLength: 128 }
+      responses:
+        "200": { description: Authenticated session }
+        "400": { description: Invalid request }
+        "401": { description: Invalid credentials }
+  /v1/auth/refresh:
+    post:
+      tags: [Identity]
+      operationId: refresh
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        "200": { description: Rotated token pair }
+        "401": { description: Invalid, expired or previously rotated refresh token }
+  /v1/auth/logout:
+    post:
+      tags: [Identity]
+      operationId: logout
+      security: [{ bearerAuth: [] }]
+      responses:
+        "204": { description: Current session revoked }
+        "401": { description: Authentication required }
+  /v1/tenant/context:
+    get:
+      tags: [Tenancy]
+      operationId: tenantContext
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Active tenant and caller role }
+        "400": { description: Missing or invalid tenant context }
+        "401": { description: Authentication required }
+        "403": { description: Caller is not an active tenant member }
+  /v1/sync/events:
+    post:
+      tags: [Synchronization]
+      operationId: pushSyncEvents
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [events]
+              properties:
+                events:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items:
+                    type: object
+                    required: [eventId, idempotencyKey, aggregateType, aggregateId, baseVersion, eventType, schemaVersion, occurredAt, payload]
+                    properties:
+                      eventId: { type: string, format: uuid }
+                      idempotencyKey: { type: string, minLength: 8, maxLength: 160 }
+                      aggregateType: { type: string, minLength: 1, maxLength: 80 }
+                      aggregateId: { type: string, format: uuid }
+                      baseVersion: { type: integer, minimum: 0 }
+                      eventType: { type: string, const: aggregate.upsert }
+                      schemaVersion: { type: integer, minimum: 1 }
+                      occurredAt: { type: string, format: date-time }
+                      correlationId: { type: string, maxLength: 160 }
+                      payload: { type: object, additionalProperties: true }
+      responses:
+        "200": { description: Per-event accepted, duplicate, conflict or rejected result }
+        "400": { description: Invalid event envelope }
+        "401": { description: Authentication required }
+        "403": { description: Tenant membership denied }
+    get:
+      tags: [Synchronization]
+      operationId: pullSyncEvents
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: header
+          name: x-tenant-id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: after
+          required: false
+          schema: { type: string, pattern: "^[0-9]+$" }
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        "200": { description: Accepted events and monotonic next cursor }
+        "400": { description: Invalid cursor or limit }
+        "401": { description: Authentication required }
+        "403": { description: Tenant membership denied }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
