@@ -124,3 +124,20 @@ Implementation code for the current prototype increments 0–5 is now present on
 ### Verification availability note
 
 The collective verification gate is open after the Increment 5 prototype implementation. The connected GitHub workflow-run lookup returned no PR-triggered run for the current head at the time of inspection. No local repository archive/runtime was available through the connected GitHub interface. Therefore no test, typecheck, frontend build, Rust build or Windows Tauri build result is claimed here. The gate remains pending; the configured workflow remains the intended execution path.
+
+
+## Cloud-first implementation record — 2026-11-24
+
+**Branch:** `implementation/cloud-first-platform` (based on the then-current `main` head).
+
+Implemented in this branch:
+- New isolated Node.js 22+/TypeScript cloud API package under `server/`; the existing root React/Vite and Tauri application remains unchanged.
+- PostgreSQL migration for users, tenants, memberships, revocable sessions, sync aggregates/inbox, append-only audit events and worker jobs.
+- Transaction-local tenant/user context, active membership verification and PostgreSQL RLS policies on tenant-owned tables.
+- Password hashing with scrypt, HMAC-SHA-256 short-lived access tokens, rotating refresh tokens, session revocation and route rate limits.
+- Versioned idempotent sync push, base-version conflict results, monotonic pull cursor and durable event inbox.
+- Separate worker process with row-lock claiming, bounded retry/backoff and explicit handler registration boundary.
+- OpenAPI contract, API README, container image and initial Compose topology.
+- PostgreSQL-backed integration tests and a separate CI job to compile and execute them.
+
+Not yet evidenced as passing at the time of this record: CI build/integration results on this branch, full production hardening, complete role/permission matrix, email verification/MFA, invitations, device leases, object storage/document scanning, business-domain server handlers, desktop outbox/pull integration, conflict UI, TLS ingress, independent backups/restore drills and security assessment. The generic JSON aggregate is not authorized for high-risk financial or professional records. This branch is an implementation increment, not a production release.
