@@ -13,7 +13,7 @@ async function claimJob(): Promise<Job | null> {
     const result = await client.query(
       `SELECT id, tenant_id, job_type, payload, attempts
        FROM jobs
-       WHERE status = 'queued' AND available_at <= now()
+       WHERE (status = 'queued' AND available_at <= now())\n          OR (status = 'running' AND locked_at < now() - interval '5 minutes')
        ORDER BY available_at, created_at
        FOR UPDATE SKIP LOCKED LIMIT 1`
     );
@@ -35,6 +35,12 @@ async function processJob(job: Job): Promise<void> {
 async function runOnce(): Promise<boolean> {
   const job = await claimJob();
   if (!job) return false;
+  const heartbeat = setInterval(() => {
+    void inTransaction(async (client) => {
+      await client.query("SELECT set_config('app.worker', 'true', true)");
+      await client.query("UPDATE jobs SET locked_at = now() WHERE id = $1 AND locked_by = $2 AND status = 'running'", [job.id, workerId]);
+    }).catch((error) => console.error(JSON.stringify({ level: "error", workerId, jobId: job.id, event: "heartbeat_failed", error: error instanceof Error ? error.message : "unknown" })));
+  }, 60_000);
   try {
     await processJob(job);
     await inTransaction(async (client) => {
