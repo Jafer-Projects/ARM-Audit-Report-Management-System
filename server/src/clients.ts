@@ -75,7 +75,7 @@ export async function listClientHistory(userId:string,tenantId:string,id:string)
   await assertPermission(client,userId,tenantId,"clients.read");
   const exists=await client.query("SELECT 1 FROM clients WHERE tenant_id=$1 AND id=$2",[tenantId,id]);
   if(!exists.rowCount) throw Object.assign(new Error("Client not found"),{statusCode:404});
-  const result=await client.query("SELECT id,action,actor_id,before_data,after_data,client_version,occurred_at FROM client_history WHERE tenant_id=$1 AND client_id=$2 ORDER BY occurred_at DESC,id DESC",[tenantId,id]);
+  const result=await client.query("SELECT h.id,h.action,h.actor_id,u.display_name AS actor_name,before_data,after_data,client_version,occurred_at FROM client_history h JOIN users u ON u.id=h.actor_id WHERE h.tenant_id=$1 AND h.client_id=$2 ORDER BY h.occurred_at DESC,h.id DESC",[tenantId,id]);
   return result.rows;
  });
 }

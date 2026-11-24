@@ -331,10 +331,10 @@ export default function App() {
       setError("");
       const info = await desktop.initialize();
       setWorkspace(info);
-      if (info.firm_name !== "ARM Demonstration Firm") {
+      if (info.workspace_mode === "cloud") {
         setNotes([]);setNotifications([]);setEvents([]);setRecords([]);setStaffRecords([]);
         setShowNotifications(false);setNoteEditor(undefined);setRecordEditor(null);setClientEditor(undefined);
-        setClients(info.firm_name === "Cloud account — select organization" || (info.permissions && !info.permissions.includes("clients.read")) ? [] : await desktop.clients(includeArchived));
+        setClients(!info.tenant_selected || (info.permissions && !info.permissions.includes("clients.read")) ? [] : await desktop.clients(includeArchived));
         setSelectedClientId("");
         if (!["home","clients"].includes(nextSection)) setSection("home");
         return;
@@ -393,7 +393,7 @@ export default function App() {
 
   const filteredClients = useMemo(() => clients.filter((c) =>
     [c.legal_name, c.display_name, c.tin_raw].join(" ").toLowerCase().includes(search.toLowerCase())), [clients, search]);
-  const cloudWorkspace = Boolean(workspace && workspace.firm_name !== "ARM Demonstration Firm");
+  const cloudWorkspace = workspace?.workspace_mode === "cloud";
   const effectivePermissions = new Set(workspace?.permissions ?? []);
   const canMutate = Boolean(workspace) && (cloudWorkspace ? effectivePermissions.has("clients.write") : workspace?.persona !== "reviewer");
   const canEditClientProfiles = canMutate;
@@ -721,9 +721,9 @@ export default function App() {
   return <div className="app-frame">
     <aside className="sidebar">
       <div className="brand"><div className="brand-mark">A</div><div><strong>ARM</strong><span>Audit Report Management</span></div></div>
-      <div className="workspace-switch"><span className="overline">WORKSPACE</span><strong>{workspace?.firm_name ?? "Local workspace"}</strong><span className="local-state"><i /> {workspace?.firm_name === "ARM Demonstration Firm" ? "Saved on this device" : "Authenticated cloud organization"}</span></div>
+      <div className="workspace-switch"><span className="overline">WORKSPACE</span><strong>{workspace?.firm_name ?? "Local workspace"}</strong><span className="local-state"><i /> {workspace?.workspace_mode === "demo" ? "Saved on this device" : "Authenticated cloud organization"}</span></div>
       <nav aria-label="Main navigation">
-        {nav.filter(item => workspace?.firm_name === "ARM Demonstration Firm" || item.id === "home" || (item.id === "clients" && workspace?.firm_name !== "Cloud account — select organization" && (!cloudWorkspace || effectivePermissions.has("clients.read")) )).map((item) => <button key={item.id} className={section === item.id ? "nav-item active" : "nav-item"} onClick={() => { setSection(item.id); setError(""); }}>
+        {nav.filter(item => workspace?.firm_name === "ARM Demonstration Firm" || item.id === "home" || (item.id === "clients" && workspace?.tenant_selected !== false && (!cloudWorkspace || effectivePermissions.has("clients.read")) )).map((item) => <button key={item.id} className={section === item.id ? "nav-item active" : "nav-item"} onClick={() => { setSection(item.id); setError(""); }}>
           <span className="nav-dot" /><span><small>{item.eyebrow}</small>{item.label}</span>{section === item.id && <b>›</b>}
         </button>)}
       </nav>
@@ -737,7 +737,7 @@ export default function App() {
       <div className="notice"><span>i</span><div><strong>{workspace?.firm_name === "ARM Demonstration Firm" ? "Prototype mode — synthetic data only" : "Cloud-first workspace — client directory only"}</strong><small>{workspace?.sync_state ?? "Sync is not enabled in this prototype"}</small></div></div>
       {error && <div className="error-banner" role="alert">{error}<button onClick={() => setError("")}>Dismiss</button></div>}
 
-      {section === "home" && workspace?.firm_name !== "ARM Demonstration Firm" && <section className="home-grid"><article className="welcome-card"><span className="overline">CLOUD WORKSPACE</span><h2>{workspace?.firm_name}</h2><p>{workspace?.firm_name === "Cloud account — select organization" ? "Your identity is authenticated, but no organization has been selected. Choose an active membership before opening tenant records." : "Organization membership is verified by the cloud API. Client records and their history are managed in the tenant directory. Other business workflows remain safely unavailable until their domain services are migrated."}</p><button className="primary" disabled={cloudWorkspace && workspace?.firm_name !== "Cloud account — select organization" && !effectivePermissions.has("clients.read")} onClick={() => workspace?.firm_name === "Cloud account — select organization" ? setShowCloudPanel(true) : setSection("clients")}>{workspace?.firm_name === "Cloud account — select organization" ? "Select organization" : "Open client directory"} <span>→</span></button><div className="welcome-foot"><span>{workspace?.clients_count ?? 0} active clients</span><span>Cloud API authoritative</span></div></article></section>}
+      {section === "home" && workspace?.workspace_mode !== "demo" && <section className="home-grid"><article className="welcome-card"><span className="overline">CLOUD WORKSPACE</span><h2>{workspace?.firm_name}</h2><p>{workspace?.tenant_selected === false ? "Your identity is authenticated, but no organization has been selected. Choose an active membership before opening tenant records." : "Organization membership is verified by the cloud API. Client records and their history are managed in the tenant directory. Other business workflows remain safely unavailable until their domain services are migrated."}</p><button className="primary" disabled={cloudWorkspace && workspace?.firm_name !== "Cloud account — select organization" && !effectivePermissions.has("clients.read")} onClick={() => workspace?.firm_name === "Cloud account — select organization" ? setShowCloudPanel(true) : setSection("clients")}>{workspace?.firm_name === "Cloud account — select organization" ? "Select organization" : "Open client directory"} <span>→</span></button><div className="welcome-foot"><span>{workspace?.clients_count ?? 0} active clients</span><span>Cloud API authoritative</span></div></article></section>}
       {section === "home" && workspace?.firm_name === "ARM Demonstration Firm" && <section className="home-grid">
         <article className="welcome-card"><span className="overline">YOUR WORKSPACE</span><h2>One place to keep client work organized.</h2><p>Start with a client profile, then capture source-backed records and move work through review. Every change stays on this device.</p><button className="primary" onClick={() => setSection("clients")}>Continue with clients <span>→</span></button><div className="welcome-foot"><span>{workspace?.clients_count ?? 0} active demo clients</span><span>Local database ready</span></div></article>
         <article className="summary-card"><span className="overline">INITIAL WORKFLOWS</span><div className="summary-row"><b>01</b><div><strong>Client records</strong><small>Register and maintain company or individual profiles</small></div><button onClick={() => setSection("clients")}>Open →</button></div><div className="summary-row"><b>02</b><div><strong>Products & invoices</strong><small>Maintain source-backed catalogue and invoice records</small></div><button onClick={() => setSection("catalogue")}>Open →</button></div><div className="summary-row"><b>03</b><div><strong>Historical & VAT work</strong><small>Capture historical information; calculations remain gated</small></div><button onClick={() => setSection("history")}>Open →</button></div><div className="summary-row"><b>04</b><div><strong>Staff & tasks</strong><small>Demonstrate assignment and review workflow</small></div><button onClick={() => setSection("work")}>Open →</button></div><div className="summary-row"><b>05</b><div><strong>Import costing</strong><small>Capture assumptions without unapproved calculations</small></div><button onClick={() => setSection("imports")}>Open →</button></div></article>

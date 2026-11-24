@@ -1,6 +1,6 @@
 export type Persona = "administrator" | "manager" | "auditor" | "reviewer";
 export type WorkspaceInfo = {
-  firm_name: string; actor_name: string; persona: Persona; clients_count: number; sync_state: string; permissions?: string[];
+  firm_name: string; actor_name: string; persona: Persona; clients_count: number; sync_state: string; permissions?: string[]; workspace_mode?: "demo" | "cloud"; tenant_selected?: boolean;
 };
 export type Client = {
   id: string; record_kind: string; legal_name: string; display_name: string; tin_raw: string;
