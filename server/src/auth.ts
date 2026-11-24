@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { FastifyRequest } from "fastify";
 import type { PoolClient } from "pg";
 import { config } from "./config.js";
@@ -19,11 +19,15 @@ export async function authenticate(request: FastifyRequest): Promise<AccessClaim
   } catch {
     throw Object.assign(new Error("Invalid or expired access token"), { statusCode: 401 });
   }
-  const session = await pool.query(
-    "SELECT 1 FROM auth_sessions s JOIN users u ON u.id = s.user_id WHERE s.id = $1 AND s.user_id = $2 AND s.revoked_at IS NULL AND s.expires_at > now() AND u.status = 'active'",
-    [claims.sid, claims.sub]
-  );
-  if (session.rowCount !== 1) throw Object.assign(new Error("Session is no longer active"), { statusCode: 401 });
+  const active = await inTransaction(async (client) => {
+    await client.query("SELECT set_config('app.user_id', $1, true)", [claims.sub]);
+    const session = await client.query(
+      "SELECT 1 FROM auth_sessions s JOIN users u ON u.id = s.user_id WHERE s.id = $1 AND s.user_id = $2 AND s.revoked_at IS NULL AND s.expires_at > now() AND u.status = 'active'",
+      [claims.sid, claims.sub]
+    );
+    return session.rowCount === 1;
+  });
+  if (!active) throw Object.assign(new Error("Session is no longer active"), { statusCode: 401 });
   return claims;
 }
 
@@ -39,12 +43,12 @@ async function membershipsFor(client: PoolClient, userId: string) {
 export async function register(input: { email: string; displayName: string; password: string; organizationName: string }) {
   const passwordHash = await hashPassword(input.password);
   return inTransaction(async (client) => {
-    const user = await client.query(
-      "INSERT INTO users(email, display_name, password_hash) VALUES ($1, $2, $3) RETURNING id, email, display_name",
-      [input.email.trim(), input.displayName.trim(), passwordHash]
-    );
-    const userId = user.rows[0].id as string;
+    const userId = randomUUID();
     await client.query("SELECT set_config('app.user_id', $1, true)", [userId]);
+    const user = await client.query(
+      "INSERT INTO users(id, email, display_name, password_hash) VALUES ($1, $2, $3, $4) RETURNING id, email, display_name",
+      [userId, input.email.trim(), input.displayName.trim(), passwordHash]
+    );
     const slug = `${input.organizationName.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 42) || "firm"}-${randomBytes(3).toString("hex")}`;
     const tenant = await client.query(
       "INSERT INTO tenants(name, slug, created_by) VALUES ($1, $2, $3) RETURNING id, name",
@@ -56,7 +60,7 @@ export async function register(input: { email: string; displayName: string; pass
       "INSERT INTO tenant_memberships(tenant_id, user_id, role, status) VALUES ($1, $2, 'owner', 'active')",
       [tenantId, userId]
     );
-    const sessionId = randomBytes(16).toString("hex");
+    const sessionId = randomUUID();
     const refreshToken = randomBytes(48).toString("base64url");
     await client.query(
       "INSERT INTO auth_sessions(id, user_id, refresh_token_hash, expires_at) VALUES ($1, $2, $3, $4)",
@@ -74,7 +78,7 @@ export async function register(input: { email: string; displayName: string; pass
 
 export async function login(email: string, password: string) {
   const result = await pool.query(
-    "SELECT id, email, display_name, password_hash, status FROM users WHERE email_normalized = lower(btrim($1))",
+    "SELECT user_id AS id, email, display_name, password_hash, status FROM public.arm_lookup_user_for_login($1)",
     [email]
   );
   const user = result.rows[0];
@@ -101,12 +105,19 @@ export async function login(email: string, password: string) {
 
 export async function rotateRefreshToken(refreshToken: string) {
   return inTransaction(async (client) => {
-    const result = await client.query(
-      "SELECT s.id, s.user_id, u.email, u.display_name FROM auth_sessions s JOIN users u ON u.id = s.user_id WHERE s.refresh_token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > now() AND u.status = 'active' FOR UPDATE",
+    const lookup = await client.query(
+      "SELECT session_id, user_id FROM public.arm_lookup_session_for_refresh($1)",
       [digest(refreshToken)]
     );
-    const session = result.rows[0];
-    if (!session) throw Object.assign(new Error("Refresh token is invalid or expired"), { statusCode: 401 });
+    const found = lookup.rows[0];
+    if (!found) throw Object.assign(new Error("Refresh token is invalid or expired"), { statusCode: 401 });
+    await client.query("SELECT set_config('app.user_id', $1, true)", [found.user_id]);
+    const locked = await client.query(
+      "SELECT id, user_id FROM auth_sessions WHERE id = $1 AND user_id = $2 AND refresh_token_hash = $3 AND revoked_at IS NULL AND expires_at > now() FOR UPDATE",
+      [found.session_id, found.user_id, digest(refreshToken)]
+    );
+    const session = locked.rows[0];
+    if (!session) throw Object.assign(new Error("Refresh token has already been rotated"), { statusCode: 401 });
     const nextRefresh = randomBytes(48).toString("base64url");
     await client.query(
       "UPDATE auth_sessions SET refresh_token_hash = $1, rotated_at = now() WHERE id = $2",
@@ -121,8 +132,11 @@ export async function rotateRefreshToken(refreshToken: string) {
 }
 
 export async function revokeSession(sessionId: string, userId: string) {
-  await pool.query(
-    "UPDATE auth_sessions SET revoked_at = now() WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL",
-    [sessionId, userId]
-  );
+  await inTransaction(async (client) => {
+    await client.query("SELECT set_config('app.user_id', $1, true)", [userId]);
+    await client.query(
+      "UPDATE auth_sessions SET revoked_at = now() WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL",
+      [sessionId, userId]
+    );
+  });
 }
