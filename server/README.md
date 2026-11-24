@@ -37,7 +37,7 @@ The test command applies pending migrations before running the PostgreSQL-backed
 - `POST /v1/auth/logout` — revoke the current session.
 - `GET /v1/tenant/context` — resolve the caller's active role in the selected tenant; requires `x-tenant-id`.
 - `POST /v1/sync/events` — submit versioned, idempotent aggregate upsert events.
-- `GET /v1/sync/events` — pull accepted events using the monotonic `after` cursor.
+- `GET /v1/sync/events` — pull accepted, conflict and rejected inbox outcomes using the monotonic `after` cursor.
 - `GET /health/live` and `GET /health/ready` — process and database health.
 
 The OpenAPI contract is in `openapi.yaml`.
