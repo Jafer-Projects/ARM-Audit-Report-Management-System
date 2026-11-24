@@ -126,3 +126,42 @@ Before production, document lawful purpose, data minimization, notice/consent wh
 ## 10. Threat modelling
 
 Maintain a threat model covering lost/stolen laptops, malicious insiders, compromised firm accounts, cross-tenant access, malware in uploads, malicious documents, sync replay, credential theft, compromised update channel, ransomware, VPS compromise, backup compromise and government connector credential exposure. Reassess after material architecture changes.
+
+
+## Cloud data/security implementation status
+
+The initial cloud migration creates identity, tenant membership, session, synchronization, append-only audit and worker-job tables. RLS is enabled with FORCE on tenant-owned tables. The API sets `app.user_id` and `app.tenant_id` using transaction-local settings and performs an active-membership check before tenant operations. Tenant identifiers in headers are selectors only, never authorization evidence.
+
+The first integration suite exercises registration, tenant context, cross-tenant denial, idempotent synchronization, stale-version conflict, pull visibility, refresh rotation and session revocation. It does not yet constitute a complete tenant-isolation assessment. Before production, add direct SQL/RLS bypass-boundary tests using separate least-privilege roles, organization invitation and role-administration tests, device/revocation tests, privileged support controls, MFA/email verification, secrets rotation and an independent security review. Audit and sync inbox rows have append-only triggers; production grants must additionally deny mutation privileges to application roles.
+
+The cloud bootstrap separates three non-superuser credentials: `arm_runtime` (only explicitly granted API tables), `arm_worker` (queue table only, with column-level update rights), and `arm_migrator` (schema ownership and forward migrations). The database bootstrap administrator is not used by API or worker processes. Runtime grants are explicit in the migration rather than broad default table grants, so a new table is not automatically exposed to the API. CI asserts the role boundaries and the API/worker cannot read the migration ledger or tenant identity tables outside their grants.
+
+
+The cloud database roles and security-definer functions are explicitly scoped. Security-definer functions use a fixed search path and are executable by the runtime role only. Identity-sensitive verification, MFA and invitation functions validate the transaction-local caller identity; pre-authentication account lookup is deliberately limited to the recovery/login flow and must remain behind non-enumerating rate-limited API routes. The worker-only RLS policies additionally require the actual `arm_worker` database identity; setting a custom worker GUC from the API role is insufficient. The API runtime has no access to the migration ledger or job queue, and the worker cannot read tenant business data.
+
+Production object storage uses an S3-compatible adapter with SigV4 request signing and server-side encryption. The bucket must be private, enforce TLS and encryption, block public access and use a least-privilege key. TLS is terminated by the Nginx gateway; only port 443 is published. Mounted Compose secret files are a deployment mechanism, not a substitute for an approved host/cloud secret manager, rotation and access auditing.
+
+These controls still require independent review and adversarial tests. In particular, RLS context is established by the trusted API transaction layer; a database credential compromise or arbitrary SQL execution under the shared runtime role is outside the protection boundary of a plain custom GUC. Use parameterized queries, least-privilege grants, injection testing and independent penetration review.
+
+
+## Independent security review and production sign-off checklist
+
+This checklist is a release gate, not a claim that the checks have already been performed. Each item requires dated evidence and an accountable reviewer.
+
+- [ ] Independent review of authentication, password recovery, TOTP replay prevention, recovery-code handling, session rotation/revocation and email token flows.
+- [ ] Adversarial tenant-isolation tests across every API route, SQL query, security-definer function and database role; include forged tenant headers, suspended memberships and cross-tenant object identifiers.
+- [ ] SQL injection, authorization bypass, mass-assignment, IDOR, CSRF/CORS, request-size and rate-limit testing; verify that no credentials or tokens appear in logs or telemetry.
+- [ ] Independent review of security-definer ownership, fixed search paths, function execute grants, RLS policies and worker-only policies; verify runtime, worker and migrator cannot elevate privileges.
+- [ ] Dependency audit and SBOM for npm, Cargo and container images; remediate critical/high findings or record a formally approved exception. Pin production images by verified digest.
+- [ ] SAST, secret scanning, container scanning, DAST and external penetration testing on the exact release SHA.
+- [ ] Verify TLS certificate chain, renewal/reload automation, supported TLS configuration, HSTS, ingress firewall, proxy trust boundary and absence of public API/database ports.
+- [ ] Verify host/cloud secret-manager controls, restrictive secret-file permissions, access audit, key rotation and documented MFA encryption-key re-encryption procedure.
+- [ ] Verify private S3 bucket policy, public-access block, TLS-only access, server-side encryption, least-privilege credentials, versioning/retention and lifecycle policy.
+- [ ] Run the encrypted PostgreSQL and object restore drill in an isolated environment; verify every document hash and record measured restore time, RPO and RTO.
+- [ ] Verify off-provider backup replication, backup retention, monitoring/alerting, incident response, breach notification and recovery ownership.
+- [ ] Verify data minimization, retention/deletion, legal basis, privacy notice, cross-border processing and professional confidentiality obligations for the deployment jurisdiction.
+- [ ] Obtain audit/accounting domain-owner approval for journal controls, separation of duties, report workflow, document evidence integrity and every calculation/rule before enabling authoritative production workflows.
+- [ ] Confirm cloud sync is enabled only for approved record classes. The current generic sync contract is prototype-only; it must not carry authoritative accounting, audit, tax or evidence records.
+- [ ] Confirm all required CI jobs pass on the exact PR head, migrations run twice successfully, clean `npm ci` and production container build succeed, and the release artifact corresponds to the reviewed commit.
+
+**Release rule:** any unchecked item above blocks production use with real client data. A passing CI workflow alone is not an independent security review.

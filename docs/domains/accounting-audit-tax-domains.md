@@ -130,3 +130,10 @@ Controls:
 ## 6. Reporting
 
 Reports must be generated from approved data and versioned templates. Include reporting period, entity, currency, framework, preparation date, preparer, reviewer, approval status and data/rule snapshot references. Drafts must be visibly distinguished from approved and issued reports. Corrections after issue create a new version and controlled reissue history.
+
+
+## 7. Current cloud domain implementation boundary
+
+The first cloud domain slice now provides tenant-scoped audit engagement and workpaper records, version-checked workpaper transitions, audit report preparation/review/approval/issuance with separation-of-duties checks, a chart of accounts, balanced draft journals, posting by a different user, immutable posted entries and one-reversal-per-journal draft reversals. Domain history is append-only. Accounting arithmetic is constrained to safe four-decimal precision for the initial API.
+
+This is not a complete accounting, audit or tax engine. Fiscal periods/locks, general ledger and trial balance, bank reconciliation, subledgers, FX, tax rules, complete audit assertion/evidence traceability, sampling, findings, report templates/signatures, retention and Ethiopian regulatory integrations still require dedicated domain specifications, professional validation and tests. A source-code presence check is not professional approval.

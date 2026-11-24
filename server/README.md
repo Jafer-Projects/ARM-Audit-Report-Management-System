@@ -1,0 +1,64 @@
+# ARM Cloud API (foundational increment)
+
+This package is the first Node.js/TypeScript cloud service for ARM. It is a modular-monolith foundation, not a completed migration of desktop business workflows.
+
+## Local development
+
+Requirements: Node.js 22.16+, PostgreSQL 16+, and npm.
+
+```sh
+cp .env.example .env
+# Generate distinct DB passwords with `openssl rand -hex 32`; generate JWT_SECRET and MFA_ENCRYPTION_KEY with `openssl rand -base64 48`. Put raw secrets in files referenced by `.env`, never in the Compose file or Git.
+# Set POSTGRES_PASSWORD, ARM_RUNTIME_PASSWORD, ARM_WORKER_PASSWORD,
+# ARM_MIGRATOR_PASSWORD and JWT_SECRET before starting Compose.
+docker compose --env-file .env up --build
+```
+
+Run the API integration suite against a disposable PostgreSQL database:
+
+```sh
+# Use a disposable PostgreSQL database only.
+export ADMIN_DATABASE_URL=postgres://owner:...@localhost:5432/arm_test
+export MIGRATION_DATABASE_URL=postgres://arm_migrator:...@localhost:5432/arm_test
+export DATABASE_URL=postgres://arm_runtime:...@localhost:5432/arm_test
+export WORKER_DATABASE_URL=postgres://arm_worker:...@localhost:5432/arm_test
+export ARM_RUNTIME_PASSWORD=... ARM_WORKER_PASSWORD=... ARM_MIGRATOR_PASSWORD=... JWT_SECRET=...
+npm run db:bootstrap-runtime
+npm run build
+npm test
+```
+
+The test command applies pending migrations before running the PostgreSQL-backed tests. Never point it at a production database.
+
+## Current API surface
+
+- `POST /v1/auth/register` — create a user and initial tenant owner.
+- `POST /v1/auth/login` — authenticate and issue a short-lived access token plus a rotating refresh token.
+- `POST /v1/auth/refresh` — rotate a refresh token.
+- `POST /v1/auth/logout` — revoke the current session.
+- `GET /v1/tenant/context` — resolve the caller's active role in the selected tenant; requires `x-tenant-id`.
+- `POST /v1/sync/events` — submit versioned, idempotent aggregate upsert events.
+- `GET /v1/sync/events` — pull accepted, conflict and rejected inbox outcomes using the monotonic `after` cursor.
+- `GET /health/live` and `GET /health/ready` — process and database health.
+
+The OpenAPI contract is in `openapi.yaml`.
+
+## Security and current limitations
+
+- Passwords are stored using Node's scrypt KDF; refresh tokens are stored only as SHA-256 digests.
+- Access tokens are HMAC-SHA-256 signed, short-lived, and checked against a revocable server-side session on every authenticated request.
+- Tenant context comes from a request header but is never trusted by itself: active membership is checked inside a transaction.
+- Tenant-owned tables enforce PostgreSQL row-level security using transaction-local user and tenant context; active membership is also checked inside the RLS policy.
+- Separate non-superuser roles isolate API runtime table grants, worker queue access and schema migration ownership. The API cannot read the migration ledger or worker queue; the worker cannot read tenant identity or business tables.
+- Sync delivery is at-least-once. Inbox uniqueness, advisory locking and aggregate base versions make retries safe and stale updates explicit.
+- Audit and sync inbox rows are append-only at the database trigger layer.
+
+This first slice does **not** yet implement email verification, MFA, organization invitations/member administration, full permission matrices, device registration/leases, S3 document upload/scanning, domain-specific accounting/audit/tax command handlers, a complete conflict-resolution UI, or production secrets/key management. A committed npm lockfile and reproducible `npm ci` build are also still required before production. The worker queue runtime is present, but domain job handlers must be added with their owning modules. These are explicit blockers for real client data and production.
+
+Do not use the generic JSON sync aggregate table as a substitute for domain-specific financial invariants. Posted journals, tax filings, report issuance and other high-risk operations must receive dedicated server-side commands, permissions, immutable history and independently tested invariants before they are synchronized as authoritative data.
+
+## Backup and restore operations
+
+Install Docker Compose, AWS CLI and age on the controlled operations host. Provision a separate backup destination and an empty, isolated restore-test bucket. Keep the age private identity offline and restrict access to its public recipient. Set the backup variables from `.env` and run `ops/backup.sh` on a schedule managed by the host scheduler. The script creates encrypted PostgreSQL and private S3 object archives plus checksums. Copy the resulting files to a separate failure domain.
+
+For a restore exercise, supply `AGE_IDENTITY`, the matching encrypted backup paths, and a dedicated empty `RESTORE_S3_BUCKET` with restore-only credentials. Run `ops/restore-drill.sh`. It restores the database to a disposable PostgreSQL container, restores objects to the isolated bucket, and verifies every document object's SHA-256 against restored metadata. Record execution time, object counts, missing objects and corrective actions. Never point the drill at the production bucket.

@@ -103,3 +103,10 @@ Firm subscription:
 ## 8. Auditability
 
 Log access grants, role changes, invitations, exports, report releases, journal postings/reversals, tax approvals, filing attempts, device registration/revocation and break-glass access. Logs must include actor, tenant, target, action, timestamp, correlation ID and relevant before/after references without unnecessarily copying sensitive document contents.
+
+
+## 8. Cloud RBAC implementation
+
+The cloud service now supports a tenant permission catalogue, custom role creation/renaming/deletion, permission replacement, member role assignment/removal, member listing, invitation creation/acceptance/revocation and membership activation/suspension/revocation. Invitation acceptance requires an active verified account whose email matches the invitation. Owner/system roles are protected from ordinary deletion and membership-status changes.
+
+Runtime authorization checks both tenant membership and permission on each service operation. PostgreSQL RLS and non-superuser database roles provide additional isolation. The offline desktop still needs signed device/permission leases and equivalent local policy enforcement before disconnected role changes or immediate revocation can be treated as authoritative.

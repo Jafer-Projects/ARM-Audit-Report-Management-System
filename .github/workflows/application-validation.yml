@@ -14,9 +14,9 @@ permissions:
 # Every independent check is a separate job. GitHub schedules these jobs in
 # parallel; a failure in one job does not cancel or suppress the others.
 # The workflow conclusion remains failure if any required job fails.
-# Node.js currently runs the React/Vite application and domain-contract tests;
-# this repository has no Node.js API/server package yet. The implemented
-# application backend is Rust/Tauri, including SQLite persistence and commands.
+# Node.js runs the React/Vite desktop UI and the separate cloud API package
+# under server/. Rust/Tauri remains the native desktop backend; PostgreSQL
+# is the cloud source of truth for shared state as the cloud increment lands.
 jobs:
   frontend-typecheck:
     name: Frontend TypeScript typecheck
@@ -150,3 +150,119 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Build Windows desktop application without installer
         run: npm run tauri -- build --no-bundle
+
+  cloud-dependency-lock:
+    name: Generate lock and validate reproducible cloud install
+    if: (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'implementation/cloud-first-platform' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'push' && github.ref == 'refs/heads/implementation/cloud-first-platform')
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    permissions:
+      contents: write
+    services:
+      postgres:
+        image: postgres:16.8
+        env:
+          POSTGRES_DB: arm_test
+          POSTGRES_USER: arm_test
+          POSTGRES_PASSWORD: arm_test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U arm_test -d arm_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    defaults:
+      run:
+        working-directory: server
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgres://arm_runtime:arm_runtime_test_password@localhost:5432/arm_test
+      WORKER_DATABASE_URL: postgres://arm_worker:arm_worker_test_password@localhost:5432/arm_test
+      MIGRATION_DATABASE_URL: postgres://arm_migrator:arm_migrator_test_password@localhost:5432/arm_test
+      ADMIN_DATABASE_URL: postgres://arm_test:arm_test_password@localhost:5432/arm_test
+      ARM_RUNTIME_PASSWORD: arm_runtime_test_password
+      ARM_WORKER_PASSWORD: arm_worker_test_password
+      ARM_MIGRATOR_PASSWORD: arm_migrator_test_password
+      JWT_SECRET: ci-only-test-secret-which-is-longer-than-thirty-two-bytes
+      MFA_ENCRYPTION_KEY: ci-only-mfa-encryption-key-with-more-than-thirty-two-bytes
+      ACCESS_TOKEN_TTL_SECONDS: 900
+      LOG_LEVEL: warn
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.16.0"
+      - name: Generate exact cloud API dependency lock
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Commit lockfile without force-pushing
+        env:
+          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+        run: |
+          if [ -z "$(git status --porcelain -- package-lock.json)" ]; then
+            echo "Cloud API lockfile is already current."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package-lock.json
+            git commit -m "build(cloud): commit reproducible API dependency lock"
+            git push origin "HEAD:refs/heads/$BRANCH_NAME"
+          fi
+      - name: Verify clean reproducible dependency installation
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Create least-privilege database roles
+        run: npm run db:bootstrap-runtime
+      - name: Compile cloud API and worker from locked dependencies
+        run: npm run build
+      - name: Apply migrations twice and run PostgreSQL integration tests
+        run: npm test
+
+  cloud-api-integration:
+    name: Cloud API build and PostgreSQL integration tests
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16.8
+        env:
+          POSTGRES_DB: arm_test
+          POSTGRES_USER: arm_test
+          POSTGRES_PASSWORD: arm_test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U arm_test -d arm_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    defaults:
+      run:
+        working-directory: server
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgres://arm_runtime:arm_runtime_test_password@localhost:5432/arm_test
+      WORKER_DATABASE_URL: postgres://arm_worker:arm_worker_test_password@localhost:5432/arm_test
+      MIGRATION_DATABASE_URL: postgres://arm_migrator:arm_migrator_test_password@localhost:5432/arm_test
+      ADMIN_DATABASE_URL: postgres://arm_test:arm_test_password@localhost:5432/arm_test
+      ARM_RUNTIME_PASSWORD: arm_runtime_test_password
+      ARM_WORKER_PASSWORD: arm_worker_test_password
+      ARM_MIGRATOR_PASSWORD: arm_migrator_test_password
+      JWT_SECRET: ci-only-test-secret-which-is-longer-than-thirty-two-bytes
+      MFA_ENCRYPTION_KEY: ci-only-mfa-encryption-key-with-more-than-thirty-two-bytes
+      ACCESS_TOKEN_TTL_SECONDS: 900
+      LOG_LEVEL: warn
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.16.0"
+      - name: Install cloud API dependencies reproducibly when lockfile is available
+        run: if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+      - name: Create least-privilege runtime database role
+        run: npm run db:bootstrap-runtime
+      - name: Compile cloud API and worker
+        run: npm run build
+      - name: Apply migrations and run PostgreSQL integration tests
+        run: npm test

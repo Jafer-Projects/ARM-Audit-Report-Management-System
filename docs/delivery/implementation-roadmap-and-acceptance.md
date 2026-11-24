@@ -149,3 +149,20 @@ A feature is complete only when:
 The product owner has issued a later, explicit decision recorded in [PR #1](https://github.com/Jafer-Projects/ARM-Audit-Report-Management-System/pull/1) and [Prototype Build Binding Contract](prototype-build-binding-contract.md). ARM is a controlled prototype using synthetic data. All implementation remains on `implementation/increments-0-to-5` in PR #1. Close the outstanding Increments 0–5 implementation gaps to the best practical professional standard, preserving existing behavior and avoiding scope expansion.
 
 **This later decision supersedes any earlier wording in this file that requires continuous test execution or increment-level verification.** Formal verification and testing of the integrated Increments 0–5 delivery occur only after Increment 5 implementation is complete. Do not declare any increment accepted, passed, or independently complete. Test plans and fixtures may be prepared during implementation, but partial checks must not be presented as acceptance. This timing decision does not permit test deletion, assertion weakening, or unsupported claims. The one collective gate and separate production/legal/security/professional gates remain mandatory.
+
+
+## Dedicated cloud-first architecture alignment increment
+
+This increment is a separate foundation track and does not alter the deferred collective acceptance rule for Increments 0–5. It must not be represented as passing or accepting any of those increments.
+
+Scope:
+1. Node.js/TypeScript modular-monolith API with versioned OpenAPI contracts.
+2. PostgreSQL identity, tenant, session, sync inbox/aggregate, audit and worker-job schema with forward-only migrations and tenant RLS.
+3. Authentication with secure password hashing, short-lived access credentials, rotating refresh tokens and revocable sessions; email verification, MFA and recovery remain required before production.
+4. Server-verified tenant membership and explicit role/permission enforcement; UI or client-supplied tenant IDs are never authorization.
+5. Versioned, idempotent, at-least-once synchronization with base-version conflict detection, monotonic pull cursors and durable acknowledgments.
+6. Separate worker runtime with bounded retries, job leasing and module-owned handlers.
+7. PostgreSQL-backed integration tests for authentication, tenant boundaries, sync replay/conflicts and migrations.
+8. Container build and initial Compose topology, followed by production ingress, object storage, secrets, backups, monitoring and recovery hardening.
+
+Initial implementation is recorded in `server/` and the cloud API CI job. Remaining implementation and verification must close the explicit gaps in the system, data/security, sync and deployment documents. No production or real-client-data gate is implied by the existence of this foundation.

@@ -141,7 +141,7 @@ impl Database {
             )?;
             tx.commit()?;
         }
-        if applied > 11 {
+        if applied > 12 {
             return Err(rusqlite::Error::InvalidQuery);
         }
         if applied < 3 {
@@ -371,6 +371,101 @@ impl Database {
             )?;
             tx.commit()?;
         }
+
+        if applied < 12 {
+            let tx = self.connection.unchecked_transaction()?;
+            tx.execute_batch(
+                "CREATE TABLE sync_outbox (
+                    event_id TEXT PRIMARY KEY NOT NULL,
+                    idempotency_key TEXT NOT NULL UNIQUE,
+                    aggregate_type TEXT NOT NULL CHECK(aggregate_type='prototype.workspace_record'),
+                    aggregate_id TEXT NOT NULL,
+                    base_version INTEGER NOT NULL CHECK(base_version>=0),
+                    event_type TEXT NOT NULL CHECK(event_type='aggregate.upsert'),
+                    schema_version INTEGER NOT NULL DEFAULT 1,
+                    occurred_at TEXT NOT NULL,
+                    correlation_id TEXT NOT NULL,
+                    payload_json TEXT NOT NULL CHECK(json_valid(payload_json)),
+                    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','accepted','conflict','rejected')),
+                    attempts INTEGER NOT NULL DEFAULT 0,
+                    server_version INTEGER,
+                    response_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX sync_outbox_pending ON sync_outbox(status,created_at);
+                CREATE TABLE cloud_sync_state (
+                    firm_id TEXT PRIMARY KEY NOT NULL REFERENCES demo_firm(id),
+                    cloud_tenant_id TEXT NOT NULL,
+                    pull_cursor TEXT NOT NULL DEFAULT '0',
+                    last_success_at TEXT,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE TABLE cloud_sync_aggregate_state (
+                    aggregate_id TEXT PRIMARY KEY NOT NULL,
+                    server_version INTEGER NOT NULL CHECK(server_version>=0),
+                    updated_at TEXT NOT NULL
+                );
+                CREATE TABLE cloud_sync_inbox (
+                    received_seq INTEGER PRIMARY KEY NOT NULL,
+                    event_id TEXT NOT NULL UNIQUE,
+                    aggregate_id TEXT NOT NULL,
+                    outcome TEXT NOT NULL CHECK(outcome IN ('accepted','conflict','rejected')),
+                    resulting_version INTEGER,
+                    payload_json TEXT NOT NULL CHECK(json_valid(payload_json)),
+                    received_at TEXT NOT NULL
+                );
+                CREATE TRIGGER workspace_record_outbox_enqueue
+                AFTER INSERT ON local_event
+                WHEN NEW.target_type='workspace_record'
+                BEGIN
+                  INSERT OR IGNORE INTO sync_outbox(
+                    event_id,idempotency_key,aggregate_type,aggregate_id,base_version,event_type,schema_version,
+                    occurred_at,correlation_id,payload_json,created_at,updated_at
+                  )
+                  SELECT NEW.id,NEW.id,'prototype.workspace_record',r.id,
+                    COALESCE(
+                      (SELECT MAX(o.base_version)+1 FROM sync_outbox o WHERE o.aggregate_id=r.id AND o.status='pending'),
+                      (SELECT a.server_version FROM cloud_sync_aggregate_state a WHERE a.aggregate_id=r.id),
+                      0
+                    ),
+                    'aggregate.upsert',1,NEW.occurred_at_utc,NEW.correlation_id,
+                    json_object('record',json_object(
+                      'id',r.id,'client_id',r.client_id,'record_type',r.record_type,'title',r.title,
+                      'status',r.status,'reference',r.reference,'amount_text',r.amount_text,'notes',r.notes,
+                      'payload_json',r.payload_json,'row_version',r.row_version,'updated_at',r.updated_at
+                    )),NEW.occurred_at_utc,NEW.occurred_at_utc
+                  FROM workspace_record r WHERE r.id=NEW.target_id AND r.firm_id=NEW.firm_id;
+                END;
+
+                INSERT OR IGNORE INTO sync_outbox(
+                  event_id,idempotency_key,aggregate_type,aggregate_id,base_version,event_type,schema_version,
+                  occurred_at,correlation_id,payload_json,created_at,updated_at
+                )
+                SELECT
+                  lower(hex(randomblob(4)))||'-'||lower(hex(randomblob(2)))||'-4'||substr(lower(hex(randomblob(2))),2)||'-a'||substr(lower(hex(randomblob(2))),2)||'-'||lower(hex(randomblob(6))),
+                  lower(hex(randomblob(4)))||'-'||lower(hex(randomblob(2)))||'-4'||substr(lower(hex(randomblob(2))),2)||'-a'||substr(lower(hex(randomblob(2))),2)||'-'||lower(hex(randomblob(6))),
+                  'prototype.workspace_record',r.id,COALESCE(a.server_version,0),'aggregate.upsert',1,r.updated_at,
+                  lower(hex(randomblob(4)))||'-'||lower(hex(randomblob(2)))||'-4'||substr(lower(hex(randomblob(2))),2)||'-a'||substr(lower(hex(randomblob(2))),2)||'-'||lower(hex(randomblob(6))),
+                  json_object('record',json_object('id',r.id,'client_id',r.client_id,'record_type',r.record_type,'title',r.title,'status',r.status,'reference',r.reference,'amount_text',r.amount_text,'notes',r.notes,'payload_json',r.payload_json,'row_version',r.row_version,'updated_at',r.updated_at)),
+                  r.updated_at,r.updated_at
+                FROM workspace_record r LEFT JOIN cloud_sync_aggregate_state a ON a.aggregate_id=r.id;
+                CREATE TRIGGER sync_outbox_response_update
+                BEFORE UPDATE ON sync_outbox
+                WHEN NEW.event_id<>OLD.event_id OR NEW.idempotency_key<>OLD.idempotency_key
+                  OR NEW.aggregate_id<>OLD.aggregate_id OR NEW.payload_json<>OLD.payload_json
+                  OR NEW.base_version<>OLD.base_version OR NEW.created_at<>OLD.created_at
+                BEGIN SELECT RAISE(ABORT,'sync outbox event envelope is immutable'); END;
+                CREATE TRIGGER sync_inbox_no_delete BEFORE DELETE ON cloud_sync_inbox
+                BEGIN SELECT RAISE(ABORT,'cloud sync inbox history is immutable'); END;"
+            )?;
+            tx.execute(
+                "INSERT INTO schema_migration(version,checksum,applied_at) VALUES(12,?1,?2)",
+                rusqlite::params!["arm-cloud-sync-outbox-v12",now_utc()],
+            )?;
+            tx.commit()?;
+        }
+
         for (version, expected_checksum) in [
             (1_i64, "arm-initial-schema-v1"),
             (2_i64, "arm-local-notes-v2"),
@@ -383,6 +478,7 @@ impl Database {
             (9_i64, "arm-review-note-transition-guards-v9"),
             (10_i64, "arm-source-documents-v10"),
             (11_i64, "arm-workspace-notifications-v11"),
+            (12_i64, "arm-cloud-sync-outbox-v12"),
         ] {
             let actual: String = self.connection.query_row(
                 "SELECT checksum FROM schema_migration WHERE version=?1",
@@ -484,7 +580,7 @@ mod tests {
         let staff: i64 = db.connection.query_row("SELECT COUNT(*) FROM workspace_record WHERE record_type='staff'", [], |r| r.get(0)).unwrap();
         assert_eq!(clients, 1);
         assert_eq!(actors, 4);
-        assert_eq!(migrations, 11);
+        assert_eq!(migrations, 12);
         assert_eq!(staff, 4);
     }
 
@@ -663,4 +759,36 @@ mod tests {
         assert_eq!(target,"workspace");
     }
 
+
+    #[test]
+    fn workspace_record_events_create_versioned_durable_cloud_outbox_entries() {
+        let db=Database::memory().expect("in-memory db");
+        let record="00000000-0000-4000-8000-000000000999";
+        let actor="00000000-0000-4000-8000-000000000011";
+        let firm="00000000-0000-4000-8000-000000000001";
+        let now=now_utc();
+        db.connection.execute(
+            "INSERT INTO workspace_record(id,firm_id,client_id,record_type,title,status,created_at,updated_at,created_by,updated_by)
+             VALUES(?1,?2,NULL,'staff','Outbox Test','Active',?3,?3,?4,?4)",
+            rusqlite::params![record,firm,now,actor]
+        ).expect("insert test workspace record");
+        db.connection.execute(
+            "INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json)
+             VALUES('10000000-0000-4000-8000-000000000001',?1,?2,'workspace_record_updated','workspace_record',?3,?4,'corr-one','{}')",
+            rusqlite::params![firm,actor,record,now]
+        ).expect("append first workspace event");
+        let first:(i64,String)=db.connection.query_row("SELECT base_version,payload_json FROM sync_outbox WHERE event_id='10000000-0000-4000-8000-000000000001'",[],|r|Ok((r.get(0)?,r.get(1)?))).unwrap();
+        assert_eq!(first.0,0);
+        assert!(first.1.contains("Outbox Test"));
+        let later=now_utc();
+        db.connection.execute("UPDATE workspace_record SET row_version=2,title='Updated Outbox Test',updated_at=?2 WHERE id=?1",rusqlite::params![record,later]).unwrap();
+        db.connection.execute(
+            "INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json)
+             VALUES('10000000-0000-4000-8000-000000000002',?1,?2,'workspace_record_updated','workspace_record',?3,?4,'corr-two','{}')",
+            rusqlite::params![firm,actor,record,later]
+        ).expect("append second workspace event");
+        let second:(i64,String)=db.connection.query_row("SELECT base_version,payload_json FROM sync_outbox WHERE event_id='10000000-0000-4000-8000-000000000002'",[],|r|Ok((r.get(0)?,r.get(1)?))).unwrap();
+        assert_eq!(second.0,1);
+        assert!(second.1.contains("Updated Outbox Test"));
+    }
 }

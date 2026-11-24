@@ -98,3 +98,17 @@ These are architecture directions to validate; final versions, licenses, mainten
 ## Current delivery state
 
 Phase 0 approval permits controlled initial development and practitioner demonstrations using synthetic data. Real client data, live accounting/tax operations, desktop distribution and production deployment remain subject to the corresponding legal, security, professional and operational approvals. The repository now includes the initial Tauri/React desktop application scaffold and synthetic-data workflow prototype on the PR #2 implementation branch. This is early, unverified implementation work: CI, full integrated acceptance, encryption, practitioner review and production gates remain outstanding. See the implementation evidence log and PR #2 for the current scope and limitations.
+
+
+## Cloud API implementation entry — 2026-11-24
+
+The approved architecture already selected Node.js/TypeScript, PostgreSQL, SQLite offline storage and independent workers. This branch begins implementing the missing cloud boundary without replacing the current Tauri/Rust desktop prototype.
+
+See:
+- `server/README.md` — local setup, endpoints and current security limitations.
+- `server/openapi.yaml` — initial versioned API contract.
+- `server/migrations/001_cloud_foundation.sql` — initial PostgreSQL identity, tenancy, sync, audit and jobs schema.
+- `server/src/` — API, auth, tenant transaction and sync services, migration runner and worker.
+- `.github/workflows/application-validation.yml` — separate PostgreSQL-backed API integration job.
+
+The implementation is not yet verified by a completed CI run and does not authorize production or real client data. See the dedicated cloud-first implementation record in the evidence log for the remaining blockers.

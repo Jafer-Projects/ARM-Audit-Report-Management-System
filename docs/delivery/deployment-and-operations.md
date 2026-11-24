@@ -66,3 +66,21 @@ Prepare runbooks for database outage, VPS loss, storage outage, credential compr
 ## 9. Cost management
 
 Begin with one appropriately sized VPS and independent object storage/backup. Track actual bandwidth, storage growth, backups, database IOPS, worker CPU and support costs. Split services only when measurements or availability requirements justify it. Moderate budget must not be achieved by omitting encryption, backups, monitoring or recovery testing.
+
+
+## Cloud deployment implementation status
+
+The current Compose topology includes PostgreSQL, the Node.js API, a separate worker, ClamAV and an Nginx TLS gateway. Only gateway port 443 is published; PostgreSQL and the API remain on the internal Compose network. The API applies versioned migrations with a separate non-superuser migrator role. API runtime and worker credentials are separate and least-privilege. Production mode requires S3-compatible object storage and mounted secret files; the API and worker do not use local filesystem storage in the production Compose profile.
+
+The Compose topology is a production-oriented starting point, not a turnkey production environment. Operators must provision a private S3 bucket with public access blocked, TLS enforced and encryption enabled; provision a real email provider; provide valid TLS certificate/key files and renewal/reload automation; mount secret files with restrictive ownership/permissions; configure host firewall and patching; and install monitoring, alerting and off-provider backup scheduling. PostgreSQL data volumes still require encrypted storage and independent backup. The included backup and restore scripts require a separate backup destination, age key custody and a dedicated empty restore bucket.
+
+Do not expose PostgreSQL or the API directly. Do not deploy real client data until the exact release SHA passes all CI checks, the independent security review is signed, the full database-and-object restore drill succeeds, operational RPO/RTO and incident owners are approved, and legal/professional data-processing requirements are satisfied.
+
+
+### Cloud-first implementation increment — current source status
+
+The cloud foundation is implemented under `server/`: Node.js/TypeScript API, PostgreSQL migrations, isolated runtime/worker/migrator roles, email/MFA/recovery, organization invitations, tenant RBAC, audit/accounting APIs, S3-compatible object storage, ClamAV scanning, TLS reverse proxy and encrypted backup/restore scripts. Production Compose expects externally provisioned secret files, TLS certificates, an email provider and a private S3-compatible bucket. The application container does not publish its API port; only the TLS gateway publishes 443.
+
+The deployment scripts are operational source, not proof of a production environment. The backup/restore drill must be run with a dedicated isolated restore bucket and database. Certificate issuance/renewal, bucket policy, key rotation, monitoring, alerting, off-provider replication and incident-response ownership must be provisioned and verified by the operator. The security review checklist remains open until an independent reviewer signs it.
+
+The cloud Dockerfile uses `npm ci` and requires `server/package-lock.json`. A CI job generates and commits that lockfile on the cloud implementation branch and validates the clean install. Do not build a release image until the committed lockfile exists and the exact branch head passes validation.
