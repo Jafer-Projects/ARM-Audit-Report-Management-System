@@ -84,7 +84,7 @@ test("login verifies credentials and returns only the caller's active membership
 test("sync push is version-checked, idempotent, and pull returns accepted events", async () => {
   const aggregateId = randomUUID();
   const event = {
-    eventId: randomUUID(), idempotencyKey: randomUUID(), aggregateType: "workspace.client",
+    eventId: randomUUID(), idempotencyKey: randomUUID(), aggregateType: "prototype.workspace_record",
     aggregateId, baseVersion: 0, eventType: "aggregate.upsert", schemaVersion: 1,
     occurredAt: new Date().toISOString(), payload: { displayName: "Synthetic Client" }
   };
