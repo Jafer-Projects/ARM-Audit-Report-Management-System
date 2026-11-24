@@ -108,3 +108,12 @@ First scale vertically and optimize database queries, indexes, connection poolin
 - Recoverability and operational observability.
 - Maintainable modular boundaries.
 - Backward-compatible synchronization.
+
+
+## Cloud-first implementation alignment — initial slice
+
+The repository now contains an initial Node.js/TypeScript cloud API in `server/`, alongside—not in place of—the existing Rust/Tauri desktop backend. The cloud package implements health endpoints, initial user/tenant registration, password login, short-lived signed access tokens, rotating refresh tokens, session revocation, tenant context validation and a versioned synchronization inbox. PostgreSQL migrations establish users, tenants, memberships, sessions, sync aggregates/inbox, audit events and a worker queue. PostgreSQL RLS is enabled and forced on tenant-owned tables; API tenant operations set transaction-local user and tenant context and verify active membership.
+
+The separate worker executable claims jobs with `FOR UPDATE SKIP LOCKED`, bounded retry/backoff and worker-only RLS policy. The queue runtime is infrastructure only: domain handlers (OCR, malware scanning, notifications, exports and government adapters) are not yet implemented.
+
+The generic `sync_aggregates` JSONB table is a protocol/bootstrap mechanism, not a replacement for domain-owned accounting, audit, tax, document or approval tables. High-risk operations require dedicated server-side commands and invariants. See `server/README.md` and `server/openapi.yaml` for the implemented surface and explicit limitations.
