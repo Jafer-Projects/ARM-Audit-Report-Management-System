@@ -71,10 +71,10 @@ export async function scanNextDocument(workerPool: {connect:()=>Promise<any>},cl
   try {
     await client.query("BEGIN");
     await client.query("SELECT set_config('app.worker','true',true)");
-    const found=await client.query("SELECT id,object_key,sha256 FROM document_objects WHERE scan_status='pending' ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1");
+    const found=await client.query("SELECT id,object_key,sha256 FROM document_objects WHERE scan_status='pending' OR (scan_status='scanning' AND scanned_at<now()-interval '5 minutes') ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1");
     document=found.rows[0];
     if(!document) { await client.query("COMMIT"); return false; }
-    await client.query("UPDATE document_objects SET scan_status='scanning' WHERE id=$1",[document.id]);
+    await client.query("UPDATE document_objects SET scan_status='scanning',scanned_at=now() WHERE id=$1",[document.id]);
     await client.query("COMMIT");
   } catch(error) { await client.query("ROLLBACK"); throw error; }
   finally { client.release(); }
