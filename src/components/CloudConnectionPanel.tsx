@@ -68,7 +68,7 @@ export function CloudConnectionPanel({onClose}:Props){
   event.preventDefault();
   await run(async()=>{
    const result=await cloudAuth.completeMfa(api,challenge,mfaCode);
-   const selectedTenantId=result.memberships?.length===1?result.memberships[0].tenant_id:"";
+   const selectedTenantId="";
    await secureSession.save({apiBaseUrl:api,selectedTenantId,session:result});
    setSession(result);setTenantId(selectedTenantId);
    setMfaEnabled((await cloudAuth.mfaStatus(api,result.accessToken)).enabled);
