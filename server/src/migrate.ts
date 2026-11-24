@@ -28,7 +28,10 @@ try {
     }
   }
 } finally {
-  if (migrationLockAcquired) await client.query("SELECT pg_advisory_unlock(hashtext('arm-schema-migrations'))");
-  client.release();
-  await migrationPool.end();
+  try {
+    if (migrationLockAcquired) await client.query("SELECT pg_advisory_unlock(hashtext('arm-schema-migrations'))");
+  } finally {
+    client.release();
+    await migrationPool.end();
+  }
 }
