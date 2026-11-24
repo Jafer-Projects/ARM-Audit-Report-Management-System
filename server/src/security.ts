@@ -136,10 +136,10 @@ export async function beginMfaEnrollment(userId:string,email:string,password:str
     await client.query("SELECT set_config('app.user_id',$1,true)",[userId]);
     const found=await client.query("SELECT password_hash FROM users WHERE id=$1 AND status='active'",[userId]);
     const existing=await client.query("SELECT enabled_at FROM mfa_credentials WHERE user_id=$1",[userId]);
-    if(existing.rows[0]?.enabled_at) throw Object.assign(new Error("MFA is already enabled. Verify with MFA before disabling it."),{statusCode:409});
-    return found;
+    return {found,enabled:Boolean(existing.rows[0]?.enabled_at)};
   });
-  if(!account.rowCount || !(await verifyPassword(password,account.rows[0].password_hash))) throw Object.assign(new Error("Current password is incorrect"),{statusCode:401});
+  if(!account.found.rowCount || !(await verifyPassword(password,account.found.rows[0].password_hash))) throw Object.assign(new Error("Current password is incorrect"),{statusCode:401});
+  if(account.enabled) throw Object.assign(new Error("MFA is already enabled. Verify with MFA before disabling it."),{statusCode:409});
   const secret=base32Encode(randomBytes(20));
   await inTransaction(async(client)=>{
     await client.query("SELECT set_config('app.user_id',$1,true)",[userId]);
