@@ -14,6 +14,9 @@ permissions:
 # Every independent check is a separate job. GitHub schedules these jobs in
 # parallel; a failure in one job does not cancel or suppress the others.
 # The workflow conclusion remains failure if any required job fails.
+# Node.js currently runs the React/Vite application and domain-contract tests;
+# this repository has no Node.js API/server package yet. The implemented
+# application backend is Rust/Tauri, including SQLite persistence and commands.
 jobs:
   frontend-typecheck:
     name: Frontend TypeScript typecheck
@@ -30,7 +33,7 @@ jobs:
         run: npm run typecheck
 
   frontend-tests:
-    name: Frontend domain contract tests
+    name: Node.js frontend domain contract tests
     runs-on: windows-2022
     timeout-minutes: 15
     steps:
@@ -89,7 +92,7 @@ jobs:
         run: cargo check --manifest-path src-tauri/Cargo.toml --all-targets --target x86_64-pc-windows-msvc
 
   rust-tests:
-    name: Rust unit and module tests
+    name: Rust backend unit, command and database tests
     runs-on: windows-2022
     timeout-minutes: 30
     steps:
@@ -103,7 +106,7 @@ jobs:
         with:
           workspaces: src-tauri -> target
           shared-key: arm-rust-1.90-windows
-      - name: Run every Rust unit and module test
+      - name: Run all Rust backend unit, command and database tests
         run: cargo test --manifest-path src-tauri/Cargo.toml --no-fail-fast
 
   rust-clippy:
