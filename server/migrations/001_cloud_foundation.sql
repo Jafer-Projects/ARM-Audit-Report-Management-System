@@ -214,6 +214,7 @@ BEGIN
     GRANT USAGE, SELECT ON SEQUENCE sync_inbox_received_seq_seq TO arm_runtime;
   END IF;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'arm_worker') THEN
-    GRANT SELECT, UPDATE ON jobs TO arm_worker;
+    GRANT SELECT ON jobs TO arm_worker;
+    GRANT UPDATE (status, attempts, available_at, locked_at, locked_by, last_error, completed_at) ON jobs TO arm_worker;
   END IF;
 END $$;
