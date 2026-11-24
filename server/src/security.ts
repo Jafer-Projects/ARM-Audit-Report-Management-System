@@ -2,7 +2,7 @@ import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, 
 import type { PoolClient } from "pg";
 import { config } from "./config.js";
 import { inTransaction, pool } from "./db.js";
-import { hashPassword } from "./crypto.js";
+import { hashPassword, verifyPassword } from "./crypto.js";
 
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 const key = () => createHash("sha256").update(config.MFA_ENCRYPTION_KEY).digest();
@@ -50,15 +50,17 @@ function totp(secret: string, time = Date.now()): string {
   const binary = ((hmac[offset] & 127) << 24) | ((hmac[offset + 1] & 255) << 16) | ((hmac[offset + 2] & 255) << 8) | (hmac[offset + 3] & 255);
   return String(binary % 1_000_000).padStart(6, "0");
 }
-function verifyTotp(secret: string, code: string): boolean {
-  if (!/^\d{6}$/.test(code)) return false;
-  const supplied = Buffer.from(code);
-  for (const offset of [-30_000, 0, 30_000]) {
-    const expected = Buffer.from(totp(secret, Date.now() + offset));
-    if (timingSafeEqual(supplied, expected)) return true;
+function matchingTotpCounter(secret:string,code:string):number|null {
+  if(!/^\d{6}$/.test(code)) return null;
+  const supplied=Buffer.from(code),current=Math.floor(Date.now()/30_000);
+  for(const offset of [-1,0,1]) {
+    const counter=current+offset;
+    const expected=Buffer.from(totp(secret,counter*30_000));
+    if(timingSafeEqual(supplied,expected)) return counter;
   }
-  return false;
+  return null;
 }
+function verifyTotp(secret:string,code:string):boolean { return matchingTotpCounter(secret,code)!==null; }
 async function queueEmail(client: PoolClient, userId: string, tenantId: string, recipient: string, template: string, payload: Record<string, unknown>) {
   await client.query(
     "INSERT INTO email_outbox(user_id,tenant_id,recipient,template_key,payload) VALUES($1,$2,$3,$4,$5::jsonb)",
@@ -124,7 +126,7 @@ export async function beginMfaEnrollment(userId: string, email: string) {
   return { secret, otpauthUri: `otpauth://totp/${label}?secret=${secret}&issuer=ARM&algorithm=SHA1&digits=6&period=30` };
 }
 
-export async function confirmMfaEnrollment(userId: string, code: string) {
+export async function confirmMfaEnrollment(userId:string,code:string) {
   const result = await inTransaction(async (client) => {
     await client.query("SELECT set_config('app.user_id',$1,true)", [userId]);
     const found = await client.query("SELECT secret_ciphertext FROM mfa_credentials WHERE user_id=$1", [userId]);
@@ -143,7 +145,7 @@ export async function confirmMfaEnrollment(userId: string, code: string) {
 export async function disableMfa(userId: string, code: string) {
   await inTransaction(async (client) => {
     await client.query("SELECT set_config('app.user_id',$1,true)", [userId]);
-    const found = await client.query("SELECT secret_ciphertext,enabled_at FROM mfa_credentials WHERE user_id=$1 FOR UPDATE", [userId]);
+    const found = await client.query("SELECT secret_ciphertext,enabled_at,last_totp_counter FROM mfa_credentials WHERE user_id=$1 FOR UPDATE", [userId]);
     if (!found.rowCount || !found.rows[0].enabled_at || !verifyTotp(decrypt(found.rows[0].secret_ciphertext),code)) {
       throw Object.assign(new Error("Authenticator code is invalid"), { statusCode: 401 });
     }
@@ -156,10 +158,10 @@ export async function disableMfa(userId: string, code: string) {
 export async function verifyMfaCode(userId: string, code: string): Promise<boolean> {
   return inTransaction(async (client) => {
     await client.query("SELECT set_config('app.user_id',$1,true)", [userId]);
-    const found = await client.query("SELECT secret_ciphertext,enabled_at FROM mfa_credentials WHERE user_id=$1", [userId]);
+    const found = await client.query("SELECT secret_ciphertext,enabled_at,last_totp_counter FROM mfa_credentials WHERE user_id=$1 FOR UPDATE", [userId]);
     if (!found.rowCount || !found.rows[0].enabled_at) return false;
     const secret = decrypt(found.rows[0].secret_ciphertext);
-    if (verifyTotp(secret,code)) return true;
+    const counter=matchingTotpCounter(secret,code);\n    if(counter!==null) {\n      const advanced=await client.query("UPDATE mfa_credentials SET last_totp_counter=$2,updated_at=now() WHERE user_id=$1 AND last_totp_counter<$2",[userId,counter]);\n      if(advanced.rowCount===1) return true;\n    }
     const hash = digest(code);
     const recovery = await client.query("SELECT id FROM mfa_recovery_codes WHERE user_id=$1 AND code_hash=$2 AND used_at IS NULL FOR UPDATE", [userId,hash]);
     if (!recovery.rowCount) return false;
