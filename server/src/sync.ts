@@ -67,13 +67,14 @@ async function applyEvent(client: PoolClient, userId: string, tenantId: string, 
     `INSERT INTO sync_inbox(tenant_id, actor_id, event_id, idempotency_key, aggregate_type, aggregate_id, base_version, resulting_version, event_type, schema_version, payload, outcome, outcome_detail)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13::jsonb)`,
     [tenantId, userId, event.eventId, event.idempotencyKey, event.aggregateType, event.aggregateId, event.baseVersion,
-      resultingVersion, event.eventType, event.schemaVersion, JSON.stringify(event.payload), outcome, JSON.stringify(detail)]
+      resultingVersion, event.eventType, event.schemaVersion, JSON.stringify(event.payload), outcome, JSON.stringify(detail), event.occurredAt]
   );
   return { eventId: event.eventId, status: outcome, version: resultingVersion, detail, duplicate: false };
 }
 
 export async function pushEvents(userId: string, tenantId: string, events: SyncEvent[]) {
   return withTenant(userId, tenantId, async (client) => {
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", ["sync-tenant:" + tenantId]);
     const results = [];
     for (const event of events) results.push(await applyEvent(client, userId, tenantId, event));
     return results;
@@ -83,7 +84,7 @@ export async function pushEvents(userId: string, tenantId: string, events: SyncE
 export async function pullEvents(userId: string, tenantId: string, after: string | undefined, limit: number) {
   return withTenant(userId, tenantId, async (client) => {
     const result = await client.query(
-      `SELECT event_id, actor_id, aggregate_type, aggregate_id, base_version, resulting_version,
+      `SELECT event_id, actor_id, aggregate_type, aggregate_id, base_version, resulting_version, received_seq,
               event_type, schema_version, payload, outcome, outcome_detail, received_at
        FROM sync_inbox
        WHERE tenant_id = $1 AND outcome = 'accepted' AND ($2::bigint IS NULL OR received_seq > $2::bigint)
