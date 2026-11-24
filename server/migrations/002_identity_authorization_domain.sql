@@ -279,6 +279,12 @@ ALTER TABLE mfa_recovery_codes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE mfa_recovery_codes FORCE ROW LEVEL SECURITY;
 CREATE POLICY mfa_recovery_self ON mfa_recovery_codes USING(user_id::text=current_setting('app.user_id',true)) WITH CHECK(user_id::text=current_setting('app.user_id',true));
 
+-- Worker access is granted only to operational queues and document scan metadata.
+CREATE POLICY email_outbox_worker_access ON email_outbox USING(current_setting('app.worker',true)='true') WITH CHECK(current_setting('app.worker',true)='true');
+CREATE POLICY document_objects_worker_access ON document_objects USING(current_setting('app.worker',true)='true') WITH CHECK(current_setting('app.worker',true)='true');
+GRANT SELECT,UPDATE ON email_outbox TO arm_worker;
+GRANT SELECT,UPDATE ON document_objects TO arm_worker;
+
 -- Append-only accounting postings and domain history.
 CREATE OR REPLACE FUNCTION arm_prevent_posted_journal_mutation() RETURNS trigger LANGUAGE plpgsql AS $fn$
 BEGIN
@@ -291,7 +297,8 @@ DECLARE s text;
 BEGIN
  SELECT status INTO s FROM accounting_journals WHERE id=COALESCE(OLD.journal_id,NEW.journal_id);
  IF s IN ('posted','reversed') THEN RAISE EXCEPTION 'posted journal lines are immutable' USING ERRCODE='55000'; END IF;
- RETURN COALESCE(NEW,OLD);
+ IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+ RETURN NEW;
 END $fn$;
 CREATE TRIGGER posted_journal_line_guard BEFORE INSERT OR UPDATE OR DELETE ON accounting_journal_lines FOR EACH ROW EXECUTE FUNCTION arm_prevent_posted_line_mutation();
 
