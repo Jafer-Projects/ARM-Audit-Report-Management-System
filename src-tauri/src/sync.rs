@@ -41,7 +41,7 @@ pub fn sync_outbox_batch(limit:Option<i64>,state:State<'_,AppState>)->Result<Vec
  let db=state.database.lock().map_err(|_|"Database lock unavailable".to_string())?;
  let max=limit.unwrap_or(50).clamp(1,100);
  let mut stmt=db.connection.prepare(
-  "SELECT event_id,idempotency_key,aggregate_type,aggregate_id,base_version,event_type,schema_version,occurred_at,correlation_id,payload_json FROM sync_outbox WHERE status IN ('pending','conflict') ORDER BY created_at LIMIT ?1"
+  "SELECT event_id,idempotency_key,aggregate_type,aggregate_id,base_version,event_type,schema_version,occurred_at,correlation_id,payload_json FROM sync_outbox WHERE status='pending' ORDER BY created_at LIMIT ?1"
  ).map_err(|e|e.to_string())?;
  let rows=stmt.query_map([max],|row|{
   let payload:String=row.get(9)?;
@@ -75,6 +75,8 @@ pub fn sync_apply_pull(events:Vec<PulledSyncEvent>,next_cursor:String,state:Stat
  let db=state.database.lock().map_err(|_|"Database lock unavailable".to_string())?;
  let tx=db.connection.unchecked_transaction().map_err(|e|e.to_string())?;
  let actor:String=tx.query_row("SELECT value FROM app_setting WHERE key='active_actor_id'",[],|r|r.get(0)).map_err(|e|e.to_string())?;
+ let configured:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM cloud_sync_state WHERE firm_id=?1)",[FIRM_ID],|r|r.get(0)).map_err(|e|e.to_string())?;
+ if !configured{return Err("Configure the cloud tenant before applying pull events.".into());}
  let mut applied=0usize;
  for event in events{
   if !["accepted","conflict","rejected"].contains(&event.outcome.as_str()){return Err("Unsupported pulled event outcome.".into());}
@@ -96,7 +98,7 @@ pub fn sync_apply_pull(events:Vec<PulledSyncEvent>,next_cursor:String,state:Stat
      let amount=record.get("amount_text").and_then(Value::as_str).unwrap_or("");
      let notes=record.get("notes").and_then(Value::as_str).unwrap_or("");
      let payload_json=record.get("payload_json").and_then(Value::as_str).unwrap_or("{}");
-     let updated=record.get("updated_at").and_then(Value::as_str).unwrap_or(&event.received_at.as_deref().unwrap_or("1970-01-01T00:00:00Z"));
+     let updated=record.get("updated_at").and_then(Value::as_str).unwrap_or(event.received_at.as_deref().unwrap_or("1970-01-01T00:00:00Z"));
      tx.execute(
       "INSERT INTO workspace_record(id,firm_id,client_id,record_type,title,status,reference,amount_text,notes,payload_json,row_version,created_at,updated_at,created_by,updated_by) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?12,?13,?13) ON CONFLICT(id) DO UPDATE SET title=excluded.title,status=excluded.status,reference=excluded.reference,amount_text=excluded.amount_text,notes=excluded.notes,payload_json=excluded.payload_json,row_version=excluded.row_version,updated_at=excluded.updated_at,updated_by=excluded.updated_by WHERE workspace_record.firm_id=excluded.firm_id AND workspace_record.row_version<excluded.row_version",
       params![id,FIRM_ID,client_id,record_type,title,status,reference,amount,notes,payload_json,version,updated,actor]
@@ -106,7 +108,7 @@ pub fn sync_apply_pull(events:Vec<PulledSyncEvent>,next_cursor:String,state:Stat
    }
   }
  }
- tx.execute("INSERT INTO cloud_sync_state(firm_id,cloud_tenant_id,pull_cursor,last_success_at,updated_at) VALUES(?1,'00000000-0000-4000-8000-000000000000',?2,?3,?3) ON CONFLICT(firm_id) DO UPDATE SET pull_cursor=CASE WHEN CAST(excluded.pull_cursor AS INTEGER)>CAST(cloud_sync_state.pull_cursor AS INTEGER) THEN excluded.pull_cursor ELSE cloud_sync_state.pull_cursor END,last_success_at=excluded.last_success_at,updated_at=excluded.updated_at",
+ tx.execute("UPDATE cloud_sync_state SET pull_cursor=CASE WHEN CAST(?2 AS INTEGER)>CAST(pull_cursor AS INTEGER) THEN ?2 ELSE pull_cursor END,last_success_at=?3,updated_at=?3 WHERE firm_id=?1",
   params![FIRM_ID,next_cursor,now_utc()]
  ).map_err(|e|e.to_string())?;
  tx.commit().map_err(|e|e.to_string())?;
