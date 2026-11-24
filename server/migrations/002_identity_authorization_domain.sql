@@ -279,7 +279,16 @@ CREATE TABLE audit_domain_history (
 );
 CREATE INDEX audit_domain_history_entity_idx ON audit_domain_history(tenant_id,entity_type,entity_id,created_at);
 
--- RLS is mandatory for every tenant-owned domain and security table.
+CREATE OR REPLACE FUNCTION arm_reject_domain_history_mutation() RETURNS trigger LANGUAGE plpgsql AS $fn$
+BEGIN RAISE EXCEPTION 'domain audit history is append-only' USING ERRCODE='55000'; END $fn$;
+CREATE TRIGGER audit_domain_history_no_mutation BEFORE UPDATE OR DELETE ON audit_domain_history FOR EACH ROW EXECUTE FUNCTION arm_reject_domain_history_mutation();
+CREATE OR REPLACE FUNCTION arm_protect_issued_report() RETURNS trigger LANGUAGE plpgsql AS $fn$
+BEGIN
+ IF OLD.status='issued' THEN RAISE EXCEPTION 'issued audit reports are immutable' USING ERRCODE='55000'; END IF;
+ RETURN NEW;
+END $fn$;
+CREATE TRIGGER issued_report_guard BEFORE UPDATE OR DELETE ON audit_reports FOR EACH ROW EXECUTE FUNCTION arm_protect_issued_report();
+\n-- RLS is mandatory for every tenant-owned domain and security table.
 DO $arm$
 DECLARE t text;
 BEGIN
@@ -384,10 +393,10 @@ CREATE TRIGGER posted_journal_line_guard BEFORE INSERT OR UPDATE OR DELETE ON ac
 DO $arm$
 BEGIN
  IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='arm_runtime') THEN
-  GRANT SELECT,INSERT,UPDATE ON email_verification_tokens,password_recovery_tokens,mfa_credentials,mfa_recovery_codes TO arm_runtime;
+  GRANT SELECT,INSERT,UPDATE ON email_verification_tokens,password_recovery_tokens,mfa_credentials,mfa_recovery_codes TO arm_runtime;\n  GRANT DELETE ON mfa_credentials,mfa_recovery_codes TO arm_runtime;
   GRANT SELECT,INSERT,UPDATE ON tenant_roles,tenant_role_permissions,tenant_membership_roles,organization_invitations TO arm_runtime;
   GRANT SELECT ON permissions TO arm_runtime;
-  GRANT SELECT,INSERT,UPDATE ON audit_engagements,audit_workpapers,audit_reports,accounting_accounts,accounting_journals,accounting_journal_lines TO arm_runtime;
-  GRANT SELECT,INSERT,UPDATE ON document_objects,email_outbox,audit_domain_history TO arm_runtime;
+  GRANT SELECT,INSERT,UPDATE ON audit_engagements,audit_workpapers,audit_reports,accounting_accounts,accounting_journals TO arm_runtime;\n  GRANT SELECT,INSERT ON accounting_journal_lines TO arm_runtime;
+  GRANT SELECT,INSERT ON document_objects,email_outbox,audit_domain_history TO arm_runtime;
  END IF;
 END $arm$;
