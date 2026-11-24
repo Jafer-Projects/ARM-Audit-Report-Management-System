@@ -191,3 +191,40 @@ export async function postJournal(userId:string,tenantId:string,id:string) {
     return result.rows[0];
   });
 }
+
+export async function listWorkpapers(userId:string,tenantId:string,engagementId?:string) {
+ return withTenant(userId,tenantId,async(client)=>{
+  await assertPermission(client,userId,tenantId,"workpapers.read");
+  const result=await client.query("SELECT id,engagement_id,reference,title,procedure,conclusion,status,version,prepared_by,reviewed_by,approved_by,created_at,updated_at FROM audit_workpapers WHERE tenant_id=$1 AND ($2::uuid IS NULL OR engagement_id=$2) ORDER BY reference",[tenantId,engagementId??null]);
+  return result.rows;
+ });
+}
+export async function listAuditReports(userId:string,tenantId:string,engagementId?:string) {
+ return withTenant(userId,tenantId,async(client)=>{
+  await assertPermission(client,userId,tenantId,"reports.read");
+  const result=await client.query("SELECT id,engagement_id,report_type,title,status,version,prepared_by,reviewed_by,approved_by,issued_at,created_at,updated_at FROM audit_reports WHERE tenant_id=$1 AND ($2::uuid IS NULL OR engagement_id=$2) ORDER BY created_at DESC",[tenantId,engagementId??null]);
+  return result.rows;
+ });
+}
+export async function listJournals(userId:string,tenantId:string) {
+ return withTenant(userId,tenantId,async(client)=>{
+  await assertPermission(client,userId,tenantId,"accounting.read");
+  const result=await client.query(
+   `SELECT j.id,j.journal_number,j.effective_date,j.description,j.currency,j.status,j.total_debit,j.total_credit,j.created_by,j.posted_by,j.reversal_of,j.posted_at,j.created_at,
+    count(l.id)::int AS line_count
+    FROM accounting_journals j LEFT JOIN accounting_journal_lines l ON l.tenant_id=j.tenant_id AND l.journal_id=j.id
+    WHERE j.tenant_id=$1 GROUP BY j.id ORDER BY j.effective_date DESC,j.journal_number`,
+   [tenantId]
+  );
+  return result.rows;
+ });
+}
+export async function getJournal(userId:string,tenantId:string,id:string) {
+ return withTenant(userId,tenantId,async(client)=>{
+  await assertPermission(client,userId,tenantId,"accounting.read");
+  const journal=await client.query("SELECT * FROM accounting_journals WHERE tenant_id=$1 AND id=$2",[tenantId,id]);
+  if(!journal.rowCount) throw Object.assign(new Error("Journal not found"),{statusCode:404});
+  const lines=await client.query("SELECT l.line_number,l.account_id,a.code AS account_code,a.name AS account_name,l.description,l.debit,l.credit FROM accounting_journal_lines l JOIN accounting_accounts a ON a.tenant_id=l.tenant_id AND a.id=l.account_id WHERE l.tenant_id=$1 AND l.journal_id=$2 ORDER BY l.line_number",[tenantId,id]);
+  return {...journal.rows[0],lines:lines.rows};
+ });
+}
