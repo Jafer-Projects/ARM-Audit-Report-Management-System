@@ -81,13 +81,17 @@ export function CloudConnectionPanel({onClose}:Props){
    setMessage("Sync cycle completed: "+result.pushed+" event(s) submitted and "+result.pulled+" event(s) received.");
   });
  }
+ async function closePanel(){
+  if(session){try{await cloudAuth.logout(api,session.accessToken);}catch(value){setError(value instanceof Error?value.message:String(value));return;}}
+  onClose();
+ }
  async function logout(){
   if(!session)return;
   await run(async()=>{await cloudAuth.logout(api,session.accessToken);setSession(null);setTenantId("");setStatus(null);setMessage("Cloud session revoked.");});
  }
  return <div className="cloud-panel-backdrop" role="presentation">
   <section className="cloud-panel" role="dialog" aria-modal="true" aria-labelledby="cloud-panel-title">
-   <header className="cloud-panel-header"><div><span className="overline">SECURE CLOUD CONNECTION</span><h2 id="cloud-panel-title">Cloud workspace</h2></div><button type="button" className="text-button" onClick={onClose}>Close</button></header>
+   <header className="cloud-panel-header"><div><span className="overline">SECURE CLOUD CONNECTION</span><h2 id="cloud-panel-title">Cloud workspace</h2></div><button type="button" className="text-button" disabled={busy} onClick={()=>void closePanel()}>Close</button></header>
    <p className="cloud-panel-note">Cloud access is separate from the local demo persona. Tokens stay in memory only and are cleared when this panel is closed or the app restarts.</p>
    <label>Cloud API HTTPS address<input value={api} onChange={event=>setApi(event.target.value)} placeholder="https://api.your-domain.example" disabled={busy||!!session||!!challenge}/></label>
    {!session&&!challenge&&<form onSubmit={login} className="cloud-panel-form">
