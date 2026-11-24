@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
+import { createConnection } from "node:net";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { withTenant, inTransaction } from "./db.js";
+import { withTenant } from "./db.js";
 import { assertPermission } from "./authorization.js";
 import { config } from "./config.js";
 
@@ -20,7 +21,6 @@ function detectMime(data:Buffer):string|null {
 }
 
 export async function uploadDocument(userId:string,tenantId:string,input:{fileName:string;mediaType:string;contentBase64:string;engagementId?:string;workpaperId?:string;reportId?:string}) {
-  await assertPermissionForUpload(userId,tenantId);
   const bytes=Buffer.from(input.contentBase64,"base64");
   if(bytes.length===0||bytes.length>52_428_800) throw Object.assign(new Error("Document must be between 1 byte and 50 MiB"),{statusCode:400});
   const detected=detectMime(bytes);
@@ -33,6 +33,7 @@ export async function uploadDocument(userId:string,tenantId:string,input:{fileNa
   await rename(temp,path);
   try {
     const result=await withTenant(userId,tenantId,async(client)=>{
+      await assertPermission(client,userId,tenantId,"documents.upload");
       if(input.engagementId) {
         const found=await client.query("SELECT 1 FROM audit_engagements WHERE tenant_id=$1 AND id=$2",[tenantId,input.engagementId]);
         if(!found.rowCount) throw Object.assign(new Error("Engagement not found"),{statusCode:404});
@@ -110,7 +111,7 @@ export async function scanNextDocument(workerPool: {connect:()=>Promise<any>},cl
 
 function clamScan(bytes:Buffer,host:string,port:number):Promise<string> {
   return new Promise((resolvePromise,reject)=>{
-    const socket=(awaitImportNet()).createConnection({host,port});
+    const socket=createConnection({host,port});
     let response="";
     socket.setTimeout(120_000);
     socket.on("connect",()=>{
@@ -127,8 +128,4 @@ function clamScan(bytes:Buffer,host:string,port:number):Promise<string> {
     socket.on("error",reject);
   });
 }
-function awaitImportNet():typeof import("node:net") {
-  // Static module access avoids exposing any network endpoint to request payloads.
-  return requireNet;
-}
-import * as requireNet from "node:net";
+
