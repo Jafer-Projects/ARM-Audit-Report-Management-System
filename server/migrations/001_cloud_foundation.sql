@@ -203,7 +203,7 @@ CREATE TRIGGER sync_inbox_append_only
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'arm_runtime') THEN
-    GRANT SELECT, INSERT ON users TO arm_runtime;
+    GRANT SELECT, INSERT, UPDATE ON users TO arm_runtime;
     GRANT SELECT, INSERT ON tenants, tenant_memberships TO arm_runtime;
     GRANT SELECT, INSERT, UPDATE ON auth_sessions TO arm_runtime;
     GRANT EXECUTE ON FUNCTION public.arm_lookup_user_for_login(text) TO arm_runtime;
