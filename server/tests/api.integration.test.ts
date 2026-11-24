@@ -107,7 +107,8 @@ test("sync push is version-checked, idempotent, and pull returns accepted events
 
   const pulled = await app.inject({ method: "GET", url: "/v1/sync/events", headers });
   assert.equal(pulled.statusCode, 200, pulled.body);
-  assert.equal(pulled.json().events.length, 1);
+  assert.equal(pulled.json().events.length, 2);
+  assert.deepEqual(pulled.json().events.map((item) => item.outcome), ["accepted", "conflict"]);
   assert.ok(pulled.json().nextCursor);
 });
 
