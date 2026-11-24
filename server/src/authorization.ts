@@ -92,3 +92,45 @@ export async function inviteOrganizationMember(userId: string,tenantId: string,e
     return invitation.rows[0];
   });
 }
+
+export async function listMembers(userId:string,tenantId:string) {
+ return withTenant(userId,tenantId,async(client)=>{
+  await assertPermission(client,userId,tenantId,"members.read");
+  const result=await client.query(
+   `SELECT m.id AS membership_id,m.user_id,u.email,u.display_name,m.role,m.status,m.created_at,
+    COALESCE(array_agg(DISTINCT r.display_name) FILTER(WHERE r.id IS NOT NULL),'{}') AS assigned_roles
+    FROM tenant_memberships m JOIN users u ON u.id=m.user_id
+    LEFT JOIN tenant_membership_roles mr ON mr.tenant_id=m.tenant_id AND mr.membership_id=m.id
+    LEFT JOIN tenant_roles r ON r.tenant_id=mr.tenant_id AND r.id=mr.role_id
+    WHERE m.tenant_id=$1 GROUP BY m.id,u.email,u.display_name ORDER BY m.created_at`,
+   [tenantId]
+  );
+  return result.rows;
+ });
+}
+export async function listInvitations(userId:string,tenantId:string) {
+ return withTenant(userId,tenantId,async(client)=>{
+  await assertPermission(client,userId,tenantId,"members.read");
+  const result=await client.query(
+   "SELECT i.id,i.email_normalized,i.status,i.expires_at,i.accepted_at,r.role_key,r.display_name AS role_name FROM organization_invitations i JOIN tenant_roles r ON r.tenant_id=i.tenant_id AND r.id=i.role_id WHERE i.tenant_id=$1 ORDER BY i.created_at DESC",
+   [tenantId]
+  );
+  return result.rows;
+ });
+}
+export async function revokeInvitation(userId:string,tenantId:string,invitationId:string) {
+ return withTenant(userId,tenantId,async(client)=>{
+  await assertPermission(client,userId,tenantId,"members.invite");
+  const result=await client.query("UPDATE organization_invitations SET status='revoked' WHERE tenant_id=$1 AND id=$2 AND status='pending' RETURNING id,status",[tenantId,invitationId]);
+  if(!result.rowCount) throw Object.assign(new Error("Pending invitation not found"),{statusCode:404});
+  await client.query("INSERT INTO audit_events(tenant_id,actor_id,action,target_type,target_id) VALUES($1,$2,'organization.invitation.revoked','organization_invitation',$3)",[tenantId,userId,invitationId]);
+  return result.rows[0];
+ });
+}
+export async function listPermissionCatalogue(userId:string,tenantId:string) {
+ return withTenant(userId,tenantId,async(client)=>{
+  await assertPermission(client,userId,tenantId,"roles.manage");
+  const result=await client.query("SELECT permission_key,description FROM permissions ORDER BY permission_key");
+  return result.rows;
+ });
+}
