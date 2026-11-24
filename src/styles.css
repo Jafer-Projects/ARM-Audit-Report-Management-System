@@ -60,3 +60,10 @@
 .cloud-sync-status{display:grid;gap:6px;padding:12px;background:var(--surface-muted);border-radius:9px;font-size:12px}
 .cloud-sync-status span{display:flex;justify-content:space-between;gap:10px}
 @media(max-width:640px){.cloud-panel-backdrop{padding:0}.cloud-panel{border-radius:0;width:100%;padding:18px}}
+
+.cloud-mfa-section{display:grid;gap:9px;border-top:1px solid var(--line);padding-top:15px}
+.cloud-mfa-section h3{margin:0;font-size:16px}
+.cloud-mfa-section p{margin:0;font-size:13px}
+.cloud-mfa-section code,.cloud-recovery-codes code{overflow-wrap:anywhere;font-size:12px}
+.cloud-recovery-codes{padding:12px;border:1px solid var(--line);border-radius:9px;background:var(--surface-muted)}
+.cloud-recovery-codes ul{columns:2;padding-left:20px;line-height:1.8}
