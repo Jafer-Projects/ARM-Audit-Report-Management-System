@@ -18,6 +18,7 @@ services:
       timeout: 5s
       retries: 20
     restart: unless-stopped
+    networks: [data]
 
   api:
     build: {context: ., dockerfile: Dockerfile}
@@ -54,6 +55,7 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    networks: [ingress,data,egress]
 
   worker:
     build: {context: ., dockerfile: Dockerfile}
@@ -80,12 +82,14 @@ services:
       postgres: {condition: service_healthy}
       clamav: {condition: service_started}
     restart: unless-stopped
+    networks: [data,egress]
 
   clamav:
     image: clamav/clamav:1.4.3
     expose: ["3310"]
     volumes: [clamav-signatures:/var/lib/clamav]
     restart: unless-stopped
+    networks: [data]
 
   gateway:
     image: nginx:1.27-alpine
@@ -96,10 +100,17 @@ services:
     depends_on:
       api: {condition: service_healthy}
     restart: unless-stopped
+    networks: [ingress]
 
 volumes:
   arm-postgres:
   clamav-signatures:
+
+networks:
+  ingress:
+  egress:
+  data:
+    internal: true
 
 secrets:
   postgres_password: {file: ${POSTGRES_PASSWORD_FILE:?set POSTGRES_PASSWORD_FILE}}
