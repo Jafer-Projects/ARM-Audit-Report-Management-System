@@ -72,7 +72,8 @@ export const cloudClients={
   const tenant=await request<{name?:string;role?:string;permissions?:string[]}>("/v1/tenant/context");
   const role=(tenant.role??"").toLowerCase();
   const persona=(role==="owner"||role==="admin"||role==="administrator"?"administrator":role==="manager"?"manager":role==="auditor"?"auditor":"reviewer") as "administrator"|"manager"|"auditor"|"reviewer";
-  const clients=await cloudClients.list(false);
-  return {firm_name:tenant.name??"Cloud organization",actor_name:saved.session.user?.displayName??saved.session.user?.email??"Authenticated user",persona,clients_count:clients.length,sync_state:"Cloud authoritative; client offline cache and outbox are not enabled",permissions:tenant.permissions??[]};
+  const permissions=tenant.permissions??[];
+  const clients=permissions.includes("clients.read")?await cloudClients.list(false):[];
+  return {firm_name:tenant.name??"Cloud organization",actor_name:saved.session.user?.displayName??saved.session.user?.email??"Authenticated user",persona,clients_count:clients.length,sync_state:"Cloud authoritative; client offline cache and outbox are not enabled",permissions};
  }
 };

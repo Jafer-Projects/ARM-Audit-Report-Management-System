@@ -25,6 +25,7 @@ export function CloudConnectionPanel({onClose}:Props){
  const [mfaPassword,setMfaPassword]=useState("");
  const [mfaManagementCode,setMfaManagementCode]=useState("");
  const [recoveryCodes,setRecoveryCodes]=useState<string[]>([]);
+ const [invitationToken,setInvitationToken]=useState("");
  const [message,setMessage]=useState("");
  const [error,setError]=useState("");
  const [busy,setBusy]=useState(false);
@@ -165,6 +166,7 @@ export function CloudConnectionPanel({onClose}:Props){
    </form>}
    {session&&<div className="cloud-panel-form">
     <h3>Connected account</h3><p>{session.user?.email??email}</p>
+    <form className="cloud-panel-form" onSubmit={event=>{event.preventDefault();void run(async()=>{await cloudAuth.acceptInvitation(api,session.accessToken,invitationToken);setInvitationToken("");setMessage("Organization invitation accepted. Select the new membership after refreshing the session.");});}}><label>Accept organization invitation token<input value={invitationToken} onChange={event=>setInvitationToken(event.target.value)} minLength={32} maxLength={128}/></label><button type="submit" disabled={busy||invitationToken.length<32}>Accept invitation</button></form>
     <label>Organization<select value={tenantId} disabled={busy} onChange={event=>{const selected=event.target.value;void run(async()=>{if(!selected)throw new Error("Choose an organization.");await cloudAuth.tenantContext(api,session.accessToken,selected);await secureSession.save({apiBaseUrl:api,selectedTenantId:selected,session});setTenantId(selected);setMessage("Organization membership verified and selected for this workspace.");});}}><option value="">Select an organization…</option>{(session.memberships??[]).map(item=><option key={item.tenant_id} value={item.tenant_id}>{item.tenant_id} — {item.role}</option>)}</select></label>
     <div className="cloud-sync-status">
      <span>Prototype demo outbox pending (not sent): <strong>{status?.pending??"—"}</strong></span>
