@@ -3,14 +3,17 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "engines": { "node": ">=22.16.0" },
+  "engines": {
+    "node": ">=22.16.0"
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "start:worker": "node dist/worker.js",
     "migrate": "tsx src/migrate.ts",
-    "test": "npm run migrate && tsx --test tests/*.test.ts"
+    "test": "npm run migrate && tsx --test tests/*.test.ts",
+    "db:bootstrap-runtime": "node scripts/bootstrap-runtime-role.mjs"
   },
   "dependencies": {
     "@fastify/helmet": "^13.0.1",
