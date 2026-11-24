@@ -392,6 +392,17 @@ ALTER TABLE auth_mfa_challenges ENABLE ROW LEVEL SECURITY;
 ALTER TABLE auth_mfa_challenges FORCE ROW LEVEL SECURITY;
 CREATE POLICY mfa_challenges_self ON auth_mfa_challenges USING(user_id::text=current_setting('app.user_id',true)) WITH CHECK(user_id::text=current_setting('app.user_id',true));
 
+
+CREATE OR REPLACE FUNCTION public.arm_lookup_mfa_challenge(p_hash text)
+RETURNS TABLE(challenge_id uuid,user_id uuid)
+LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog,public AS $fn$
+ SELECT c.id,c.user_id FROM public.auth_mfa_challenges c
+ JOIN public.users u ON u.id=c.user_id
+ WHERE c.challenge_hash=p_hash AND c.consumed_at IS NULL AND c.expires_at>now() AND u.status='active'
+$fn$;
+REVOKE ALL ON FUNCTION public.arm_lookup_mfa_challenge(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.arm_lookup_mfa_challenge(text) TO arm_runtime;
+
 CREATE OR REPLACE FUNCTION public.arm_lookup_verification(p_hash text)
 RETURNS TABLE(token_id uuid,user_id uuid,tenant_id uuid,email text)
 LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog,public AS $fn$
