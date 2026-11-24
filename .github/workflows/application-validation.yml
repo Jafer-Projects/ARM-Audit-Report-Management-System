@@ -152,11 +152,42 @@ jobs:
         run: npm run tauri -- build --no-bundle
 
   cloud-dependency-lock:
-    name: Generate and commit cloud API dependency lock
+    name: Generate lock and validate reproducible cloud install
     if: (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'implementation/cloud-first-platform' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'push' && github.ref == 'refs/heads/implementation/cloud-first-platform')
     runs-on: ubuntu-22.04
+    timeout-minutes: 25
     permissions:
       contents: write
+    services:
+      postgres:
+        image: postgres:16.8
+        env:
+          POSTGRES_DB: arm_test
+          POSTGRES_USER: arm_test
+          POSTGRES_PASSWORD: arm_test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U arm_test -d arm_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    defaults:
+      run:
+        working-directory: server
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgres://arm_runtime:arm_runtime_test_password@localhost:5432/arm_test
+      WORKER_DATABASE_URL: postgres://arm_worker:arm_worker_test_password@localhost:5432/arm_test
+      MIGRATION_DATABASE_URL: postgres://arm_migrator:arm_migrator_test_password@localhost:5432/arm_test
+      ADMIN_DATABASE_URL: postgres://arm_test:arm_test_password@localhost:5432/arm_test
+      ARM_RUNTIME_PASSWORD: arm_runtime_test_password
+      ARM_WORKER_PASSWORD: arm_worker_test_password
+      ARM_MIGRATOR_PASSWORD: arm_migrator_test_password
+      JWT_SECRET: ci-only-test-secret-which-is-longer-than-thirty-two-bytes
+      MFA_ENCRYPTION_KEY: ci-only-mfa-encryption-key-with-more-than-thirty-two-bytes
+      ACCESS_TOKEN_TTL_SECONDS: 900
+      LOG_LEVEL: warn
     steps:
       - uses: actions/checkout@v4
         with:
@@ -165,21 +196,28 @@ jobs:
         with:
           node-version: "22.16.0"
       - name: Generate exact cloud API dependency lock
-        working-directory: server
         run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
       - name: Commit lockfile without force-pushing
         env:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
         run: |
-          if git diff --quiet -- server/package-lock.json; then
+          if [ -z "$(git status --porcelain -- package-lock.json)" ]; then
             echo "Cloud API lockfile is already current."
-            exit 0
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package-lock.json
+            git commit -m "build(cloud): commit reproducible API dependency lock"
+            git push origin "HEAD:refs/heads/$BRANCH_NAME"
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add server/package-lock.json
-          git commit -m "build(cloud): commit reproducible API dependency lock"
-          git push origin "HEAD:refs/heads/$BRANCH_NAME"
+      - name: Verify clean reproducible dependency installation
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Create least-privilege database roles
+        run: npm run db:bootstrap-runtime
+      - name: Compile cloud API and worker from locked dependencies
+        run: npm run build
+      - name: Apply migrations twice and run PostgreSQL integration tests
+        run: npm test
 
   cloud-api-integration:
     name: Cloud API build and PostgreSQL integration tests
