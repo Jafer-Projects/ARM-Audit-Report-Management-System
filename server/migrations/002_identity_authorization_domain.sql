@@ -315,7 +315,7 @@ ALTER TABLE mfa_recovery_codes FORCE ROW LEVEL SECURITY;
 CREATE POLICY mfa_recovery_self ON mfa_recovery_codes USING(user_id::text=current_setting('app.user_id',true)) WITH CHECK(user_id::text=current_setting('app.user_id',true));
 
 -- Worker access is granted only to operational queues and document scan metadata.
-CREATE POLICY email_outbox_worker_access ON email_outbox USING(current_setting('app.worker',true)='true') WITH CHECK(current_setting('app.worker',true)='true');
+CREATE POLICY email_outbox_worker_access ON email_outbox USING(current_user='arm_worker' AND current_setting('app.worker',true)='true') WITH CHECK(current_user='arm_worker' AND current_setting('app.worker',true)='true');
 CREATE POLICY document_objects_worker_access ON document_objects USING(current_setting('app.worker',true)='true') WITH CHECK(current_setting('app.worker',true)='true');
 GRANT SELECT ON email_outbox TO arm_worker;
 GRANT UPDATE (status,attempts,available_at,sent_at,last_error) ON email_outbox TO arm_worker;
