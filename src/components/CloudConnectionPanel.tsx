@@ -185,7 +185,7 @@ export function CloudConnectionPanel({onClose}:Props){
     </div>
     <div className="cloud-sync-consent"><p><strong>Synchronization remains disabled.</strong> The tenant client directory is cloud-backed, but the local client cache/outbox, device identity and offline lease, dependency-safe pull, conflict workspace and domain-specific event contracts are not implemented. The prototype outbox remains isolated and is never sent to this tenant.</p></div>
     <button type="button" disabled>Synchronization unavailable until tenant-bound offline contracts are implemented</button>
-    {tenantId&&<TenantAdministration/>}
+    {tenantId&&<TenantAdministration key={tenantId}/>}
     <button type="button" className="text-button" disabled={busy} onClick={()=>void refreshSession()}>Refresh session</button>
     <button type="button" className="text-button" disabled={busy} onClick={()=>void logout()}>Sign out</button>
    </div>}
