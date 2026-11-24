@@ -7,7 +7,7 @@ const syncEventSchema = z.object({
   idempotencyKey: z.string().min(8).max(160),
   aggregateType: z.literal("prototype.workspace_record"),
   aggregateId: z.string().uuid(),
-  baseVersion: z.number().int().min(0),
+  baseVersion: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
   eventType: z.literal("aggregate.upsert"),
   schemaVersion: z.literal(1),
   occurredAt: z.string().datetime({ offset: true }),
