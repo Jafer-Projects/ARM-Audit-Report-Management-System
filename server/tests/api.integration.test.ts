@@ -46,6 +46,9 @@ test("worker role is non-superuser and cannot read tenant identity tables", asyn
   const role = await workerPool.query("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user");
   assert.equal(role.rows[0].rolsuper, false);
   assert.equal(role.rows[0].rolbypassrls, false);
+  const privileges = await workerPool.query("SELECT has_column_privilege(current_user, 'jobs', 'status', 'UPDATE') AS can_update_status, has_column_privilege(current_user, 'jobs', 'tenant_id', 'UPDATE') AS can_update_tenant");
+  assert.equal(privileges.rows[0].can_update_status, true);
+  assert.equal(privileges.rows[0].can_update_tenant, false);
   await workerPool.query("BEGIN");
   try {
     await workerPool.query("SELECT set_config('app.worker', 'true', true)");
