@@ -13,7 +13,7 @@ async function claimJob(): Promise<Job | null> {
     const result = await client.query(
       `SELECT id, tenant_id, job_type, payload, attempts
        FROM jobs
-       WHERE (status = 'queued' AND available_at <= now())\n          OR (status = 'running' AND locked_at < now() - interval '5 minutes')
+       WHERE (status = 'queued' AND available_at <= now())\n          OR (status = 'running' AND (locked_at IS NULL OR locked_at < now() - interval '5 minutes'))
        ORDER BY available_at, created_at
        FOR UPDATE SKIP LOCKED LIMIT 1`
     );
@@ -70,11 +70,12 @@ async function runOnce(): Promise<boolean> {
   return true;
 }
 
-process.on("SIGTERM", () => { void pool.end().then(() => process.exit(0)); });
-process.on("SIGINT", () => { void pool.end().then(() => process.exit(0)); });
+let stopping = false;
+process.on("SIGTERM", () => { stopping = true; });
+process.on("SIGINT", () => { stopping = true; });
 
 console.log(JSON.stringify({ level: "info", workerId, event: "started", nodeEnv: config.NODE_ENV }));
-while (true) {
+while (!stopping) {
   try {
     const worked = await runOnce();
     if (!worked) await sleep(1500);
@@ -83,3 +84,4 @@ while (true) {
     await sleep(3000);
   }
 }
+await pool.end();
