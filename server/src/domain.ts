@@ -93,7 +93,7 @@ export async function transitionAuditReport(userId:string,tenantId:string,id:str
     if(!transitions[action].includes(row.status)) throw Object.assign(new Error("Invalid report workflow transition"),{statusCode:409});
     if(action==="review" && row.prepared_by===userId) throw Object.assign(new Error("The preparer cannot review their own report"),{statusCode:403});
     if(action==="approve" && (row.prepared_by===userId || !row.reviewed_by || row.reviewed_by===userId)) throw Object.assign(new Error("Approval requires independent preparation and review"),{statusCode:403});
-    if(action==="issue" && (!row.approved_by || row.prepared_by===userId || row.approved_by===userId)) throw Object.assign(new Error("Issuance requires independent approval by another user"),{statusCode:403});
+    if(action==="issue" && (!row.approved_by || row.prepared_by===userId || row.reviewed_by===userId || row.approved_by===userId)) throw Object.assign(new Error("Issuance requires independent approval by another user"),{statusCode:403});
     const next=action==="prepare"?"prepared":action==="review"?"under_review":action==="approve"?"approved":action==="issue"?"issued":"withdrawn";
     const updated=await client.query(
       `UPDATE audit_reports SET status=$3,version=version+1,
@@ -131,11 +131,11 @@ export async function createJournal(userId:string,tenantId:string,input:{journal
     await assertPermission(client,userId,tenantId,"accounting.post");
     if(input.lines.length<2 || input.lines.length>500) throw Object.assign(new Error("A journal requires between 2 and 500 lines"),{statusCode:400});
     const amounts=input.lines.flatMap((line)=>[line.debit,line.credit]);
-    if(amounts.some((value)=>!Number.isFinite(value)||value<0||Math.abs(value*10000-Math.round(value*10000))>0.000001)) throw Object.assign(new Error("Journal amounts must be finite, non-negative and have at most four decimal places"),{statusCode:400});
+    if(amounts.some((value)=>!Number.isFinite(value)||value<0||!Number.isSafeInteger(Math.round(value*10000))||Math.abs(value*10000-Math.round(value*10000))>0.000001)) throw Object.assign(new Error("Journal amounts must be finite, non-negative and have at most four decimal places"),{statusCode:400});
     const debitUnits=input.lines.reduce((sum,line)=>sum+Math.round(line.debit*10000),0);
     const creditUnits=input.lines.reduce((sum,line)=>sum+Math.round(line.credit*10000),0);
     const debit=debitUnits/10000,credit=creditUnits/10000;
-    if(debitUnits<=0||debitUnits!==creditUnits) throw Object.assign(new Error("Journal debits and credits must balance and be positive"),{statusCode:400});
+    if(!Number.isSafeInteger(debitUnits)||!Number.isSafeInteger(creditUnits)||debitUnits<=0||debitUnits!==creditUnits) throw Object.assign(new Error("Journal debits and credits must balance and be positive"),{statusCode:400});
     const accounts=await client.query("SELECT id FROM accounting_accounts WHERE tenant_id=$1 AND id=ANY($2::uuid[]) AND active=true AND currency=$3",[tenantId,input.lines.map(x=>x.accountId),input.currency]);
     if(accounts.rowCount!==new Set(input.lines.map(x=>x.accountId)).size) throw Object.assign(new Error("One or more accounts are inactive, missing or use a different currency"),{statusCode:400});
     const id=randomUUID();
