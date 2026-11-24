@@ -1,6 +1,7 @@
 mod db;
 mod commands;
 mod import_cost;
+mod sync;
 
 use db::Database;
 use std::sync::Mutex;
@@ -51,7 +52,12 @@ pub fn run() {
             commands::read_source_document,
             commands::list_workspace_notifications,
             commands::mark_workspace_notification_read,
-            commands::reset_demo_data
+            commands::reset_demo_data,
+            sync::sync_configure,
+            sync::sync_outbox_batch,
+            sync::sync_ack_outbox,
+            sync::sync_apply_pull,
+            sync::sync_status
         ])
         .run(tauri::generate_context!())
         .expect("ARM desktop runtime failed");
