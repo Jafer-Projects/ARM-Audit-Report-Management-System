@@ -21,6 +21,8 @@ function detectMime(data:Buffer):string|null {
 }
 
 export async function uploadDocument(userId:string,tenantId:string,input:{fileName:string;mediaType:string;contentBase64:string;engagementId?:string;workpaperId?:string;reportId?:string}) {
+  if(!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(input.contentBase64)) throw Object.assign(new Error("Invalid base64 document body"),{statusCode:400});
+  if(!input.engagementId&&!input.workpaperId&&!input.reportId) throw Object.assign(new Error("Attach evidence to an engagement, workpaper or report"),{statusCode:400});
   const bytes=Buffer.from(input.contentBase64,"base64");
   if(bytes.length===0||bytes.length>52_428_800) throw Object.assign(new Error("Document must be between 1 byte and 50 MiB"),{statusCode:400});
   const detected=detectMime(bytes);
