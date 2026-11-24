@@ -66,3 +66,10 @@ Prepare runbooks for database outage, VPS loss, storage outage, credential compr
 ## 9. Cost management
 
 Begin with one appropriately sized VPS and independent object storage/backup. Track actual bandwidth, storage growth, backups, database IOPS, worker CPU and support costs. Split services only when measurements or availability requirements justify it. Moderate budget must not be achieved by omitting encryption, backups, monitoring or recovery testing.
+
+
+## Cloud deployment implementation status
+
+The initial API includes a multi-stage non-root container build and a development/pilot-oriented Docker Compose definition for PostgreSQL, API and worker. The Compose database port is bound to loopback; API readiness checks PostgreSQL. The API applies versioned SQL migrations before startup. The Compose file is not a complete production topology: it does not configure a public reverse proxy/TLS, external S3-compatible object storage, independent backup destination, monitoring/alerting, hardened database role separation, image scanning, or tested restore/rollback automation.
+
+Do not expose the Compose database port publicly. Set unique environment-specific secrets outside source control. Before real client data or production, introduce a private database network/least-privilege runtime role, verified TLS ingress, encrypted off-host backups and restore drills, object storage, operational runbooks, security scanning, and approved RPO/RTO. Migrations are additive and should be applied forward; do not assume destructive down-migrations are safe for offline clients.
