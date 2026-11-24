@@ -174,7 +174,10 @@ jobs:
         working-directory: server
     env:
       NODE_ENV: test
-      DATABASE_URL: postgres://arm_test:arm_test_password@localhost:5432/arm_test
+      DATABASE_URL: postgres://arm_runtime:arm_runtime_test_password@localhost:5432/arm_test
+      MIGRATION_DATABASE_URL: postgres://arm_test:arm_test_password@localhost:5432/arm_test
+      ADMIN_DATABASE_URL: postgres://arm_test:arm_test_password@localhost:5432/arm_test
+      ARM_RUNTIME_PASSWORD: arm_runtime_test_password
       JWT_SECRET: ci-only-test-secret-which-is-longer-than-thirty-two-bytes
       ACCESS_TOKEN_TTL_SECONDS: 900
       LOG_LEVEL: warn
@@ -185,6 +188,8 @@ jobs:
           node-version: "22.16.0"
       - name: Install cloud API dependencies
         run: npm install --no-audit --no-fund
+      - name: Create least-privilege runtime database role
+        run: npm run db:bootstrap-runtime
       - name: Compile cloud API and worker
         run: npm run build
       - name: Apply migrations and run PostgreSQL integration tests
