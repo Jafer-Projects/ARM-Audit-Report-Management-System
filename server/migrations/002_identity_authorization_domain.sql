@@ -306,8 +306,10 @@ CREATE POLICY mfa_recovery_self ON mfa_recovery_codes USING(user_id::text=curren
 -- Worker access is granted only to operational queues and document scan metadata.
 CREATE POLICY email_outbox_worker_access ON email_outbox USING(current_setting('app.worker',true)='true') WITH CHECK(current_setting('app.worker',true)='true');
 CREATE POLICY document_objects_worker_access ON document_objects USING(current_setting('app.worker',true)='true') WITH CHECK(current_setting('app.worker',true)='true');
-GRANT SELECT,UPDATE ON email_outbox TO arm_worker;
-GRANT SELECT,UPDATE ON document_objects TO arm_worker;
+GRANT SELECT ON email_outbox TO arm_worker;
+GRANT UPDATE (status,attempts,available_at,sent_at,last_error) ON email_outbox TO arm_worker;
+GRANT SELECT ON document_objects TO arm_worker;
+GRANT UPDATE (scan_status,scanned_at,scan_detail) ON document_objects TO arm_worker;
 
 
 CREATE TABLE auth_mfa_challenges (
