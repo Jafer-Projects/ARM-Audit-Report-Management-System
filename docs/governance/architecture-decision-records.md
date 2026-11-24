@@ -91,3 +91,14 @@ This document records the current approved baseline. Decisions may be superseded
 **Rationale:** Fits the selected hosting direction and moderate budget.
 
 **Consequences:** Capacity must be benchmarked; single-VPS failure must not destroy the only copy of data. Define and test RPO/RTO before production.
+
+
+## ADR-011 — Cloud API is authoritative for shared state
+
+**Status:** Accepted; initial implementation in progress.
+
+**Decision:** Implement the approved Node.js/TypeScript modular-monolith API and PostgreSQL as the authoritative cloud boundary for shared multi-tenant state. Retain Tauri/Rust and SQLite for native desktop capabilities, local offline transactions, drafts and synchronization outbox. Run background work in a separately deployable worker process. Use explicit versioned APIs and synchronization envelopes; do not use database replication or last-write-wins merging.
+
+**Rationale:** The approved architecture already requires a cloud-first source of truth while preserving substantive offline desktop use. A server boundary is required for centralized authorization, tenant isolation, collaboration, shared records and controlled integrations.
+
+**Consequences:** New shared business operations must be implemented and authorized server-side before production use. Existing local-only commands remain prototype/local behavior until migrated through explicit domain contracts. The generic JSON sync aggregate is not a canonical financial data model. The first cloud slice does not authorize real client data, live filing or production deployment. Full email verification, MFA, membership administration, device leases, object storage, domain handlers, conflict UI, deployment hardening and independent security review remain release blockers.
