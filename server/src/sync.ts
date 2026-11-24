@@ -26,6 +26,10 @@ async function applyEvent(client: PoolClient, userId: string, tenantId: string, 
   if (duplicate.rowCount) {
     const row = duplicate.rows[0];
     if (row.idempotency_key !== event.idempotencyKey || row.event_id !== event.eventId) {
+      await client.query(
+        "INSERT INTO audit_events(tenant_id, actor_id, action, target_type, target_id, metadata) VALUES ($1, $2, 'sync.event.reuse_rejected', $3, $4, $5::jsonb)",
+        [tenantId, userId, event.aggregateType, event.aggregateId, JSON.stringify({ eventId: event.eventId, idempotencyKey: event.idempotencyKey })]
+      );
       return { eventId: event.eventId, status: "rejected", version: null, detail: { reason: "event_or_idempotency_key_reused" }, duplicate: false };
     }
     return { eventId: event.eventId, status: row.outcome, version: row.resulting_version, detail: row.outcome_detail, duplicate: true };
@@ -47,6 +51,10 @@ async function applyEvent(client: PoolClient, userId: string, tenantId: string, 
   if (currentVersion !== event.baseVersion) {
     outcome = "conflict";
     detail = { reason: "base_version_mismatch", expectedVersion: currentVersion, suppliedBaseVersion: event.baseVersion };
+    await client.query(
+      "INSERT INTO audit_events(tenant_id, actor_id, action, target_type, target_id, correlation_id, metadata) VALUES ($1, $2, 'sync.aggregate.conflict', $3, $4, $5, $6::jsonb)",
+      [tenantId, userId, event.aggregateType, event.aggregateId, event.correlationId ?? null, JSON.stringify({ eventId: event.eventId, ...detail })]
+    );
   } else {
     resultingVersion = currentVersion + 1;
     await client.query(
@@ -87,7 +95,7 @@ export async function pullEvents(userId: string, tenantId: string, after: string
       `SELECT event_id, actor_id, aggregate_type, aggregate_id, base_version, resulting_version, received_seq,
               event_type, schema_version, payload, outcome, outcome_detail, received_at
        FROM sync_inbox
-       WHERE tenant_id = $1 AND outcome = 'accepted' AND ($2::bigint IS NULL OR received_seq > $2::bigint)
+       WHERE tenant_id = $1 AND ($2::bigint IS NULL OR received_seq > $2::bigint)
        ORDER BY received_seq LIMIT $3`,
       [tenantId, after ?? null, limit]
     );
