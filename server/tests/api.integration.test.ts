@@ -170,7 +170,7 @@ test("audit engagement, chart of accounts and balanced journals require tenant p
  assert.equal(unbalanced.statusCode,400);
  const post=await app.inject({method:"POST",url:"/v1/accounting/journals/"+journal.json().id+"/post",headers:{authorization:"Bearer "+second.accessToken,"x-tenant-id":first.tenant.id}});
  assert.equal(post.statusCode,200,post.body);assert.equal(post.json().status,"posted");
- const immutable=await pool.query("SELECT status FROM accounting_journals WHERE id=$1",[journal.json().id]);
+ const immutable=await withTenant(first.user.id,first.tenant.id,(client)=>client.query("SELECT status FROM accounting_journals WHERE id=$1",[journal.json().id]));
  assert.equal(immutable.rows[0].status,"posted");
 });
 
