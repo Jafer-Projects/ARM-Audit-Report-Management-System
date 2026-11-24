@@ -20,11 +20,14 @@ type SyncEvent = z.infer<typeof syncEventSchema>;
 
 async function applyEvent(client: PoolClient, userId: string, tenantId: string, event: SyncEvent) {
   const duplicate = await client.query(
-    "SELECT outcome, resulting_version, outcome_detail FROM sync_inbox WHERE tenant_id = $1 AND idempotency_key = $2",
-    [tenantId, event.idempotencyKey]
+    "SELECT event_id, idempotency_key, outcome, resulting_version, outcome_detail FROM sync_inbox WHERE tenant_id = $1 AND (idempotency_key = $2 OR event_id = $3)",
+    [tenantId, event.idempotencyKey, event.eventId]
   );
   if (duplicate.rowCount) {
     const row = duplicate.rows[0];
+    if (row.idempotency_key !== event.idempotencyKey || row.event_id !== event.eventId) {
+      return { eventId: event.eventId, status: "rejected", version: null, detail: { reason: "event_or_idempotency_key_reused" }, duplicate: false };
+    }
     return { eventId: event.eventId, status: row.outcome, version: row.resulting_version, detail: row.outcome_detail, duplicate: true };
   }
 
@@ -83,8 +86,8 @@ export async function pullEvents(userId: string, tenantId: string, after: string
       `SELECT event_id, actor_id, aggregate_type, aggregate_id, base_version, resulting_version,
               event_type, schema_version, payload, outcome, outcome_detail, received_at
        FROM sync_inbox
-       WHERE tenant_id = $1 AND outcome = 'accepted' AND ($2::timestamptz IS NULL OR received_at > $2::timestamptz)
-       ORDER BY received_at, id LIMIT $3`,
+       WHERE tenant_id = $1 AND outcome = 'accepted' AND ($2::bigint IS NULL OR received_seq > $2::bigint)
+       ORDER BY received_seq LIMIT $3`,
       [tenantId, after ?? null, limit]
     );
     return result.rows;
