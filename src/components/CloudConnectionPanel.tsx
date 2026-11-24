@@ -125,7 +125,7 @@ export function CloudConnectionPanel({onClose}:Props){
  }
  async function logout(){
   if(!session)return;
-  await run(async()=>{await cloudAuth.logout(api,session.accessToken);await secureSession.clear();setSession(null);setTenantId("");setStatus(null);setMessage("Cloud session revoked and secure credentials cleared.");});
+  await run(async()=>{let revoked=false;try{await cloudAuth.logout(api,session.accessToken);revoked=true;}finally{await secureSession.clear();setSession(null);setTenantId("");setStatus(null);}setMessage(revoked?"Cloud session revoked and secure credentials cleared.":"Local credentials cleared; server-side revocation could not be confirmed while offline.");});
  }
  return <div className="cloud-panel-backdrop" role="presentation">
   <section className="cloud-panel" role="dialog" aria-modal="true" aria-labelledby="cloud-panel-title">

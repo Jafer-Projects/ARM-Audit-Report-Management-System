@@ -1,4 +1,3 @@
-import { cloudAuth } from "../cloudAuth";
 import { secureSession } from "../secureSession";
 import type { Client, ClientChange, ClientInput, DuplicateCandidate } from "../types";
 

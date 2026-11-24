@@ -341,7 +341,9 @@ export default function App() {
       }
       setNotes(await desktop.notes());
       setNotifications(await desktop.notifications());
-      if (nextSection === "clients") setClients(await desktop.clients(includeArchived));
+      const refreshedClients=await desktop.clients(includeArchived);
+      setClients(refreshedClients);
+      setSelectedClientId(current=>refreshedClients.some(item=>item.id===current)?current:refreshedClients[0]?.id??"");
       if (nextSection === "activity") setEvents(await desktop.events());
       if (["catalogue", "history", "work", "imports"].includes(nextSection)) setRecords(await desktop.records(recordType, recordType === "staff" ? undefined : selectedClientId || undefined));
     } catch (e) { setError(String(e)); }
@@ -391,7 +393,7 @@ export default function App() {
 
   const filteredClients = useMemo(() => clients.filter((c) =>
     [c.legal_name, c.display_name, c.tin_raw].join(" ").toLowerCase().includes(search.toLowerCase())), [clients, search]);
-  const canMutate = workspace?.persona !== "reviewer";
+  const canMutate = Boolean(workspace) && workspace?.persona !== "reviewer";
   const canEditClientProfiles = canMutate;
   const canManageClientLifecycle = canMutate && ["administrator","manager"].includes(workspace?.persona ?? "");
 

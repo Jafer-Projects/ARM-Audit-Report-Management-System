@@ -46,9 +46,9 @@ mod platform {
             persist: 2, attribute_count: 0, attributes: ptr::null_mut(),
             target_alias: ptr::null_mut(), user_name: username.as_ptr() as *mut u16,
         };
-        if unsafe { CredWriteW(&credential, 0) } == 0 {
-            return Err(format!("Windows Credential Manager write failed: {}", io::Error::last_os_error()));
-        }
+        let written = unsafe { CredWriteW(&credential, 0) };
+        bytes.fill(0);
+        if written == 0 { return Err(format!("Windows Credential Manager write failed: {}", io::Error::last_os_error())); }
         Ok(())
     }
 
