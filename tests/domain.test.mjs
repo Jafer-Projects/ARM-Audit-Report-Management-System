@@ -88,3 +88,10 @@ test("release desktop does not open demo SQLite or register demo and prototype c
   assert.match(native, /credential_vault::load_cloud_session/);
   assert.match(native, /commands::initialize_workspace/);
 });
+
+
+test("release cloud panel does not invoke development-only prototype synchronization commands", () => {
+  const panel = readFileSync(new URL("../src/components/CloudConnectionPanel.tsx", import.meta.url), "utf8");
+  assert.match(panel, /import\.meta\.env\.DEV\?getLocalSyncStatus\(\)/);
+  assert.match(panel, /Synchronization remains disabled/);
+});

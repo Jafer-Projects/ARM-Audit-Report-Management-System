@@ -6,6 +6,7 @@ import { TenantAdministration } from "./TenantAdministration";
 
 type Props={onClose:()=>void};
 type LocalStatus={configured:boolean;cursor:string;pending:number;conflicts:number};
+async function getPrototypeSyncStatus():Promise<LocalStatus>{return import.meta.env.DEV?getLocalSyncStatus():{configured:false,cursor:"0",pending:0,conflicts:0};}
 export function CloudConnectionPanel({onClose}:Props){
  const [api,setApi]=useState("https://api.example.com");
  const [email,setEmail]=useState("");
@@ -41,7 +42,7 @@ export function CloudConnectionPanel({onClose}:Props){
    let mfa:{enabled:boolean};
    try{mfa=await cloudAuth.mfaStatus(saved.apiBaseUrl,restored.accessToken);}
    catch{const updated=await secureSession.refresh();restored=updated.session;mfa=await cloudAuth.mfaStatus(saved.apiBaseUrl,restored.accessToken);}
-   const syncStatus=await getLocalSyncStatus();
+   const syncStatus=await getPrototypeSyncStatus();
    if(!cancelled){setSession(restored);setMfaEnabled(mfa.enabled);setStatus(syncStatus);setMessage("Secure cloud session restored from Windows Credential Manager.");}
   }).catch(value=>{if(!cancelled)setError(value instanceof Error?value.message:String(value));});
   return ()=>{cancelled=true;};
@@ -61,7 +62,7 @@ export function CloudConnectionPanel({onClose}:Props){
    await secureSession.save({apiBaseUrl:api,selectedTenantId,session:result});
    setSession(result);setTenantId(selectedTenantId);
    setMfaEnabled((await cloudAuth.mfaStatus(api,result.accessToken)).enabled);
-   setStatus(await getLocalSyncStatus());setMessage("Cloud session established and credentials stored in Windows Credential Manager.");
+   setStatus(await getPrototypeSyncStatus());setMessage("Cloud session established and credentials stored in Windows Credential Manager.");
   });
  }
  async function completeMfa(event:FormEvent){
@@ -72,7 +73,7 @@ export function CloudConnectionPanel({onClose}:Props){
    await secureSession.save({apiBaseUrl:api,selectedTenantId,session:result});
    setSession(result);setTenantId(selectedTenantId);
    setMfaEnabled((await cloudAuth.mfaStatus(api,result.accessToken)).enabled);
-   setChallenge("");setMfaCode("");setStatus(await getLocalSyncStatus());setMessage("Multi-factor authentication completed.");
+   setChallenge("");setMfaCode("");setStatus(await getPrototypeSyncStatus());setMessage("Multi-factor authentication completed.");
   });
  }
  async function register(event:FormEvent){
