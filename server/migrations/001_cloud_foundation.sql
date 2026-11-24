@@ -126,18 +126,18 @@ CREATE POLICY memberships_tenant_scope ON tenant_memberships
     AND user_id::text = current_setting('app.user_id', true)
   );
 
-DO $
+DO $arm$
 DECLARE table_name text;
 BEGIN
   FOREACH table_name IN ARRAY ARRAY['sync_aggregates','sync_inbox','audit_events','jobs'] LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', table_name);
     EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', table_name);
     EXECUTE format(
-      'CREATE POLICY %I ON %I USING (tenant_id::text = current_setting(''app.tenant_id'', true)) WITH CHECK (tenant_id::text = current_setting(''app.tenant_id'', true))',
-      table_name || '_tenant_scope', table_name
+      'CREATE POLICY %I ON %I USING (tenant_id::text = current_setting(''app.tenant_id'', true) AND EXISTS (SELECT 1 FROM tenant_memberships m WHERE m.tenant_id = %I.tenant_id AND m.user_id::text = current_setting(''app.user_id'', true) AND m.status = ''active'')) WITH CHECK (tenant_id::text = current_setting(''app.tenant_id'', true) AND EXISTS (SELECT 1 FROM tenant_memberships m WHERE m.tenant_id = %I.tenant_id AND m.user_id::text = current_setting(''app.user_id'', true) AND m.status = ''active''))',
+      table_name || '_tenant_scope', table_name, table_name, table_name
     );
   END LOOP;
-END $;
+END $arm$;
 
 CREATE POLICY jobs_worker_access ON jobs
   USING (current_setting('app.worker', true) = 'true')
