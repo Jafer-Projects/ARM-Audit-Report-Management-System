@@ -80,4 +80,17 @@ test("refresh tokens rotate and logout revokes the access session", async () => 
   assert.equal(refreshed.statusCode, 200, refreshed.body);
   const oldToken = await app.inject({ method: "POST", url: "/v1/auth/refresh", payload: { refreshToken: first.refreshToken } });
   assert.equal(oldToken.statusCode, 401);
+  const newRefresh = refreshed.json().refreshToken as string;
+  const logout = await app.inject({
+    method: "POST", url: "/v1/auth/logout",
+    headers: { authorization: `Bearer ${refreshed.json().accessToken}` }
+  });
+  assert.equal(logout.statusCode, 204);
+  const revoked = await app.inject({
+    method: "GET", url: "/v1/tenant/context",
+    headers: { authorization: `Bearer ${refreshed.json().accessToken}`, "x-tenant-id": first.tenant.id }
+  });
+  assert.equal(revoked.statusCode, 401);
+  const rotatedAgain = await app.inject({ method: "POST", url: "/v1/auth/refresh", payload: { refreshToken: newRefresh } });
+  assert.equal(rotatedAgain.statusCode, 401);
 });
