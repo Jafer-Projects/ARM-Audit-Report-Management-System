@@ -27,11 +27,12 @@ async function request<T>(path:string,init:RequestInit={}):Promise<T>{
  let response=await send(current.saved.session.accessToken);
  if(response.status===401){
   try{
-   const rotated=await cloudAuth.refresh(current.base,current.saved.session.refreshToken);
-   const session={...current.saved.session,...rotated};
-   await secureSession.save({...current.saved,session});
-   response=await send(session.accessToken);
-  }catch(error){await secureSession.clear();throw new Error("Cloud session expired or was revoked. Sign in again.",{cause:error});}
+   const updated=await secureSession.refresh();
+   response=await send(updated.session.accessToken);
+  }catch(error){
+   if(error instanceof Error&&/Cloud identity API (401|403)/.test(error.message))await secureSession.clear();
+   throw new Error("Cloud request could not refresh its session. If the device is offline, the saved credentials are retained for retry.",{cause:error});
+  }
  }
  if(!response.ok){const body=await response.text();throw new Error("Cloud client directory returned "+response.status+": "+body.slice(0,400));}
  if(response.status===204)return undefined as T;

@@ -38,7 +38,7 @@ export function CloudConnectionPanel({onClose}:Props){
    let restored=saved.session;
    let mfa:{enabled:boolean};
    try{mfa=await cloudAuth.mfaStatus(saved.apiBaseUrl,restored.accessToken);}
-   catch{const rotated=await cloudAuth.refresh(saved.apiBaseUrl,restored.refreshToken);restored={...restored,...rotated};await secureSession.save({...saved,session:restored});mfa=await cloudAuth.mfaStatus(saved.apiBaseUrl,restored.accessToken);}
+   catch{const updated=await secureSession.refresh();restored=updated.session;mfa=await cloudAuth.mfaStatus(saved.apiBaseUrl,restored.accessToken);}
    const syncStatus=await getLocalSyncStatus();
    if(!cancelled){setSession(restored);setMfaEnabled(mfa.enabled);setStatus(syncStatus);setMessage("Secure cloud session restored from Windows Credential Manager.");}
   }).catch(value=>{if(!cancelled)setError(value instanceof Error?value.message:String(value));});
@@ -95,10 +95,8 @@ export function CloudConnectionPanel({onClose}:Props){
  async function refreshSession(){
   if(!session)return;
   await run(async()=>{
-   const next=await cloudAuth.refresh(api,session.refreshToken);
-   const updated={...session,...next};
-   await secureSession.save({apiBaseUrl:api,selectedTenantId:tenantId,session:updated});
-   setSession(updated);
+   const updated=await secureSession.refresh();
+   setSession(updated.session);
    setMessage("Cloud session refreshed and the rotated credentials were stored securely.");
   });
  }
@@ -168,8 +166,8 @@ export function CloudConnectionPanel({onClose}:Props){
     <h3>Connected account</h3><p>{session.user?.email??email}</p>
     <label>Organization<select value={tenantId} disabled={busy} onChange={event=>{const selected=event.target.value;void run(async()=>{if(!selected)throw new Error("Choose an organization.");await cloudAuth.tenantContext(api,session.accessToken,selected);await secureSession.save({apiBaseUrl:api,selectedTenantId:selected,session});setTenantId(selected);setMessage("Organization membership verified and selected for this workspace.");});}}><option value="">Select an organization…</option>{(session.memberships??[]).map(item=><option key={item.tenant_id} value={item.tenant_id}>{item.tenant_id} — {item.role}</option>)}</select></label>
     <div className="cloud-sync-status">
-     <span>Pending local events: <strong>{status?.pending??"—"}</strong></span>
-     <span>Conflicts: <strong>{status?.conflicts??"—"}</strong></span>
+     <span>Prototype demo outbox pending (not sent): <strong>{status?.pending??"—"}</strong></span>
+     <span>Prototype conflicts (not synced): <strong>{status?.conflicts??"—"}</strong></span>
      <span>Pull cursor: <strong>{status?.cursor??"—"}</strong></span>
     </div>
 
@@ -181,8 +179,8 @@ export function CloudConnectionPanel({onClose}:Props){
      {mfaEnabled&&<><label>Current password<input type="password" value={mfaPassword} onChange={event=>setMfaPassword(event.target.value)}/></label><label>Fresh authenticator code<input inputMode="numeric" autoComplete="one-time-code" value={mfaManagementCode} onChange={event=>setMfaManagementCode(event.target.value)}/></label><button type="button" disabled={busy||!mfaPassword||!/^\d{6}$/.test(mfaManagementCode)} onClick={()=>void disableMfa()}>Disable MFA</button></>}
      {recoveryCodes.length>0&&<div className="cloud-recovery-codes"><strong>One-time recovery codes</strong><ul>{recoveryCodes.map(code=><li key={code}><code>{code}</code></li>)}</ul><button type="button" className="text-button" onClick={()=>setRecoveryCodes([])}>I stored these codes</button></div>}
     </div>
-    <div className="cloud-sync-consent"><p><strong>Synchronization is disabled in this build.</strong> This desktop still opens the seeded ARM Demonstration Firm and its initial outbox contains synthetic sample records. The native sync layer rejects this demo workspace. A separate tenant-owned workspace, complete domain API integration and migration controls are required before enabling production synchronization.</p></div>
-    <button type="button" disabled>Synchronization unavailable for demonstration workspace</button>
+    <div className="cloud-sync-consent"><p><strong>Synchronization remains disabled.</strong> The tenant client directory is cloud-backed, but the local client cache/outbox, device identity and offline lease, dependency-safe pull, conflict workspace and domain-specific event contracts are not implemented. The prototype outbox remains isolated and is never sent to this tenant.</p></div>
+    <button type="button" disabled>Synchronization unavailable until tenant-bound offline contracts are implemented</button>
     <button type="button" className="text-button" disabled={busy} onClick={()=>void refreshSession()}>Refresh session</button>
     <button type="button" className="text-button" disabled={busy} onClick={()=>void logout()}>Sign out</button>
    </div>}
