@@ -210,3 +210,11 @@ export async function enqueueVerificationEmail(client: PoolClient, userId: strin
   await client.query("INSERT INTO email_verification_tokens(user_id,token_hash,expires_at) VALUES($1,$2,now()+interval '24 hours')", [userId,digest(raw)]);
   await queueEmail(client,userId,tenantId,email,"email_verification",{ verificationUrl: `${config.PUBLIC_APP_URL}/verify-email?token=${raw}` });
 }
+
+export async function getMfaStatus(userId:string) {
+ return inTransaction(async(client)=>{
+  await client.query("SELECT set_config('app.user_id',$1,true)",[userId]);
+  const result=await client.query("SELECT enabled_at FROM mfa_credentials WHERE user_id=$1",[userId]);
+  return {enabled:Boolean(result.rows[0]?.enabled_at)};
+ });
+}
