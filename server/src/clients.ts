@@ -66,7 +66,8 @@ export async function transitionClient(userId:string,tenantId:string,id:string,a
   if(action==="restore"&&before.status!=="archived") throw Object.assign(new Error("Only archived clients can be restored"),{statusCode:409});
   if(action==="activate"&&before.status!=="inactive") throw Object.assign(new Error("Only inactive clients can be activated"),{statusCode:409});
   const result=await client.query("UPDATE clients SET status=$3,row_version=row_version+1,updated_by=$4,updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING *",[tenantId,id,next,userId]);
-  await recordHistory(client,tenantId,userId,id,action,snapshot(before),snapshot(result.rows[0]),Number(result.rows[0].row_version));
+  const historyAction=action==="archive"?"archived":action==="activate"?"activated":"restored";
+  await recordHistory(client,tenantId,userId,id,historyAction,snapshot(before),snapshot(result.rows[0]),Number(result.rows[0].row_version));
   return result.rows[0];
  });
 }

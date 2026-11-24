@@ -225,3 +225,57 @@ test("password recovery is non-enumerating, one-time and revokes existing sessio
  const newLogin=await app.inject({method:"POST",url:"/v1/auth/login",payload:{email:firstEmail,password:"new-correct-horse-battery-4"}});
  assert.equal(newLogin.statusCode,200);assert.equal(newLogin.json().mfaRequired,true);
 });
+
+
+test("tenant context exposes effective permissions and client directory enforces them",async()=>{
+ const role=await app.inject({method:"POST",url:"/v1/tenant/roles",headers:headers(),payload:{key:"client_reader",name:"Client Reader",permissions:["clients.read"]}});
+ assert.equal(role.statusCode,201,role.body);
+ const membership=await withTenant(first.user.id,first.tenant.id,async(client)=>{
+  const result=await client.query("SELECT id FROM tenant_memberships WHERE tenant_id=$1 AND user_id=$2",[first.tenant.id,second.user.id]);
+  assert.equal(result.rowCount,1);return result.rows[0].id as string;
+ });
+ const assigned=await app.inject({method:"POST",url:"/v1/tenant/memberships/"+membership+"/roles",headers:headers(),payload:{roleId:role.json().id}});
+ assert.equal(assigned.statusCode,200,assigned.body);
+ const memberHeaders={authorization:"Bearer "+second.accessToken,"x-tenant-id":first.tenant.id};
+ const context=await app.inject({method:"GET",url:"/v1/tenant/context",headers:memberHeaders});
+ assert.equal(context.statusCode,200,context.body);
+ assert.ok(context.json().permissions.includes("clients.read"));
+ assert.equal(context.json().permissions.includes("clients.write"),false);
+ const listed=await app.inject({method:"GET",url:"/v1/clients",headers:memberHeaders});
+ assert.equal(listed.statusCode,200,listed.body);
+ const denied=await app.inject({method:"POST",url:"/v1/clients",headers:memberHeaders,payload:{record_kind:"business",legal_name:"Read Only Client",display_name:"Read Only Client"}});
+ assert.equal(denied.statusCode,403);
+});
+
+test("cloud client directory preserves duplicate acknowledgement, row versions, lifecycle history and tenant isolation",async()=>{
+ const payload={record_kind:"business",legal_name:"Example Client "+randomUUID(),display_name:"Example Client",tin_raw:"TIN-"+randomUUID(),sector:"Professional services",contact_name:"Test Contact",contact_email:"contact@example.test"};
+ const created=await app.inject({method:"POST",url:"/v1/clients",headers:headers(),payload});
+ assert.equal(created.statusCode,201,created.body);
+ assert.equal(created.json().status,"active");assert.equal(created.json().row_version,1);
+ const duplicate=await app.inject({method:"GET",url:"/v1/clients/duplicates?legalName="+encodeURIComponent(payload.legal_name)+"&tinRaw="+encodeURIComponent(payload.tin_raw),headers:headers()});
+ assert.equal(duplicate.statusCode,200);assert.equal(duplicate.json().candidates.length,1);
+ const rejectedDuplicate=await app.inject({method:"POST",url:"/v1/clients",headers:headers(),payload:{...payload,display_name:"Second profile"}});
+ assert.equal(rejectedDuplicate.statusCode,409);
+ const acknowledged=await app.inject({method:"POST",url:"/v1/clients",headers:headers(),payload:{...payload,display_name:"Second profile",duplicate_acknowledged:true}});
+ assert.equal(acknowledged.statusCode,201,acknowledged.body);
+ const updated=await app.inject({method:"POST",url:"/v1/clients",headers:headers(),payload:{...created.json(),display_name:"Updated Example Client",row_version:1}});
+ assert.equal(updated.statusCode,200,updated.body);assert.equal(updated.json().row_version,2);
+ const stale=await app.inject({method:"POST",url:"/v1/clients",headers:headers(),payload:{...created.json(),display_name:"Stale Update",row_version:1}});
+ assert.equal(stale.statusCode,409);
+ const archived=await app.inject({method:"POST",url:"/v1/clients/"+created.json().id+"/transition",headers:headers(),payload:{action:"archive",expectedVersion:2}});
+ assert.equal(archived.statusCode,200,archived.body);assert.equal(archived.json().status,"archived");assert.equal(archived.json().row_version,3);
+ const normalList=await app.inject({method:"GET",url:"/v1/clients",headers:headers()});
+ assert.equal(normalList.json().clients.some((item:any)=>item.id===created.json().id),false);
+ const inclusiveList=await app.inject({method:"GET",url:"/v1/clients?includeArchived=true",headers:headers()});
+ assert.equal(inclusiveList.json().clients.some((item:any)=>item.id===created.json().id),true);
+ const restored=await app.inject({method:"POST",url:"/v1/clients/"+created.json().id+"/transition",headers:headers(),payload:{action:"restore",expectedVersion:3}});
+ assert.equal(restored.statusCode,200,restored.body);assert.equal(restored.json().status,"active");assert.equal(restored.json().row_version,4);
+ const history=await app.inject({method:"GET",url:"/v1/clients/"+created.json().id+"/history",headers:headers()});
+ assert.equal(history.statusCode,200,history.body);
+ assert.deepEqual(history.json().history.map((item:any)=>item.action),["restored","archived","updated","created"]);
+ assert.ok(history.json().history.every((item:any)=>item.actor_name==="First Owner"));
+ const foreign=await app.inject({method:"GET",url:"/v1/clients",headers:{authorization:"Bearer "+second.accessToken,"x-tenant-id":first.tenant.id}});
+ assert.equal(foreign.statusCode,200,"the second user has a valid active membership in this tenant");
+ const otherTenant=await app.inject({method:"GET",url:"/v1/clients",headers:{authorization:"Bearer "+second.accessToken,"x-tenant-id":second.tenant.id}});
+ assert.equal(otherTenant.statusCode,200);assert.equal(otherTenant.json().clients.length,0);
+});
