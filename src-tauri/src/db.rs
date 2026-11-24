@@ -3,29 +3,6 @@ use std::path::Path;
 
 pub struct Database {
     pub connection: Connection,
-    #[test]
-    fn workspace_record_events_create_versioned_durable_cloud_outbox_entries() {
-        let db=Database::memory().expect("in-memory db");
-        let record="00000000-0000-4000-8000-000000000301";
-        db.connection.execute(
-            "INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json)
-             VALUES('10000000-0000-4000-8000-000000000001',?1,?2,'workspace_record_updated','workspace_record',?3,'2026-11-24T00:00:00Z','corr-one','{}')",
-            rusqlite::params!["00000000-0000-4000-8000-000000000001","00000000-0000-4000-8000-000000000011",record]
-        ).expect("append first workspace event");
-        let first:(i64,String)=db.connection.query_row("SELECT base_version,payload_json FROM sync_outbox WHERE event_id='10000000-0000-4000-8000-000000000001'",[],|r|Ok((r.get(0)?,r.get(1)?))).unwrap();
-        assert_eq!(first.0,0);
-        assert!(first.1.contains("Demo Firm Administrator"));
-        db.connection.execute("UPDATE workspace_record SET row_version=2,title='Updated administrator' WHERE id=?1",[record]).unwrap();
-        db.connection.execute(
-            "INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json)
-             VALUES('10000000-0000-4000-8000-000000000002',?1,?2,'workspace_record_updated','workspace_record',?3,'2026-11-24T00:01:00Z','corr-two','{}')",
-            rusqlite::params!["00000000-0000-4000-8000-000000000001","00000000-0000-4000-8000-000000000011",record]
-        ).expect("append second workspace event");
-        let second:(i64,String)=db.connection.query_row("SELECT base_version,payload_json FROM sync_outbox WHERE event_id='10000000-0000-4000-8000-000000000002'",[],|r|Ok((r.get(0)?,r.get(1)?))).unwrap();
-        assert_eq!(second.0,1);
-        assert!(second.1.contains("Updated administrator"));
-    }
-
 }
 
 impl Database {
@@ -780,6 +757,30 @@ mod tests {
         assert!(!actor.is_empty());
         assert!(!firm.is_empty());
         assert_eq!(target,"workspace");
+    }
+
+
+    #[test]
+    fn workspace_record_events_create_versioned_durable_cloud_outbox_entries() {
+        let db=Database::memory().expect("in-memory db");
+        let record="00000000-0000-4000-8000-000000000301";
+        db.connection.execute(
+            "INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json)
+             VALUES('10000000-0000-4000-8000-000000000001',?1,?2,'workspace_record_updated','workspace_record',?3,'2026-11-24T00:00:00Z','corr-one','{}')",
+            rusqlite::params!["00000000-0000-4000-8000-000000000001","00000000-0000-4000-8000-000000000011",record]
+        ).expect("append first workspace event");
+        let first:(i64,String)=db.connection.query_row("SELECT base_version,payload_json FROM sync_outbox WHERE event_id='10000000-0000-4000-8000-000000000001'",[],|r|Ok((r.get(0)?,r.get(1)?))).unwrap();
+        assert_eq!(first.0,0);
+        assert!(first.1.contains("Demo Firm Administrator"));
+        db.connection.execute("UPDATE workspace_record SET row_version=2,title='Updated administrator' WHERE id=?1",[record]).unwrap();
+        db.connection.execute(
+            "INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json)
+             VALUES('10000000-0000-4000-8000-000000000002',?1,?2,'workspace_record_updated','workspace_record',?3,'2026-11-24T00:01:00Z','corr-two','{}')",
+            rusqlite::params!["00000000-0000-4000-8000-000000000001","00000000-0000-4000-8000-000000000011",record]
+        ).expect("append second workspace event");
+        let second:(i64,String)=db.connection.query_row("SELECT base_version,payload_json FROM sync_outbox WHERE event_id='10000000-0000-4000-8000-000000000002'",[],|r|Ok((r.get(0)?,r.get(1)?))).unwrap();
+        assert_eq!(second.0,1);
+        assert!(second.1.contains("Updated administrator"));
     }
 
 }
