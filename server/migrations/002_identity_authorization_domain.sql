@@ -419,6 +419,7 @@ RETURNS TABLE(user_id uuid,tenant_id uuid,email text)
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,public AS $fn$
  SELECT u.id,m.tenant_id,u.email FROM public.users u
  JOIN public.tenant_memberships m ON m.user_id=u.id AND m.status='active'
+ JOIN public.tenants t ON t.id=m.tenant_id AND t.status='active'
  WHERE u.email_normalized=lower(btrim(p_email)) AND u.status='pending_verification'
  ORDER BY m.created_at LIMIT 1
 $fn$;
