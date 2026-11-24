@@ -7,7 +7,7 @@ async function requireDemoWorkspace(){if(await secureSession.load())throw new Er
 async function demo<T>(command:string,args?:Record<string,unknown>):Promise<T>{await requireDemoWorkspace();return invoke<T>(command,args);}
 
 export const desktop = {
- initialize: async ():Promise<WorkspaceInfo> => await secureSession.load() ? cloudClients.workspace() : invoke<WorkspaceInfo>("initialize_workspace"),
+ initialize: async ():Promise<WorkspaceInfo> => {const saved=await secureSession.load();if(!saved)return invoke<WorkspaceInfo>("initialize_workspace");if(!saved.selectedTenantId)return {firm_name:"Cloud account — select organization",actor_name:saved.session.user?.displayName??saved.session.user?.email??"Authenticated user",persona:"reviewer",clients_count:0,sync_state:"Select an active organization in Cloud connection before opening tenant data"};return cloudClients.workspace();},
  setPersona: async (persona:string) => {await requireDemoWorkspace();return invoke<WorkspaceInfo>("set_demo_persona",{persona});},
  clients: async (includeArchived=false) => await secureSession.load() ? cloudClients.list(includeArchived) : invoke<Client[]>("list_clients",{includeArchived}),
  findClientDuplicates: async (legalName:string,tinRaw:string,excludeId?:string) => await secureSession.load() ? cloudClients.duplicates(legalName,tinRaw,excludeId) : invoke<DuplicateCandidate[]>("find_client_duplicates",{legalName,tinRaw,excludeId}),

@@ -68,9 +68,9 @@ export const cloudClients={
  },
  workspace:async()=>{
   const {saved}=await context();
-  const tenant=await cloudAuth.tenantContext(saved.apiBaseUrl,saved.session.accessToken,saved.selectedTenantId) as {name?:string;role?:string};
+  const tenant=await request<{name?:string;role?:string}>("/v1/tenant/context");
   const role=(tenant.role??"").toLowerCase();
-  const persona=(["administrator","manager","auditor","reviewer"].includes(role)?role:"reviewer") as "administrator"|"manager"|"auditor"|"reviewer";
+  const persona=(role==="owner"||role==="admin"||role==="administrator"?"administrator":role==="manager"?"manager":role==="auditor"?"auditor":"reviewer") as "administrator"|"manager"|"auditor"|"reviewer";
   const clients=await cloudClients.list(false);
   return {firm_name:tenant.name??"Cloud organization",actor_name:saved.session.user?.displayName??saved.session.user?.email??"Authenticated user",persona,clients_count:clients.length,sync_state:"Cloud authoritative; client offline cache and outbox are not enabled"};
  }

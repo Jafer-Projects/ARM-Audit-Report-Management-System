@@ -53,7 +53,7 @@ export function CloudConnectionPanel({onClose}:Props){
   await run(async()=>{
    const result=await cloudAuth.login(api,email,password);
    if("mfaRequired" in result){setChallenge(result.challengeToken);setMessage("Enter the authenticator code or a single-use recovery code.");return;}
-   const selectedTenantId=result.memberships?.[0]?.tenant_id??"";
+   const selectedTenantId=result.memberships?.length===1?result.memberships[0].tenant_id:"";
    await secureSession.save({apiBaseUrl:api,selectedTenantId,session:result});
    setSession(result);setTenantId(selectedTenantId);
    setMfaEnabled((await cloudAuth.mfaStatus(api,result.accessToken)).enabled);
@@ -164,7 +164,7 @@ export function CloudConnectionPanel({onClose}:Props){
    </form>}
    {session&&<div className="cloud-panel-form">
     <h3>Connected account</h3><p>{session.user?.email??email}</p>
-    <label>Organization<select value={tenantId} onChange={event=>setTenantId(event.target.value)}>{(session.memberships??[]).map(item=><option key={item.tenant_id} value={item.tenant_id}>{item.tenant_id} — {item.role}</option>)}</select></label>
+    <label>Organization<select value={tenantId} disabled={busy} onChange={event=>{const selected=event.target.value;void run(async()=>{if(!selected)throw new Error("Choose an organization.");await cloudAuth.tenantContext(api,session.accessToken,selected);await secureSession.save({apiBaseUrl:api,selectedTenantId:selected,session});setTenantId(selected);setMessage("Organization membership verified and selected for this workspace.");});}}><option value="">Select an organization…</option>{(session.memberships??[]).map(item=><option key={item.tenant_id} value={item.tenant_id}>{item.tenant_id} — {item.role}</option>)}</select></label>
     <div className="cloud-sync-status">
      <span>Pending local events: <strong>{status?.pending??"—"}</strong></span>
      <span>Conflicts: <strong>{status?.conflicts??"—"}</strong></span>
