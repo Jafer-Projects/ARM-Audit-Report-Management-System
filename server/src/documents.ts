@@ -6,13 +6,6 @@ import { withTenant } from "./db.js";
 import { assertPermission } from "./authorization.js";
 import { config } from "./config.js";
 
-const root=resolve(config.OBJECT_STORAGE_DIR);
-const sha=(data:Buffer)=>createHash("sha256").update(data).digest("hex");
-function objectPath(key:string) {
-  const path=resolve(root,key);
-  if(!path.startsWith(root+"/")) throw Object.assign(new Error("Invalid object key"),{statusCode:400});
-  return path;
-}
 function detectMime(data:Buffer):string|null {
   if(data.subarray(0,5).toString("ascii")==="%PDF-") return "application/pdf";
   if(data.length>=8 && data.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))) return "image/png";
@@ -29,10 +22,8 @@ export async function uploadDocument(userId:string,tenantId:string,input:{fileNa
   if(!detected||detected!==input.mediaType) throw Object.assign(new Error("File signature does not match an allowed PDF, JPEG or PNG media type"),{statusCode:415});
   const fileName=input.fileName.replace(/[\\/\\x00-\\x1f]/g,"_").trim().slice(0,180);
   if(!fileName) throw Object.assign(new Error("A safe filename is required"),{statusCode:400});
-  const id=randomUUID(),objectKey=`${tenantId}/${id}`,path=objectPath(objectKey),temp=`${path}.tmp`;
-  await mkdir(dirname(path),{recursive:true,mode:0o700});
-  await writeFile(temp,bytes,{flag:"wx",mode:0o600});
-  await rename(temp,path);
+  const id=randomUUID(),objectKey=`${tenantId}/${id}`;
+  await storeObject(objectKey,bytes);
   try {
     const result=await withTenant(userId,tenantId,async(client)=>{
       await assertPermission(client,userId,tenantId,"documents.upload");
@@ -58,7 +49,7 @@ export async function uploadDocument(userId:string,tenantId:string,input:{fileNa
     });
     return result;
   } catch(error) {
-    await rm(path,{force:true});
+    await deleteObject(objectKey).catch(()=>undefined);
     throw error;
   }
 }
@@ -73,7 +64,7 @@ export async function readCleanDocument(userId:string,tenantId:string,id:string)
     const row=found.rows[0];
     if(!row) throw Object.assign(new Error("Document not found"),{statusCode:404});
     if(row.scan_status!=="clean") throw Object.assign(new Error("Document is unavailable until malware scanning passes"),{statusCode:423});
-    const bytes=await readFile(objectPath(row.object_key));
+    const bytes=await loadObject(row.object_key);
     if(sha(bytes)!==row.sha256) throw Object.assign(new Error("Stored document integrity check failed"),{statusCode:500});
     return {...row,contentBase64:bytes.toString("base64")};
   });
@@ -94,7 +85,7 @@ export async function scanNextDocument(workerPool: {connect:()=>Promise<any>},cl
   finally { client.release(); }
   let status="failed",detail="Scanner unavailable";
   try {
-    const bytes=await readFile(objectPath(document.object_key));
+    const bytes=await loadObject(document.object_key);
     if(sha(bytes)!==document.sha256) throw new Error("SHA-256 mismatch before scanning");
     const verdict=await clamScan(bytes,clamHost,clamPort);
     status=verdict==="OK"?"clean":"infected";
