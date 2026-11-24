@@ -8,7 +8,7 @@ import { pool, withTenant } from "./db.js";
 import { authenticate, login, register, revokeSession, rotateRefreshToken, completeMfaLogin, type AuthenticatedRequest } from "./auth.js";
 import { verifyEmailAddress, requestPasswordRecovery, resetPassword, beginMfaEnrollment, confirmMfaEnrollment, disableMfa } from "./security.js";
 import { pushEvents, pullEvents, pushSchema } from "./sync.js";
-import { listRoles, createRole, replaceRolePermissions, assignMemberRole, inviteOrganizationMember, listMembers, listInvitations, revokeInvitation, listPermissionCatalogue } from "./authorization.js";
+import { listRoles, createRole, replaceRolePermissions, assignMemberRole, inviteOrganizationMember, listMembers, listInvitations, revokeInvitation, listPermissionCatalogue, updateRoleName, deleteRole, removeMemberRole, changeMemberStatus } from "./authorization.js";
 import { acceptOrganizationInvitation } from "./organizations.js";
 import { createEngagement, listEngagements, createWorkpaper, transitionWorkpaper, createAuditReport, transitionAuditReport, createJournal, postJournal, createAccount, listAccounts, reverseJournal } from "./domain.js";
 import { uploadDocument, readCleanDocument } from "./documents.js";
@@ -158,6 +158,27 @@ export async function buildApp(): Promise<FastifyInstance> {
   app.post("/v1/tenant/invitations/:id/revoke", { preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request) => {
     const auth=(request as AuthenticatedRequest).auth!,params=request.params as {id:string};
     return revokeInvitation(auth.sub,tenantId(request as AuthenticatedRequest),params.id);
+  });
+
+  app.put("/v1/tenant/roles/:roleId", { preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request,reply) => {
+    const parsed=z.object({name:z.string().trim().min(2).max(100)}).safeParse(request.body);
+    if(!parsed.success) return reply.code(400).send({error:"validation_error"});
+    const auth=(request as AuthenticatedRequest).auth!,params=request.params as {roleId:string};
+    return updateRoleName(auth.sub,tenantId(request as AuthenticatedRequest),params.roleId,parsed.data.name);
+  });
+  app.delete("/v1/tenant/roles/:roleId", { preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request) => {
+    const auth=(request as AuthenticatedRequest).auth!,params=request.params as {roleId:string};
+    return deleteRole(auth.sub,tenantId(request as AuthenticatedRequest),params.roleId);
+  });
+  app.delete("/v1/tenant/memberships/:membershipId/roles/:roleId", { preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request) => {
+    const auth=(request as AuthenticatedRequest).auth!,params=request.params as {membershipId:string;roleId:string};
+    return removeMemberRole(auth.sub,tenantId(request as AuthenticatedRequest),params.membershipId,params.roleId);
+  });
+  app.patch("/v1/tenant/memberships/:membershipId/status", { preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request,reply) => {
+    const parsed=z.object({status:z.enum(["active","suspended","revoked"])}).safeParse(request.body);
+    if(!parsed.success) return reply.code(400).send({error:"validation_error"});
+    const auth=(request as AuthenticatedRequest).auth!,params=request.params as {membershipId:string};
+    return changeMemberStatus(auth.sub,tenantId(request as AuthenticatedRequest),params.membershipId,parsed.data.status);
   });
 
   app.get("/v1/tenant/roles", { preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request) => {
