@@ -4,10 +4,15 @@ services:
     environment:
       POSTGRES_DB: arm
       POSTGRES_USER: arm_owner
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the deployment environment}
-      ARM_WORKER_PASSWORD: ${ARM_WORKER_PASSWORD:?set ARM_WORKER_PASSWORD in the deployment environment}
-      ARM_MIGRATOR_PASSWORD: ${ARM_MIGRATOR_PASSWORD:?set ARM_MIGRATOR_PASSWORD in the deployment environment}
-      ARM_RUNTIME_PASSWORD: ${ARM_RUNTIME_PASSWORD:?set ARM_RUNTIME_PASSWORD in the deployment environment}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      ARM_RUNTIME_PASSWORD_FILE: /run/secrets/arm_runtime_password
+      ARM_WORKER_PASSWORD_FILE: /run/secrets/arm_worker_password
+      ARM_MIGRATOR_PASSWORD_FILE: /run/secrets/arm_migrator_password
+    secrets:
+      - postgres_password
+      - arm_runtime_password
+      - arm_worker_password
+      - arm_migrator_password
     volumes:
       - arm-postgres:/var/lib/postgresql/data
       - ./docker/init/01-runtime-role.sh:/docker-entrypoint-initdb.d/01-runtime-role.sh:ro
@@ -17,8 +22,6 @@ services:
       timeout: 5s
       retries: 20
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:5432:5432"
 
   api:
     build:
@@ -29,14 +32,32 @@ services:
       NODE_ENV: production
       HOST: 0.0.0.0
       PORT: 3000
-      DATABASE_URL: postgres://arm_runtime:${ARM_RUNTIME_PASSWORD}@postgres:5432/arm
-      MIGRATION_DATABASE_URL: postgres://arm_migrator:${ARM_MIGRATOR_PASSWORD}@postgres:5432/arm
-      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in the deployment environment}
+      DATABASE_URL_FILE: /run/secrets/api_database_url
+      MIGRATION_DATABASE_URL_FILE: /run/secrets/migrator_database_url
+      JWT_SECRET_FILE: /run/secrets/jwt_secret
+      MFA_ENCRYPTION_KEY_FILE: /run/secrets/mfa_encryption_key
+      EMAIL_PROVIDER_URL: ${EMAIL_PROVIDER_URL:?set EMAIL_PROVIDER_URL}
+      EMAIL_PROVIDER_API_KEY_FILE: /run/secrets/email_provider_api_key
+      EMAIL_FROM: ${EMAIL_FROM:?set EMAIL_FROM}
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:?set PUBLIC_APP_URL}
+      OBJECT_STORAGE_DIR: /data/objects
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: 3310
       ACCESS_TOKEN_TTL_SECONDS: 900
       LOG_LEVEL: info
+    secrets:
+      - api_database_url
+      - migrator_database_url
+      - jwt_secret
+      - mfa_encryption_key
+      - email_provider_api_key
+    volumes:
+      - arm-objects:/data/objects
     depends_on:
       postgres:
         condition: service_healthy
+      clamav:
+        condition: service_started
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 15s
@@ -51,15 +72,73 @@ services:
     command: ["node", "dist/worker.js"]
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgres://arm_worker:${ARM_WORKER_PASSWORD}@postgres:5432/arm
-      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in the deployment environment}
+      DATABASE_URL_FILE: /run/secrets/worker_database_url
+      JWT_SECRET_FILE: /run/secrets/jwt_secret
+      MFA_ENCRYPTION_KEY_FILE: /run/secrets/mfa_encryption_key
+      EMAIL_PROVIDER_URL: ${EMAIL_PROVIDER_URL:?set EMAIL_PROVIDER_URL}
+      EMAIL_PROVIDER_API_KEY_FILE: /run/secrets/email_provider_api_key
+      EMAIL_FROM: ${EMAIL_FROM:?set EMAIL_FROM}
+      OBJECT_STORAGE_DIR: /data/objects
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: 3310
       LOG_LEVEL: info
+    secrets:
+      - worker_database_url
+      - jwt_secret
+      - mfa_encryption_key
+      - email_provider_api_key
+    volumes:
+      - arm-objects:/data/objects
     depends_on:
       postgres:
         condition: service_healthy
+      clamav:
+        condition: service_started
+    restart: unless-stopped
+
+  clamav:
+    image: clamav/clamav:1.4.3
+    expose:
+      - "3310"
+    volumes:
+      - clamav-signatures:/var/lib/clamav
+    restart: unless-stopped
+
+  gateway:
+    image: nginx:1.27-alpine
+    ports:
+      - "443:443"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ${TLS_CERT_DIR:?set TLS_CERT_DIR}:/etc/nginx/certs:ro
+    depends_on:
       api:
         condition: service_healthy
     restart: unless-stopped
 
 volumes:
   arm-postgres:
+  arm-objects:
+  clamav-signatures:
+
+secrets:
+  postgres_password:
+    file: ${POSTGRES_PASSWORD_FILE:?set POSTGRES_PASSWORD_FILE}
+  arm_runtime_password:
+    file: ${ARM_RUNTIME_PASSWORD_FILE:?set ARM_RUNTIME_PASSWORD_FILE}
+  arm_worker_password:
+    file: ${ARM_WORKER_PASSWORD_FILE:?set ARM_WORKER_PASSWORD_FILE}
+  arm_migrator_password:
+    file: ${ARM_MIGRATOR_PASSWORD_FILE:?set ARM_MIGRATOR_PASSWORD_FILE}
+  api_database_url:
+    file: ${API_DATABASE_URL_FILE:?set API_DATABASE_URL_FILE}
+  worker_database_url:
+    file: ${WORKER_DATABASE_URL_FILE:?set WORKER_DATABASE_URL_FILE}
+  migrator_database_url:
+    file: ${MIGRATOR_DATABASE_URL_FILE:?set MIGRATOR_DATABASE_URL_FILE}
+  jwt_secret:
+    file: ${JWT_SECRET_FILE:?set JWT_SECRET_FILE}
+  mfa_encryption_key:
+    file: ${MFA_ENCRYPTION_KEY_FILE:?set MFA_ENCRYPTION_KEY_FILE}
+  email_provider_api_key:
+    file: ${EMAIL_PROVIDER_API_KEY_FILE:?set EMAIL_PROVIDER_API_KEY_FILE}
