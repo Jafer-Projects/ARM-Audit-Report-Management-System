@@ -182,6 +182,7 @@ jobs:
       ARM_WORKER_PASSWORD: arm_worker_test_password
       ARM_MIGRATOR_PASSWORD: arm_migrator_test_password
       JWT_SECRET: ci-only-test-secret-which-is-longer-than-thirty-two-bytes
+      MFA_ENCRYPTION_KEY: ci-only-mfa-encryption-key-with-more-than-thirty-two-bytes
       ACCESS_TOKEN_TTL_SECONDS: 900
       LOG_LEVEL: warn
     steps:
