@@ -30,7 +30,10 @@ async function claimEmail():Promise<Email|null>{
   return {...row,attempts:row.attempts+1};
  });
 }
-function escapeHtml(value:string){return value.replace(/[&<>"']/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]??c));}
+function escapeHtml(value:string){
+ const entities:Record<string,string>={"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"};
+ return value.replace(/[&<>"']/g,(character)=>entities[character]??character);
+}
 function renderEmail(row:Email){
  const payload=row.payload;
  const url=typeof payload.verificationUrl==="string"?payload.verificationUrl:typeof payload.resetUrl==="string"?payload.resetUrl:typeof payload.invitationUrl==="string"?payload.invitationUrl:"";
