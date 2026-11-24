@@ -3,7 +3,7 @@ import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import { z } from "zod";
 import { config } from "./config.js";
-import { pool } from "./db.js";
+import { pool, withTenant } from "./db.js";
 import { authenticate, login, register, revokeSession, rotateRefreshToken, type AuthenticatedRequest } from "./auth.js";
 import { pushEvents, pullEvents, pushSchema } from "./sync.js";
 
@@ -92,7 +92,6 @@ export async function buildApp(): Promise<FastifyInstance> {
   } }, async (request) => {
     const auth = (request as AuthenticatedRequest).auth!;
     const id = tenantId(request as AuthenticatedRequest);
-    const { withTenant } = await import("./db.js");
     return withTenant(auth.sub, id, async (client) => {
       const result = await client.query(
         "SELECT t.id, t.name, t.slug, m.role FROM tenants t JOIN tenant_memberships m ON m.tenant_id = t.id WHERE t.id = $1 AND m.user_id = $2 AND m.status = 'active'",
