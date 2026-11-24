@@ -204,7 +204,7 @@ CREATE TRIGGER sync_inbox_append_only
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'arm_runtime') THEN
-    REVOKE ALL ON jobs FROM arm_runtime;
+    REVOKE ALL ON jobs, schema_migrations FROM arm_runtime;
     REVOKE ALL ON users, auth_sessions FROM arm_runtime;
     GRANT SELECT, INSERT ON users TO arm_runtime;
     GRANT SELECT, INSERT, UPDATE ON auth_sessions TO arm_runtime;
