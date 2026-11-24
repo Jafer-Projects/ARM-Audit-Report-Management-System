@@ -137,7 +137,7 @@ paths:
                       aggregateId: { type: string, format: uuid }
                       baseVersion: { type: integer, minimum: 0 }
                       eventType: { type: string, const: aggregate.upsert }
-                      schemaVersion: { type: integer, minimum: 1 }
+                      schemaVersion: { type: integer, const: 1 }
                       occurredAt: { type: string, format: date-time }
                       correlationId: { type: string, maxLength: 160 }
                       payload: { type: object, additionalProperties: true }
@@ -164,7 +164,7 @@ paths:
           required: false
           schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
       responses:
-        "200": { description: Accepted events and monotonic next cursor }
+        "200": { description: Durable accepted, conflict and rejected inbox events with monotonic next cursor }
         "400": { description: Invalid cursor or limit }
         "401": { description: Authentication required }
         "403": { description: Tenant membership denied }
