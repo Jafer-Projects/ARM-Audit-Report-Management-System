@@ -93,7 +93,7 @@ export async function pullEvents(userId: string, tenantId: string, after: string
   return withTenant(userId, tenantId, async (client) => {
     const result = await client.query(
       `SELECT event_id, actor_id, aggregate_type, aggregate_id, base_version, resulting_version, received_seq,
-              event_type, schema_version, payload, outcome, outcome_detail, received_at
+              event_type, schema_version, payload, outcome, outcome_detail, occurred_at_device, received_at
        FROM sync_inbox
        WHERE tenant_id = $1 AND ($2::bigint IS NULL OR received_seq > $2::bigint)
        ORDER BY received_seq LIMIT $3`,
