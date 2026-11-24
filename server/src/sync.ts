@@ -5,11 +5,11 @@ import { withTenant } from "./db.js";
 const syncEventSchema = z.object({
   eventId: z.string().uuid(),
   idempotencyKey: z.string().min(8).max(160),
-  aggregateType: z.string().min(1).max(80).regex(/^[a-z][a-z0-9_.-]*$/),
+  aggregateType: z.literal("prototype.workspace_record"),
   aggregateId: z.string().uuid(),
   baseVersion: z.number().int().min(0),
   eventType: z.literal("aggregate.upsert"),
-  schemaVersion: z.number().int().positive(),
+  schemaVersion: z.literal(1),
   occurredAt: z.string().datetime({ offset: true }),
   correlationId: z.string().max(160).optional(),
   payload: z.record(z.string(), z.unknown())
