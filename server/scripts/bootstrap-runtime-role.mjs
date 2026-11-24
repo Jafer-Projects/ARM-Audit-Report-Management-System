@@ -8,27 +8,30 @@ if (!adminUrl || !runtimePassword || runtimePassword.length < 24 || !workerPassw
 }
 const pool = new pg.Pool({ connectionString: adminUrl, max: 1 });
 try {
-  const escaped = await pool.query("SELECT quote_literal($1) AS runtime, quote_literal($2) AS worker", [runtimePassword, workerPassword]);
+  const escaped = await pool.query("SELECT quote_literal($1) AS runtime, quote_literal($2) AS worker, quote_ident(current_database()) AS db", [runtimePassword, workerPassword]);
   const runtimeLiteral = escaped.rows[0].runtime;
   const workerLiteral = escaped.rows[0].worker;
-  await pool.query(\`DO $$ BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'arm_runtime') THEN
-      CREATE ROLE arm_runtime LOGIN PASSWORD \${runtimeLiteral} NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'arm_worker') THEN
-      CREATE ROLE arm_worker LOGIN PASSWORD \${workerLiteral} NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
-    END IF;
-  END $$\`);
-  await pool.query(\`ALTER ROLE arm_runtime WITH LOGIN PASSWORD \${runtimeLiteral} NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS\`);
-  await pool.query(\`ALTER ROLE arm_worker WITH LOGIN PASSWORD \${workerLiteral} NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS\`);
-  const db = (await pool.query("SELECT quote_ident(current_database()) AS name")).rows[0].name;
-  await pool.query(\`GRANT CONNECT ON DATABASE \${db} TO arm_runtime, arm_worker\`);
+  const databaseIdentifier = escaped.rows[0].db;
+
+  const runtimeExists = await pool.query("SELECT 1 FROM pg_roles WHERE rolname = 'arm_runtime'");
+  if (!runtimeExists.rowCount) {
+    await pool.query("CREATE ROLE arm_runtime LOGIN PASSWORD " + runtimeLiteral + " NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS");
+  } else {
+    await pool.query("ALTER ROLE arm_runtime WITH LOGIN PASSWORD " + runtimeLiteral + " NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS");
+  }
+  const workerExists = await pool.query("SELECT 1 FROM pg_roles WHERE rolname = 'arm_worker'");
+  if (!workerExists.rowCount) {
+    await pool.query("CREATE ROLE arm_worker LOGIN PASSWORD " + workerLiteral + " NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS");
+  } else {
+    await pool.query("ALTER ROLE arm_worker WITH LOGIN PASSWORD " + workerLiteral + " NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS");
+  }
+  await pool.query("GRANT CONNECT ON DATABASE " + databaseIdentifier + " TO arm_runtime, arm_worker");
   await pool.query("GRANT USAGE ON SCHEMA public TO arm_runtime, arm_worker");
   await pool.query("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO arm_runtime");
   await pool.query("GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO arm_runtime");
   await pool.query("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO arm_runtime");
   await pool.query("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO arm_runtime");
-  process.stdout.write("Configured non-owner, non-superuser, NOBYPASSRLS runtime and worker roles\\n");
+  console.log("Configured non-owner, non-superuser, NOBYPASSRLS runtime and worker roles");
 } finally {
   await pool.end();
 }
