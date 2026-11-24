@@ -6,7 +6,7 @@ import { z } from "zod";
 import { config } from "./config.js";
 import { pool, withTenant } from "./db.js";
 import { authenticate, login, register, revokeSession, rotateRefreshToken, completeMfaLogin, type AuthenticatedRequest } from "./auth.js";
-import { verifyEmailAddress, requestPasswordRecovery, resetPassword, beginMfaEnrollment, confirmMfaEnrollment, disableMfa } from "./security.js";
+import { verifyEmailAddress, resendEmailVerification, requestPasswordRecovery, resetPassword, beginMfaEnrollment, confirmMfaEnrollment, disableMfa } from "./security.js";
 import { pushEvents, pullEvents, pushSchema } from "./sync.js";
 import { listRoles, createRole, replaceRolePermissions, assignMemberRole, inviteOrganizationMember, listMembers, listInvitations, revokeInvitation, listPermissionCatalogue, updateRoleName, deleteRole, removeMemberRole, changeMemberStatus } from "./authorization.js";
 import { acceptOrganizationInvitation } from "./organizations.js";
@@ -90,6 +90,12 @@ export async function buildApp(): Promise<FastifyInstance> {
     const parsed = z.object({ token: z.string().min(32).max(128) }).safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error" });
     return verifyEmailAddress(parsed.data.token);
+  });
+
+  app.post("/v1/auth/verification/resend", { config: { rateLimit: { max: 3, timeWindow: "15 minutes" } } }, async (request,reply) => {
+    const parsed=z.object({email:z.string().email().max(254)}).safeParse(request.body);
+    if(!parsed.success) return reply.code(400).send({error:"validation_error"});
+    return resendEmailVerification(parsed.data.email);
   });
 
   app.post("/v1/auth/recovery/request", { config: { rateLimit: { max: 5, timeWindow: "15 minutes" } } }, async (request, reply) => {
