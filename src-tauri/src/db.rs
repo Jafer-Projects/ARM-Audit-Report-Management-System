@@ -763,24 +763,32 @@ mod tests {
     #[test]
     fn workspace_record_events_create_versioned_durable_cloud_outbox_entries() {
         let db=Database::memory().expect("in-memory db");
-        let record="00000000-0000-4000-8000-000000000301";
+        let record="00000000-0000-4000-8000-000000000999";
+        let actor="00000000-0000-4000-8000-000000000011";
+        let firm="00000000-0000-4000-8000-000000000001";
+        let now=now_utc();
+        db.connection.execute(
+            "INSERT INTO workspace_record(id,firm_id,client_id,record_type,title,status,created_at,updated_at,created_by,updated_by)
+             VALUES(?1,?2,NULL,'staff','Outbox Test','Active',?3,?3,?4,?4)",
+            rusqlite::params![record,firm,now,actor]
+        ).expect("insert test workspace record");
         db.connection.execute(
             "INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json)
-             VALUES('10000000-0000-4000-8000-000000000001',?1,?2,'workspace_record_updated','workspace_record',?3,'2026-11-24T00:00:00Z','corr-one','{}')",
-            rusqlite::params!["00000000-0000-4000-8000-000000000001","00000000-0000-4000-8000-000000000011",record]
+             VALUES('10000000-0000-4000-8000-000000000001',?1,?2,'workspace_record_updated','workspace_record',?3,?4,'corr-one','{}')",
+            rusqlite::params![firm,actor,record,now]
         ).expect("append first workspace event");
         let first:(i64,String)=db.connection.query_row("SELECT base_version,payload_json FROM sync_outbox WHERE event_id='10000000-0000-4000-8000-000000000001'",[],|r|Ok((r.get(0)?,r.get(1)?))).unwrap();
         assert_eq!(first.0,0);
-        assert!(first.1.contains("Demo Firm Administrator"));
-        db.connection.execute("UPDATE workspace_record SET row_version=2,title='Updated administrator' WHERE id=?1",[record]).unwrap();
+        assert!(first.1.contains("Outbox Test"));
+        let later=now_utc();
+        db.connection.execute("UPDATE workspace_record SET row_version=2,title='Updated Outbox Test',updated_at=?2 WHERE id=?1",rusqlite::params![record,later]).unwrap();
         db.connection.execute(
             "INSERT INTO local_event(id,firm_id,actor_id,event_type,target_type,target_id,occurred_at_utc,correlation_id,payload_json)
-             VALUES('10000000-0000-4000-8000-000000000002',?1,?2,'workspace_record_updated','workspace_record',?3,'2026-11-24T00:01:00Z','corr-two','{}')",
-            rusqlite::params!["00000000-0000-4000-8000-000000000001","00000000-0000-4000-8000-000000000011",record]
+             VALUES('10000000-0000-4000-8000-000000000002',?1,?2,'workspace_record_updated','workspace_record',?3,?4,'corr-two','{}')",
+            rusqlite::params![firm,actor,record,later]
         ).expect("append second workspace event");
         let second:(i64,String)=db.connection.query_row("SELECT base_version,payload_json FROM sync_outbox WHERE event_id='10000000-0000-4000-8000-000000000002'",[],|r|Ok((r.get(0)?,r.get(1)?))).unwrap();
         assert_eq!(second.0,1);
-        assert!(second.1.contains("Updated administrator"));
+        assert!(second.1.contains("Updated Outbox Test"));
     }
-
 }
