@@ -35,10 +35,12 @@ export function CloudConnectionPanel({onClose}:Props){
   void secureSession.load().then(async saved=>{
    if(!saved||cancelled)return;
    setApi(saved.apiBaseUrl);setSession(saved.session);setTenantId(saved.selectedTenantId);
-   const [mfa,syncStatus]=await Promise.all([
-    cloudAuth.mfaStatus(saved.apiBaseUrl,saved.session.accessToken),getLocalSyncStatus()
-   ]);
-   if(!cancelled){setMfaEnabled(mfa.enabled);setStatus(syncStatus);setMessage("Secure cloud session restored from Windows Credential Manager.");}
+   let restored=saved.session;
+   let mfa:{enabled:boolean};
+   try{mfa=await cloudAuth.mfaStatus(saved.apiBaseUrl,restored.accessToken);}
+   catch{const rotated=await cloudAuth.refresh(saved.apiBaseUrl,restored.refreshToken);restored={...restored,...rotated};await secureSession.save({...saved,session:restored});mfa=await cloudAuth.mfaStatus(saved.apiBaseUrl,restored.accessToken);}
+   const syncStatus=await getLocalSyncStatus();
+   if(!cancelled){setSession(restored);setMfaEnabled(mfa.enabled);setStatus(syncStatus);setMessage("Secure cloud session restored from Windows Credential Manager.");}
   }).catch(value=>{if(!cancelled)setError(value instanceof Error?value.message:String(value));});
   return ()=>{cancelled=true;};
  },[]);
@@ -64,7 +66,7 @@ export function CloudConnectionPanel({onClose}:Props){
   event.preventDefault();
   await run(async()=>{
    const result=await cloudAuth.completeMfa(api,challenge,mfaCode);
-   const selectedTenantId=result.memberships?.[0]?.tenant_id??"";
+   const selectedTenantId=result.memberships?.length===1?result.memberships[0].tenant_id:"";
    await secureSession.save({apiBaseUrl:api,selectedTenantId,session:result});
    setSession(result);setTenantId(selectedTenantId);
    setMfaEnabled((await cloudAuth.mfaStatus(api,result.accessToken)).enabled);

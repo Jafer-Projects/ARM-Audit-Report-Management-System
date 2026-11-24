@@ -4,6 +4,7 @@ import type { Client, ClientChange, ClientInput, DuplicateCandidate } from "../t
 
 type CloudClient = Omit<Client,"record_kind"|"status"> & {record_kind:"business"|"individual"|"other";status:"active"|"inactive"|"archived"};
 type CloudHistory = {id:string;action:string;actor_id:string;before_data:unknown;after_data:unknown;client_version:number;occurred_at:string};
+type CloudDuplicate = {id:string;record_kind:"business"|"individual"|"other";legal_name:string;tin_raw:string;status:"active"|"inactive"|"archived"};
 
 function normalizeBase(value:string){
  const url=new URL(value);
@@ -50,8 +51,8 @@ export const cloudClients={
  },
  duplicates:async(legalName:string,tinRaw:string,excludeId?:string):Promise<DuplicateCandidate[]>=>{
   const query=new URLSearchParams({legalName,tinRaw});if(excludeId)query.set("excludeId",excludeId);
-  const result=await request<{candidates:CloudClient[]}>("/v1/clients/duplicates?"+query.toString());
-  return result.candidates.map(mapClient);
+  const result=await request<{candidates:CloudDuplicate[]}>("/v1/clients/duplicates?"+query.toString());
+  return result.candidates.map(item=>({id:item.id,record_kind:item.record_kind==="business"?"Company":item.record_kind==="individual"?"Individual":"Other organization",legal_name:item.legal_name,tin_raw:item.tin_raw,status:item.status==="active"?"Active":item.status==="inactive"?"Inactive":"Archived"}));
  },
  save:async(input:ClientInput):Promise<Client>=>{
   const body={...input,record_kind:serverKind(input.record_kind)};
