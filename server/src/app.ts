@@ -46,8 +46,11 @@ export async function buildApp(): Promise<FastifyInstance> {
   app.get("/health/live", async () => ({ status: "ok" }));
   app.get("/health/ready", async (_request, reply) => {
     try {
-      await pool.query("SELECT 1");
-      return { status: "ready", database: "available" };
+      const result = await pool.query("SELECT to_regclass('public.users') IS NOT NULL AS identity_ready, to_regclass('public.sync_inbox') IS NOT NULL AS sync_ready");
+      if (!result.rows[0]?.identity_ready || !result.rows[0]?.sync_ready) {
+        return reply.code(503).send({ status: "not_ready", database: "available", schema: "incomplete" });
+      }
+      return { status: "ready", database: "available", schema: "ready" };
     } catch {
       return reply.code(503).send({ status: "not_ready", database: "unavailable" });
     }
