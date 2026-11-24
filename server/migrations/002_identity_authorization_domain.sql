@@ -244,6 +244,7 @@ CREATE TABLE accounting_journals (
   FOREIGN KEY(tenant_id,reversal_of) REFERENCES accounting_journals(tenant_id,id),
   CHECK(status <> 'posted' OR (posted_by IS NOT NULL AND posted_at IS NOT NULL AND total_debit = total_credit AND total_debit > 0))
 );
+CREATE UNIQUE INDEX accounting_one_reversal_per_journal ON accounting_journals(tenant_id,reversal_of) WHERE reversal_of IS NOT NULL;
 CREATE TABLE accounting_journal_lines (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL,
