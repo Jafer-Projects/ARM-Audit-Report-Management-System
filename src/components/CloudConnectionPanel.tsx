@@ -89,7 +89,7 @@ export function CloudConnectionPanel({onClose}:Props){
   });
  }
  async function closePanel(){
-  if(session){try{await cloudAuth.logout(api,session.accessToken);}catch(value){setError(value instanceof Error?value.message:String(value));return;}}
+  if(session) await cloudAuth.logout(api,session.accessToken).catch(()=>undefined);
   onClose();
  }
 
