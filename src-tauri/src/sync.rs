@@ -61,9 +61,19 @@ pub fn sync_ack_outbox(results:Vec<SyncAcknowledgement>,state:State<'_,AppState>
  let tx=db.connection.unchecked_transaction().map_err(|e|e.to_string())?;
  for result in results{
   if !["accepted","conflict","rejected"].contains(&result.status.as_str()){return Err("Unsupported synchronization result.".into());}
+  let detail=result.detail.unwrap_or(Value::Null);
+  let aggregate:Option<String>=tx.query_row("SELECT aggregate_id FROM sync_outbox WHERE event_id=?1",[&result.event_id],|r|r.get(0)).optional().map_err(|e|e.to_string())?;
   tx.execute("UPDATE sync_outbox SET status=?1,server_version=?2,response_json=?3,attempts=attempts+1,updated_at=?4 WHERE event_id=?5",
-   params![result.status,result.version,result.detail.unwrap_or(Value::Null).to_string(),now_utc(),result.event_id]
+   params![result.status,result.version,detail.to_string(),now_utc(),result.event_id]
   ).map_err(|e|e.to_string())?;
+  if let Some(aggregate_id)=aggregate {
+   let server_version=if result.status=="accepted" { result.version } else if result.status=="conflict" { detail.get("expectedVersion").and_then(Value::as_i64) } else { None };
+   if let Some(version)=server_version {
+    tx.execute("INSERT INTO cloud_sync_aggregate_state(aggregate_id,server_version,updated_at) VALUES(?1,?2,?3) ON CONFLICT(aggregate_id) DO UPDATE SET server_version=excluded.server_version,updated_at=excluded.updated_at WHERE excluded.server_version>=cloud_sync_aggregate_state.server_version",
+     params![aggregate_id,version,now_utc()]
+    ).map_err(|e|e.to_string())?;
+   }
+  }
  }
  tx.commit().map_err(|e|e.to_string())
 }
@@ -84,6 +94,9 @@ pub fn sync_apply_pull(events:Vec<PulledSyncEvent>,next_cursor:String,state:Stat
    params![event.received_seq,event.event_id,event.aggregate_id,event.outcome,event.resulting_version,event.payload.to_string(),event.received_at.unwrap_or_else(now_utc)]
   ).map_err(|e|e.to_string())?;
   if event.outcome=="accepted"{
+   if let Some(version)=event.resulting_version {
+    tx.execute("INSERT INTO cloud_sync_aggregate_state(aggregate_id,server_version,updated_at) VALUES(?1,?2,?3) ON CONFLICT(aggregate_id) DO UPDATE SET server_version=MAX(server_version,excluded.server_version),updated_at=excluded.updated_at",[&event.aggregate_id,version,now_utc()]).map_err(|e|e.to_string())?;
+   }
    if let (Some(record),Some(version))=(event.payload.get("record"),event.resulting_version){
     let id=record.get("id").and_then(Value::as_str).unwrap_or(&event.aggregate_id);
     let record_type=record.get("record_type").and_then(Value::as_str).unwrap_or("historical_record");
