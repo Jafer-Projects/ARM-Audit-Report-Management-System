@@ -11,29 +11,93 @@ on:
 permissions:
   contents: read
 
+# Every independent check is a separate job. GitHub schedules these jobs in
+# parallel; a failure in one job does not cancel or suppress the others.
+# The workflow conclusion remains failure if any required job fails.
 jobs:
-  web-validation:
-    name: Typecheck, domain tests and frontend build
+  frontend-typecheck:
+    name: Frontend TypeScript typecheck
     runs-on: windows-2022
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "22.16.0"
-      - name: Install pinned direct dependencies
+      - name: Install dependencies
         run: npm install --no-audit --no-fund
-      - name: Typecheck
+      - name: TypeScript diagnostics
         run: npm run typecheck
-      - name: Domain contract tests
-        if: always()
+
+  frontend-tests:
+    name: Frontend domain contract tests
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.16.0"
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Run domain contract tests
         run: npm test
+
+  frontend-build:
+    name: Frontend production build
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.16.0"
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
       - name: Build frontend independently of typecheck
-        if: always()
         run: npm run build:frontend
 
-  rust-validation:
-    name: Rust tests and Windows desktop build
+  rust-format:
+    name: Rust formatting
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.90.0"
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+
+  rust-tests:
+    name: Rust unit and module tests
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.90.0"
+          targets: x86_64-pc-windows-msvc
+      - name: Run Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+  rust-clippy:
+    name: Rust Clippy lint
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.90.0"
+          components: clippy
+          targets: x86_64-pc-windows-msvc
+      - name: Run Clippy for all targets
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+
+  windows-desktop-build:
+    name: Windows Tauri desktop build
     runs-on: windows-2022
     timeout-minutes: 45
     steps:
@@ -42,30 +106,10 @@ jobs:
         with:
           toolchain: "1.90.0"
           targets: x86_64-pc-windows-msvc
-      - name: Rust formatting check
-        if: always()
-        run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
-      - name: Rust tests (all unit and module tests)
-        if: always()
-        run: cargo test --manifest-path src-tauri/Cargo.toml
-      - name: Rust lint across all targets
-        if: always()
-        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
       - uses: actions/setup-node@v4
-        if: always()
         with:
           node-version: "22.16.0"
-      - name: Tauri Windows build (no installer)
-        if: always()
-        run: |
-          npm install --no-audit --no-fund
-          npm run tauri -- build --no-bundle
-      - name: Preserve generated dependency lockfiles for review
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: arm-generated-lockfiles
-          path: |
-            package-lock.json
-            src-tauri/Cargo.lock
-          if-no-files-found: error
+      - name: Install frontend dependencies
+        run: npm install --no-audit --no-fund
+      - name: Build Windows desktop application without installer
+        run: npm run tauri -- build --no-bundle
