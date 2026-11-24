@@ -112,60 +112,63 @@ export async function resetPassword(rawToken: string, password: string) {
   return { reset: true, sessionsRevoked: true };
 }
 
-export async function beginMfaEnrollment(userId: string, email: string) {
-  const secret = base32Encode(randomBytes(20));
-  await inTransaction(async (client) => {
-    await client.query("SELECT set_config('app.user_id',$1,true)", [userId]);
-    await client.query(
-      "INSERT INTO mfa_credentials(user_id,secret_ciphertext,enabled_at) VALUES($1,$2,NULL) ON CONFLICT(user_id) DO UPDATE SET secret_ciphertext=EXCLUDED.secret_ciphertext,enabled_at=NULL,updated_at=now()",
-      [userId,encrypt(secret)]
-    );
-    await client.query("DELETE FROM mfa_recovery_codes WHERE user_id=$1 AND used_at IS NULL", [userId]);
+export async function beginMfaEnrollment(userId:string,email:string,password:string) {
+  const account=await pool.query("SELECT password_hash FROM users WHERE id=$1 AND status='active'",[userId]);
+  if(!account.rowCount || !(await verifyPassword(password,account.rows[0].password_hash))) throw Object.assign(new Error("Current password is incorrect"),{statusCode:401});
+  const secret=base32Encode(randomBytes(20));
+  await inTransaction(async(client)=>{
+    await client.query("SELECT set_config('app.user_id',$1,true)",[userId]);
+    await client.query("INSERT INTO mfa_credentials(user_id,secret_ciphertext,enabled_at) VALUES($1,$2,NULL) ON CONFLICT(user_id) DO UPDATE SET secret_ciphertext=EXCLUDED.secret_ciphertext,enabled_at=NULL,updated_at=now()",[userId,encrypt(secret)]);
+    await client.query("DELETE FROM mfa_recovery_codes WHERE user_id=$1",[userId]);
   });
-  const label = encodeURIComponent(`ARM:${email}`);
-  return { secret, otpauthUri: `otpauth://totp/${label}?secret=${secret}&issuer=ARM&algorithm=SHA1&digits=6&period=30` };
+  const label=encodeURIComponent(`ARM:${email}`);
+  return {secret,otpauthUri:`otpauth://totp/${label}?secret=${secret}&issuer=ARM&algorithm=SHA1&digits=6&period=30`};
 }
 
 export async function confirmMfaEnrollment(userId:string,code:string) {
-  const result = await inTransaction(async (client) => {
-    await client.query("SELECT set_config('app.user_id',$1,true)", [userId]);
-    const found = await client.query("SELECT secret_ciphertext FROM mfa_credentials WHERE user_id=$1", [userId]);
-    if (!found.rowCount) throw Object.assign(new Error("MFA enrollment has not started"), { statusCode: 409 });
-    const secret = decrypt(found.rows[0].secret_ciphertext);
-    if (!verifyTotp(secret, code)) throw Object.assign(new Error("Invalid authenticator code"), { statusCode: 400 });
-    await client.query("UPDATE mfa_credentials SET enabled_at=now(),updated_at=now() WHERE user_id=$1", [userId]);
-    await client.query("DELETE FROM mfa_recovery_codes WHERE user_id=$1", [userId]);
-    const codes = Array.from({ length: 10 }, () => randomBytes(8).toString("hex"));
-    for (const recovery of codes) await client.query("INSERT INTO mfa_recovery_codes(user_id,code_hash) VALUES($1,$2)", [userId,digest(recovery)]);
+  const recoveryCodes=await inTransaction(async(client)=>{
+    await client.query("SELECT set_config('app.user_id',$1,true)",[userId]);
+    const found=await client.query("SELECT secret_ciphertext FROM mfa_credentials WHERE user_id=$1 FOR UPDATE",[userId]);
+    if(!found.rowCount) throw Object.assign(new Error("MFA enrollment has not started"),{statusCode:409});
+    const secret=decrypt(found.rows[0].secret_ciphertext);
+    const counter=matchingTotpCounter(secret,code);
+    if(counter===null) throw Object.assign(new Error("Invalid authenticator code"),{statusCode:400});
+    await client.query("UPDATE mfa_credentials SET enabled_at=now(),last_totp_counter=$2,updated_at=now() WHERE user_id=$1",[userId,counter]);
+    await client.query("DELETE FROM mfa_recovery_codes WHERE user_id=$1",[userId]);
+    const codes=Array.from({length:10},()=>randomBytes(8).toString("hex"));
+    for(const recovery of codes) await client.query("INSERT INTO mfa_recovery_codes(user_id,code_hash) VALUES($1,$2)",[userId,digest(recovery)]);
     return codes;
   });
-  return { enabled: true, recoveryCodes: result };
+  return {enabled:true,recoveryCodes};
 }
 
-export async function disableMfa(userId: string, code: string) {
-  await inTransaction(async (client) => {
-    await client.query("SELECT set_config('app.user_id',$1,true)", [userId]);
-    const found = await client.query("SELECT secret_ciphertext,enabled_at,last_totp_counter FROM mfa_credentials WHERE user_id=$1 FOR UPDATE", [userId]);
-    if (!found.rowCount || !found.rows[0].enabled_at || !verifyTotp(decrypt(found.rows[0].secret_ciphertext),code)) {
-      throw Object.assign(new Error("Authenticator code is invalid"), { statusCode: 401 });
-    }
-    await client.query("DELETE FROM mfa_recovery_codes WHERE user_id=$1", [userId]);
-    await client.query("DELETE FROM mfa_credentials WHERE user_id=$1", [userId]);
+export async function disableMfa(userId:string,password:string,code:string) {
+  const account=await pool.query("SELECT password_hash FROM users WHERE id=$1 AND status='active'",[userId]);
+  if(!account.rowCount || !(await verifyPassword(password,account.rows[0].password_hash))) throw Object.assign(new Error("Current password is incorrect"),{statusCode:401});
+  await inTransaction(async(client)=>{
+    await client.query("SELECT set_config('app.user_id',$1,true)",[userId]);
+    const found=await client.query("SELECT secret_ciphertext,enabled_at,last_totp_counter FROM mfa_credentials WHERE user_id=$1 FOR UPDATE",[userId]);
+    if(!found.rowCount || !found.rows[0].enabled_at || !verifyTotp(decrypt(found.rows[0].secret_ciphertext),code)) throw Object.assign(new Error("Authenticator code is invalid"),{statusCode:401});
+    await client.query("DELETE FROM mfa_recovery_codes WHERE user_id=$1",[userId]);
+    await client.query("DELETE FROM mfa_credentials WHERE user_id=$1",[userId]);
   });
-  return { disabled: true };
+  return {disabled:true};
 }
 
-export async function verifyMfaCode(userId: string, code: string): Promise<boolean> {
-  return inTransaction(async (client) => {
-    await client.query("SELECT set_config('app.user_id',$1,true)", [userId]);
-    const found = await client.query("SELECT secret_ciphertext,enabled_at,last_totp_counter FROM mfa_credentials WHERE user_id=$1 FOR UPDATE", [userId]);
-    if (!found.rowCount || !found.rows[0].enabled_at) return false;
-    const secret = decrypt(found.rows[0].secret_ciphertext);
-    const counter=matchingTotpCounter(secret,code);\n    if(counter!==null) {\n      const advanced=await client.query("UPDATE mfa_credentials SET last_totp_counter=$2,updated_at=now() WHERE user_id=$1 AND last_totp_counter<$2",[userId,counter]);\n      if(advanced.rowCount===1) return true;\n    }
-    const hash = digest(code);
-    const recovery = await client.query("SELECT id FROM mfa_recovery_codes WHERE user_id=$1 AND code_hash=$2 AND used_at IS NULL FOR UPDATE", [userId,hash]);
-    if (!recovery.rowCount) return false;
-    await client.query("UPDATE mfa_recovery_codes SET used_at=now() WHERE id=$1", [recovery.rows[0].id]);
+export async function verifyMfaCode(userId:string,code:string):Promise<boolean> {
+  return inTransaction(async(client)=>{
+    await client.query("SELECT set_config('app.user_id',$1,true)",[userId]);
+    const found=await client.query("SELECT secret_ciphertext,enabled_at,last_totp_counter FROM mfa_credentials WHERE user_id=$1 FOR UPDATE",[userId]);
+    if(!found.rowCount || !found.rows[0].enabled_at) return false;
+    const secret=decrypt(found.rows[0].secret_ciphertext);
+    const counter=matchingTotpCounter(secret,code);
+    if(counter!==null) {
+      const advanced=await client.query("UPDATE mfa_credentials SET last_totp_counter=$2,updated_at=now() WHERE user_id=$1 AND last_totp_counter<$2",[userId,counter]);
+      if(advanced.rowCount===1) return true;
+    }
+    const recovery=await client.query("SELECT id FROM mfa_recovery_codes WHERE user_id=$1 AND code_hash=$2 AND used_at IS NULL FOR UPDATE",[userId,digest(code)]);
+    if(!recovery.rowCount) return false;
+    await client.query("UPDATE mfa_recovery_codes SET used_at=now() WHERE id=$1",[recovery.rows[0].id]);
     return true;
   });
 }
