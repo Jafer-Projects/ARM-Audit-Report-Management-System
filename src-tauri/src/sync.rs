@@ -98,7 +98,7 @@ pub fn sync_apply_pull(events:Vec<PulledSyncEvent>,next_cursor:String,state:Stat
   if event.outcome=="accepted"{
    if let (Some(record),Some(version))=(event.payload.get("record"),event.resulting_version){
     let current_cloud_version:Option<i64>=tx.query_row("SELECT server_version FROM cloud_sync_aggregate_state WHERE aggregate_id=?1",[&event.aggregate_id],|r|r.get(0)).optional().map_err(|e|e.to_string())?;
-    let has_pending:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM sync_outbox WHERE aggregate_id=?1 AND status='pending')",[&event.aggregate_id],|r|r.get(0)).map_err(|e|e.to_string())?;
+    let has_pending:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM sync_outbox WHERE aggregate_id=?1 AND status IN ('pending','conflict'))",[&event.aggregate_id],|r|r.get(0)).map_err(|e|e.to_string())?;
     if version>current_cloud_version.unwrap_or(0) && !has_pending {
      let record_id=record.get("id").and_then(Value::as_str).unwrap_or(&event.aggregate_id);
      let record_type=record.get("record_type").and_then(Value::as_str).unwrap_or("historical_record");
