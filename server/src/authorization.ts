@@ -96,15 +96,7 @@ export async function inviteOrganizationMember(userId: string,tenantId: string,e
 export async function listMembers(userId:string,tenantId:string) {
  return withTenant(userId,tenantId,async(client)=>{
   await assertPermission(client,userId,tenantId,"members.read");
-  const result=await client.query(
-   `SELECT m.id AS membership_id,m.user_id,u.email,u.display_name,m.role,m.status,m.created_at,
-    COALESCE(array_agg(DISTINCT r.display_name) FILTER(WHERE r.id IS NOT NULL),'{}') AS assigned_roles
-    FROM tenant_memberships m JOIN users u ON u.id=m.user_id
-    LEFT JOIN tenant_membership_roles mr ON mr.tenant_id=m.tenant_id AND mr.membership_id=m.id
-    LEFT JOIN tenant_roles r ON r.tenant_id=mr.tenant_id AND r.id=mr.role_id
-    WHERE m.tenant_id=$1 GROUP BY m.id,u.email,u.display_name ORDER BY m.created_at`,
-   [tenantId]
-  );
+  const result=await client.query("SELECT * FROM public.arm_list_tenant_members($1,$2)",[tenantId,userId]);
   return result.rows;
  });
 }
