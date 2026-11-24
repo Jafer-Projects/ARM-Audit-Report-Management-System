@@ -37,6 +37,7 @@ pub fn run() {
             commands::save_note,
             commands::set_demo_persona,
             commands::add_task_review_note,
+            commands::respond_task_review_note,
             commands::disposition_task_review_note,
             commands::find_invoice_duplicates,
             commands::import_historical_batch,
