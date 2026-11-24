@@ -1,10 +1,9 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { createConnection } from "node:net";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
 import { withTenant } from "./db.js";
 import { assertPermission } from "./authorization.js";
 import { config } from "./config.js";
+import { loadObject,storeObject,deleteObject,sha256 as sha } from "./objectStorage.js";
 
 function detectMime(data:Buffer):string|null {
   if(data.subarray(0,5).toString("ascii")==="%PDF-") return "application/pdf";
@@ -53,10 +52,6 @@ export async function uploadDocument(userId:string,tenantId:string,input:{fileNa
     throw error;
   }
 }
-async function assertPermissionForUpload(userId:string,tenantId:string) {
-  await withTenant(userId,tenantId,async(client)=>assertPermission(client,userId,tenantId,"documents.upload"));
-}
-
 export async function readCleanDocument(userId:string,tenantId:string,id:string) {
   return withTenant(userId,tenantId,async(client)=>{
     await assertPermission(client,userId,tenantId,"documents.read");
