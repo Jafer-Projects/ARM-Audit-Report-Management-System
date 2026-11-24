@@ -33,7 +33,7 @@ export async function withTenant<T>(
     await client.query("SELECT set_config('app.user_id', $1, true)", [userId]);
     await client.query("SELECT set_config('app.tenant_id', $1, true)", [tenantId]);
     const membership = await client.query(
-      "SELECT 1 FROM tenant_memberships WHERE tenant_id = $1 AND user_id = $2 AND status = 'active'",
+      "SELECT 1 FROM tenant_memberships m JOIN tenants t ON t.id = m.tenant_id WHERE m.tenant_id = $1 AND m.user_id = $2 AND m.status = 'active' AND t.status = 'active'",
       [tenantId, userId]
     );
     if (membership.rowCount !== 1) {
