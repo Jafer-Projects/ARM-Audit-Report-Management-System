@@ -14,9 +14,9 @@ permissions:
 # Every independent check is a separate job. GitHub schedules these jobs in
 # parallel; a failure in one job does not cancel or suppress the others.
 # The workflow conclusion remains failure if any required job fails.
-# Node.js currently runs the React/Vite application and domain-contract tests;
-# this repository has no Node.js API/server package yet. The implemented
-# application backend is Rust/Tauri, including SQLite persistence and commands.
+# Node.js runs the React/Vite desktop UI and the separate cloud API package
+# under server/. Rust/Tauri remains the native desktop backend; PostgreSQL
+# is the cloud source of truth for shared state as the cloud increment lands.
 jobs:
   frontend-typecheck:
     name: Frontend TypeScript typecheck
