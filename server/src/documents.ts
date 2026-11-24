@@ -19,7 +19,7 @@ export async function uploadDocument(userId:string,tenantId:string,input:{fileNa
   if(bytes.length===0||bytes.length>52_428_800) throw Object.assign(new Error("Document must be between 1 byte and 50 MiB"),{statusCode:400});
   const detected=detectMime(bytes);
   if(!detected||detected!==input.mediaType) throw Object.assign(new Error("File signature does not match an allowed PDF, JPEG or PNG media type"),{statusCode:415});
-  const fileName=input.fileName.replace(/[\\/]/g,"_").replace(/[\\u0000-\\u001f\\u007f]/g,"_").trim().slice(0,180);
+  const fileName=input.fileName.replace(/[\\/]/g,"_").replace(/[\u0000-\u001f\u007f]/g,"_").trim().slice(0,180);
   if(!fileName) throw Object.assign(new Error("A safe filename is required"),{statusCode:400});
   const id=randomUUID(),objectKey=`${tenantId}/${id}`;
   await withTenant(userId,tenantId,async(client)=>{
