@@ -1,6 +1,7 @@
-import { useState,type FormEvent } from "react";
+import { useEffect, useState,type FormEvent } from "react";
 import { cloudAuth,type CloudSession } from "../cloudAuth";
 import { getLocalSyncStatus } from "../cloudSync";
+import { secureSession } from "../secureSession";
 
 type Props={onClose:()=>void};
 type LocalStatus={configured:boolean;cursor:string;pending:number;conflicts:number};
@@ -29,6 +30,19 @@ export function CloudConnectionPanel({onClose}:Props){
  const [showRegister,setShowRegister]=useState(false);
  const [showRecovery,setShowRecovery]=useState(false);
 
+ useEffect(()=>{
+  let cancelled=false;
+  void secureSession.load().then(async saved=>{
+   if(!saved||cancelled)return;
+   setApi(saved.apiBaseUrl);setSession(saved.session);setTenantId(saved.selectedTenantId);
+   const [mfa,syncStatus]=await Promise.all([
+    cloudAuth.mfaStatus(saved.apiBaseUrl,saved.session.accessToken),getLocalSyncStatus()
+   ]);
+   if(!cancelled){setMfaEnabled(mfa.enabled);setStatus(syncStatus);setMessage("Secure cloud session restored from Windows Credential Manager.");}
+  }).catch(value=>{if(!cancelled)setError(value instanceof Error?value.message:String(value));});
+  return ()=>{cancelled=true;};
+ },[]);
+
  async function run(action:()=>Promise<void>){
   setBusy(true);setError("");setMessage("");
   try{await action();}catch(value){setError(value instanceof Error?value.message:String(value));}
@@ -39,7 +53,9 @@ export function CloudConnectionPanel({onClose}:Props){
   await run(async()=>{
    const result=await cloudAuth.login(api,email,password);
    if("mfaRequired" in result){setChallenge(result.challengeToken);setMessage("Enter the authenticator code or a single-use recovery code.");return;}
-   setSession(result);setTenantId(result.memberships?.[0]?.tenant_id??"");
+   const selectedTenantId=result.memberships?.[0]?.tenant_id??"";
+   await secureSession.save({apiBaseUrl:api,selectedTenantId,session:result});
+   setSession(result);setTenantId(selectedTenantId);
    setMfaEnabled((await cloudAuth.mfaStatus(api,result.accessToken)).enabled);
    setStatus(await getLocalSyncStatus());setMessage("Cloud session established in memory for this application session.");
   });
@@ -48,7 +64,9 @@ export function CloudConnectionPanel({onClose}:Props){
   event.preventDefault();
   await run(async()=>{
    const result=await cloudAuth.completeMfa(api,challenge,mfaCode);
-   setSession(result);setTenantId(result.memberships?.[0]?.tenant_id??"");
+   const selectedTenantId=result.memberships?.[0]?.tenant_id??"";
+   await secureSession.save({apiBaseUrl:api,selectedTenantId,session:result});
+   setSession(result);setTenantId(selectedTenantId);
    setMfaEnabled((await cloudAuth.mfaStatus(api,result.accessToken)).enabled);
    setChallenge("");setMfaCode("");setStatus(await getLocalSyncStatus());setMessage("Multi-factor authentication completed.");
   });
@@ -76,15 +94,14 @@ export function CloudConnectionPanel({onClose}:Props){
   if(!session)return;
   await run(async()=>{
    const next=await cloudAuth.refresh(api,session.refreshToken);
-   setSession({...session,...next});
-   setMessage("Cloud session refreshed. The refresh token was rotated.");
+   const updated={...session,...next};
+   await secureSession.save({apiBaseUrl:api,selectedTenantId:tenantId,session:updated});
+   setSession(updated);
+   setMessage("Cloud session refreshed and the rotated credentials were stored securely.");
   });
  }
 
- async function closePanel(){
-  if(session) await cloudAuth.logout(api,session.accessToken).catch(()=>undefined);
-  onClose();
- }
+ async function closePanel(){ onClose(); }
 
  async function beginMfa(){
   if(!session||!tenantId) return;
@@ -108,7 +125,7 @@ export function CloudConnectionPanel({onClose}:Props){
  }
  async function logout(){
   if(!session)return;
-  await run(async()=>{await cloudAuth.logout(api,session.accessToken);setSession(null);setTenantId("");setStatus(null);setMessage("Cloud session revoked.");});
+  await run(async()=>{await cloudAuth.logout(api,session.accessToken);await secureSession.clear();setSession(null);setTenantId("");setStatus(null);setMessage("Cloud session revoked and secure credentials cleared.");});
  }
  return <div className="cloud-panel-backdrop" role="presentation">
   <section className="cloud-panel" role="dialog" aria-modal="true" aria-labelledby="cloud-panel-title">
