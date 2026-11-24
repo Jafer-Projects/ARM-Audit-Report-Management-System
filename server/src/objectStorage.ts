@@ -33,7 +33,7 @@ async function s3Request(method:"PUT"|"GET"|"DELETE",key:string,body?:Buffer):Pr
  const kSigning=hmac(kService,"aws4_request");
  const signature=createHmac("sha256",kSigning).update(stringToSign).digest("hex");
  const authorization="AWS4-HMAC-SHA256 Credential="+config.S3_ACCESS_KEY_ID+"/"+scope+", SignedHeaders="+signedHeaders+", Signature="+signature;
- const response=await fetch(url,{method,headers:{host:url.host,"x-amz-date":amzDate,"x-amz-content-sha256":payloadHash,authorization,...(body?{"content-type":"application/octet-stream"}:{})},body:body?new Uint8Array(body):undefined,signal:AbortSignal.timeout(60_000)});
+ const response=await fetch(url,{method,headers:{"x-amz-date":amzDate,"x-amz-content-sha256":payloadHash,authorization,...(body?{"content-type":"application/octet-stream"}:{})},body:body?new Uint8Array(body):undefined,signal:AbortSignal.timeout(60_000)});
  if(!response.ok) throw new Error("Private object storage request failed ("+response.status+")");
  if(method==="GET") return Buffer.from(await response.arrayBuffer());
  return null;
