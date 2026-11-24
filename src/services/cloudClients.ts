@@ -2,7 +2,7 @@ import { secureSession } from "../secureSession";
 import type { Client, ClientChange, ClientInput, DuplicateCandidate } from "../types";
 
 type CloudClient = Omit<Client,"record_kind"|"status"> & {record_kind:"business"|"individual"|"other";status:"active"|"inactive"|"archived"};
-type CloudHistory = {id:string;action:string;actor_id:string;before_data:unknown;after_data:unknown;client_version:number;occurred_at:string};
+type CloudHistory = {id:string;action:string;actor_id:string;actor_name?:string;before_data:unknown;after_data:unknown;client_version:number;occurred_at:string};
 type CloudDuplicate = {id:string;record_kind:"business"|"individual"|"other";legal_name:string;tin_raw:string;status:"active"|"inactive"|"archived"};
 
 function normalizeBase(value:string){
@@ -55,7 +55,7 @@ export const cloudClients={
   return result.candidates.map(item=>({id:item.id,record_kind:item.record_kind==="business"?"Company":item.record_kind==="individual"?"Individual":"Other organization",legal_name:item.legal_name,tin_raw:item.tin_raw,status:item.status==="active"?"Active":item.status==="inactive"?"Inactive":"Archived"}));
  },
  save:async(input:ClientInput):Promise<Client>=>{
-  const body={...input,record_kind:serverKind(input.record_kind)};
+  const body={...input,display_name:input.display_name.trim()||input.legal_name.trim(),record_kind:serverKind(input.record_kind)};
   return mapClient(await request<CloudClient>("/v1/clients",{method:"POST",body:JSON.stringify(body)}));
  },
  transition:async(id:string,action:"archive"|"activate"|"restore"):Promise<void>=>{
@@ -65,7 +65,7 @@ export const cloudClients={
  },
  history:async(id:string):Promise<ClientChange[]>=>{
   const result=await request<{history:CloudHistory[]}>("/v1/clients/"+encodeURIComponent(id)+"/history");
-  return result.history.map(item=>({id:item.id,action:item.action,changed_at:item.occurred_at,actor_name:item.actor_id,before_json:item.before_data==null?"":JSON.stringify(item.before_data),after_json:item.after_data==null?"":JSON.stringify(item.after_data)}));
+  return result.history.map(item=>({id:item.id,action:item.action,changed_at:item.occurred_at,actor_name:item.actor_name??item.actor_id,before_json:item.before_data==null?"":JSON.stringify(item.before_data),after_json:item.after_data==null?"":JSON.stringify(item.after_data)}));
  },
  workspace:async()=>{
   const {saved}=await context();
