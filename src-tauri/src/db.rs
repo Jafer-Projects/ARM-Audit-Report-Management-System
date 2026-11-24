@@ -401,6 +401,11 @@ impl Database {
                     last_success_at TEXT,
                     updated_at TEXT NOT NULL
                 );
+                CREATE TABLE cloud_sync_aggregate_state (
+                    aggregate_id TEXT PRIMARY KEY NOT NULL,
+                    server_version INTEGER NOT NULL CHECK(server_version>=0),
+                    updated_at TEXT NOT NULL
+                );
                 CREATE TABLE cloud_sync_inbox (
                     received_seq INTEGER PRIMARY KEY NOT NULL,
                     event_id TEXT NOT NULL UNIQUE,
@@ -419,7 +424,11 @@ impl Database {
                     occurred_at,correlation_id,payload_json,created_at,updated_at
                   )
                   SELECT NEW.id,NEW.id,'prototype.workspace_record',r.id,
-                    CASE WHEN r.row_version>0 THEN r.row_version-1 ELSE 0 END,
+                    COALESCE(
+                      (SELECT MAX(o.base_version)+1 FROM sync_outbox o WHERE o.aggregate_id=r.id AND o.status='pending'),
+                      (SELECT a.server_version FROM cloud_sync_aggregate_state a WHERE a.aggregate_id=r.id),
+                      0
+                    ),
                     'aggregate.upsert',1,NEW.occurred_at_utc,NEW.correlation_id,
                     json_object('record',json_object(
                       'id',r.id,'client_id',r.client_id,'record_type',r.record_type,'title',r.title,
@@ -428,6 +437,19 @@ impl Database {
                     )),NEW.occurred_at_utc,NEW.occurred_at_utc
                   FROM workspace_record r WHERE r.id=NEW.target_id AND r.firm_id=NEW.firm_id;
                 END;
+
+                INSERT OR IGNORE INTO sync_outbox(
+                  event_id,idempotency_key,aggregate_type,aggregate_id,base_version,event_type,schema_version,
+                  occurred_at,correlation_id,payload_json,created_at,updated_at
+                )
+                SELECT
+                  lower(hex(randomblob(4)))||'-'||lower(hex(randomblob(2)))||'-4'||substr(lower(hex(randomblob(2))),2)||'-a'||substr(lower(hex(randomblob(2))),2)||'-'||lower(hex(randomblob(6))),
+                  lower(hex(randomblob(4)))||'-'||lower(hex(randomblob(2)))||'-4'||substr(lower(hex(randomblob(2))),2)||'-a'||substr(lower(hex(randomblob(2))),2)||'-'||lower(hex(randomblob(6))),
+                  'prototype.workspace_record',r.id,COALESCE(a.server_version,0),'aggregate.upsert',1,r.updated_at,
+                  lower(hex(randomblob(4)))||'-'||lower(hex(randomblob(2)))||'-4'||substr(lower(hex(randomblob(2))),2)||'-a'||substr(lower(hex(randomblob(2))),2)||'-'||lower(hex(randomblob(6))),
+                  json_object('record',json_object('id',r.id,'client_id',r.client_id,'record_type',r.record_type,'title',r.title,'status',r.status,'reference',r.reference,'amount_text',r.amount_text,'notes',r.notes,'payload_json',r.payload_json,'row_version',r.row_version,'updated_at',r.updated_at)),
+                  r.updated_at,r.updated_at
+                FROM workspace_record r LEFT JOIN cloud_sync_aggregate_state a ON a.aggregate_id=r.id;
                 CREATE TRIGGER sync_outbox_response_update
                 BEFORE UPDATE ON sync_outbox
                 WHEN NEW.event_id<>OLD.event_id OR NEW.idempotency_key<>OLD.idempotency_key
