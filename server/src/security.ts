@@ -90,6 +90,7 @@ export async function requestPasswordRecovery(email: string) {
     await inTransaction(async (client) => {
       await client.query("SELECT set_config('app.user_id',$1,true)", [row.user_id]);
       await client.query("SELECT set_config('app.tenant_id',$1,true)", [row.tenant_id]);
+      await client.query("UPDATE password_recovery_tokens SET consumed_at=now() WHERE user_id=$1 AND consumed_at IS NULL",[row.user_id]);
       await client.query("INSERT INTO password_recovery_tokens(user_id,token_hash,expires_at) VALUES($1,$2,now()+interval '30 minutes')", [row.user_id,digest(raw)]);
       await queueEmail(client,row.user_id,row.tenant_id,row.email,"password_recovery",{ resetUrl: `${config.PUBLIC_APP_URL}/reset-password?token=${raw}` });
     });
@@ -187,6 +188,7 @@ export function newVerificationToken() { return token(); }
 export function hashOpaqueToken(value: string) { return digest(value); }
 export function verificationExpiry() { return new Date(Date.now() + 24 * 60 * 60 * 1000); }
 export async function enqueueVerificationEmail(client: PoolClient, userId: string, tenantId: string, email: string, raw: string) {
+  await client.query("UPDATE email_verification_tokens SET consumed_at=now() WHERE user_id=$1 AND consumed_at IS NULL",[userId]);
   await client.query("INSERT INTO email_verification_tokens(user_id,token_hash,expires_at) VALUES($1,$2,now()+interval '24 hours')", [userId,digest(raw)]);
   await queueEmail(client,userId,tenantId,email,"email_verification",{ verificationUrl: `${config.PUBLIC_APP_URL}/verify-email?token=${raw}` });
 }
