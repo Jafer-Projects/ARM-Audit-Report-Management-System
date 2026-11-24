@@ -6,7 +6,7 @@ import { z } from "zod";
 import { config } from "./config.js";
 import { pool, withTenant } from "./db.js";
 import { authenticate, login, register, revokeSession, rotateRefreshToken, completeMfaLogin, type AuthenticatedRequest } from "./auth.js";
-import { verifyEmailAddress, resendEmailVerification, requestPasswordRecovery, resetPassword, beginMfaEnrollment, confirmMfaEnrollment, disableMfa } from "./security.js";
+import { verifyEmailAddress, resendEmailVerification, requestPasswordRecovery, resetPassword, beginMfaEnrollment, confirmMfaEnrollment, disableMfa, getMfaStatus } from "./security.js";
 import { pushEvents, pullEvents, pushSchema } from "./sync.js";
 import { listRoles, createRole, replaceRolePermissions, assignMemberRole, inviteOrganizationMember, listMembers, listInvitations, revokeInvitation, listPermissionCatalogue, updateRoleName, deleteRole, removeMemberRole, changeMemberStatus } from "./authorization.js";
 import { acceptOrganizationInvitation } from "./organizations.js";
@@ -114,6 +114,11 @@ export async function buildApp(): Promise<FastifyInstance> {
     const parsed = z.object({ challengeToken: z.string().min(32).max(128), code: z.string().regex(/^(?:\d{6}|[a-f0-9]{16})$/i) }).safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error" });
     return completeMfaLogin(parsed.data.challengeToken,parsed.data.code);
+  });
+
+  app.get("/v1/auth/mfa/status", { preHandler: async (request) => { (request as AuthenticatedRequest).auth = await authenticate(request); } }, async (request) => {
+    const auth=(request as AuthenticatedRequest).auth!;
+    return getMfaStatus(auth.sub);
   });
 
   app.post("/v1/auth/mfa/enroll", { config: { rateLimit: { max: 5, timeWindow: "15 minutes" } }, preHandler: async (request) => {
