@@ -110,6 +110,15 @@ test("sync push is version-checked, idempotent, and pull returns accepted events
   assert.equal(pulled.json().events.length, 2);
   assert.deepEqual(pulled.json().events.map((item) => item.outcome), ["accepted", "conflict"]);
   assert.ok(pulled.json().nextCursor);
+  const drained = await app.inject({ method: "GET", url: `/v1/sync/events?after=${pulled.json().nextCursor}`, headers });
+  assert.equal(drained.statusCode, 200);
+  assert.equal(drained.json().events.length, 0);
+
+  const unsupportedDomain = await app.inject({
+    method: "POST", url: "/v1/sync/events", headers,
+    payload: { events: [{ ...event, eventId: randomUUID(), idempotencyKey: randomUUID(), aggregateType: "accounting.posted_journal" }] }
+  });
+  assert.equal(unsupportedDomain.statusCode, 400);
 });
 
 test("PostgreSQL RLS hides another tenant even when the tenant context is supplied directly", async () => {
